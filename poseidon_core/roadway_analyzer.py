@@ -3,7 +3,7 @@ import gc
 import zarr
 import numpy as np
 import pandas as pd
-import image_processing
+import poseidon_core
 from tqdm import tqdm
 from mpi4py import MPI
 

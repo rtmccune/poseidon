@@ -9,7 +9,7 @@ from datetime import datetime
 import cmocean
 import matplotlib.pyplot as plt
 from mpi4py import MPI
-import image_processing
+import poseidon_core
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import contextily as ctx
