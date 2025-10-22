@@ -2,9 +2,11 @@ import os
 import re
 import zarr
 import cv2
+import cmocean
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from scipy.interpolate import griddata
 from scipy.interpolate import RegularGridInterpolator as reg_interp

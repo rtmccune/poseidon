@@ -1,6 +1,8 @@
 import os
 import zarr
 import laspy
+import pdal
+import json
 import numpy as np
 from scipy.interpolate import griddata
 
@@ -131,7 +133,7 @@ class GridGenerator:
 
         return xyz_m[:, extent_mask]  # Keep only the points within the extents
 
-    def gen_grid(self, resolution, z=0, dir="generated_grids"):
+    def gen_grid(self, resolution, z=0, dir="data/generated_grids"):
         """Generate a grid of points in the specified extent and resolution.
 
         This function creates a grid based on the specified resolution and z-value. It can
@@ -184,3 +186,85 @@ class GridGenerator:
         zarr.save(os.path.join(dir, f"grid_z_{resolution}m.zarr"), grid_z)
 
         return grid_x, grid_y, grid_z
+
+
+    # I've renamed the argument to 'input_points' for clarity
+    def gen_grid_to_geotiff(self, resolution, input_points, out_dir="generated_grids", out_name="output_grid.tif"):
+        """
+        Generates a gridded GeoTIFF directly from NumPy point arrays using PDAL.
+        
+        Args:
+            resolution (float): The grid resolution.
+            input_points (tuple or list): A tuple/list containing (x_array, y_array, z_array).
+            out_dir (str): Output directory.
+            out_name (str): Name for the final GeoTIFF file.
+        """
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        # --- START REQUIRED FIX ---
+        # Add this entire block to convert your input
+        
+        try:
+            # Assumes input_points is a tuple/list like (x_array, y_array, z_array)
+            x_pts, y_pts, z_pts = input_points[0], input_points[1], input_points[2]
+            
+            print(f"Structuring {x_pts.shape[0]} points for PDAL...")
+            # Create the structured array that PDAL needs
+            structured_array = np.zeros(
+                x_pts.shape[0], 
+                dtype=[('X', np.float64), ('Y', np.float64), ('Z', np.float64)]
+            )
+            structured_array['X'] = x_pts
+            structured_array['Y'] = y_pts
+            structured_array['Z'] = z_pts
+        except (IndexError, TypeError, AttributeError) as e:
+            print("--- ERROR ---")
+            print("Input 'input_points' is not in the expected format.")
+            print("It must be a tuple or list of 3 NumPy arrays: (x_array, y_array, z_array)")
+            print(f"Received type: {type(input_points)}")
+            print("-------------")
+            raise e
+        # --- END REQUIRED FIX ---
+
+
+        output_tif = os.path.join(out_dir, out_name)
+        bounds = (
+            f"([{self.min_x_extent}, {self.max_x_extent}],"
+            f" [{self.min_y_extent}, {self.max_y_extent}])"
+        )
+
+        pipeline_def = {
+            "pipeline": [
+                {
+                    "type": "readers.array",
+                    "tag": "reader"
+                },
+                {
+                    "type": "writers.gdal",
+                    "filename": output_tif,
+                    "output_type": "idw",
+                    "resolution": resolution,
+                    "bounds": bounds,
+                    "gdaldriver": "GTiff"
+                }
+            ]
+        }
+
+        print(f"Generating GeoTIFF: {output_tif}")
+        
+        # --- CHANGE THIS LINE ---
+        # Instead of passing 'points_array' (or 'input_points'), 
+        # pass the new 'structured_array' you just created.
+        
+        # OLD CODE:
+        # pipeline = pdal.Pipeline(json.dumps(pipeline_def), arrays=[points_array])
+        
+        # NEW CODE:
+        pipeline = pdal.Pipeline(json.dumps(pipeline_def), arrays=[structured_array])
+        # --- END CHANGE ---
+        
+        pipeline.execute()
+        print("Generation complete.")
+        
+        return output_tif
