@@ -14,7 +14,10 @@
 It integrates image segmentation and georectification to detect water surfaces and estimate flood depths across real-world terrain.
 
 
-# Utility Scripts
+# Setup
+## Environment
+
+
 ## C++ Executables
 These executables rely on the opencv library for processing. First, ensure that you have opencv installed on your system.
 
@@ -34,7 +37,7 @@ To install opencv:
   brew install opencv
   ```
 
-To compile executables using cmake:
+After the working 'poseidon' environment and OpenCV have been installed on your system, compile the executables using cmake:
 
 1. Create a build directory in the desired location:
   ```bash
@@ -43,10 +46,14 @@ To compile executables using cmake:
   ```
 2. Configure the build for your system.
   ```bash
-  cmake /path/to/poseidon/utils
+  cmake /path/to/poseidon/utils/c_helpers
   ```
 3. Build the exectuables.
   ```bash
   make
   ```
+The compiled executables will now exist in the 'build' directory for use. You can test that these compiled executables are working by running the test_compiled_funcs.sh script from the docs/tests directory. To run these tests from the 'build' directory simply:
+```bash
+/home/directory/poseidon/docs/tests/test_compiled_funcs.sh
+```
 
