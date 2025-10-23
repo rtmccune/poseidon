@@ -15,39 +15,38 @@ It integrates image segmentation and georectification to detect water surfaces a
 
 
 # Utility Scripts
----
 ## C++ Executables
 These executables rely on the opencv library for processing. First, ensure that you have opencv installed on your system.
 
 To install opencv:
   On Ubuntu/Debian-based systems run:
-  '''bash
+  ```bash
   sudo apt install libopencv-dev
-  '''
+  ```
   
   On Fedora/RHEL-based systems run:
-  '''bash
+  ```bash
   sudo dnf install opencv-devel
-  '''
+  ```
 
   On macOS:
-  '''bash
+  ```bash
   brew install opencv
-  '''
+  ```
 
 To compile executables using cmake:
 
 1. Create a build directory in the desired location:
-  '''bash
+  ```bash
   mkdir build
   cd build
-  '''
+  ```
 2. Configure the build for your system.
-  '''bash
+  ```bash
   cmake /path/to/poseidon/utils
-  '''
+  ```
 3. Build the exectuables.
-  '''bash
+  ```bash
   make
-  '''
+  ```
 
