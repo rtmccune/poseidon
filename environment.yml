@@ -8,14 +8,18 @@ dependencies:
   - zarr
   - numpy
   - matplotlib
+  - cmocean
+  - jupyter
+  - scipy
+  - scikit-image
   - pandas
   - geopandas
-  - jupyter
   - cupy
+  - gdal
   - laspy
   - opencv
   - tqdm
-  - scikit-image
-  - cmocean
   - mpi4py
   - contextily
+  - cxx-compiler
+  - c-compiler

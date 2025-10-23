@@ -2,6 +2,24 @@ cmake_minimum_required(VERSION 3.16)
 
 project(POSEIDON VERSION 1.0 LANGUAGES CXX)
 
+# Find the CONDA_PREFIX environment variable.
+# This points to your active conda env (e.g., /home/user/miniconda3/envs/poseidon)
+set(CONDA_LIB_DIR "$ENV{CONDA_PREFIX}/lib")
+
+if(NOT EXISTS "${CONDA_LIB_DIR}")
+    message(WARNING "CONDA_PREFIX/lib not found. RPATH may not be set correctly. "
+                    "Make sure you run cmake from an active conda environment.")
+else()
+    # Set the RPATH for all compiled executables.
+    # This tells the linker to look in your conda env's lib folder *first*
+    # when searching for .so files at runtime.
+    set(CMAKE_INSTALL_RPATH "${CONDA_LIB_DIR}")
+    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    
+    message(STATUS "Setting RPATH to: ${CONDA_LIB_DIR}")
+endif()
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
