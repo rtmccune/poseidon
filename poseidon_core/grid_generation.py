@@ -6,6 +6,10 @@ import json
 import numpy as np
 from scipy.interpolate import griddata
 
+# Added imports for the new PDAL method
+import rasterio
+import tempfile
+
 
 class GridGenerator:
     """A class for generating and processing LiDAR data grids.
@@ -28,7 +32,7 @@ class GridGenerator:
     Methods:
         load_lidar(): Load LiDAR data from the specified file.
         create_point_array(point_mask_value=2): Create an array of filtered LiDAR points based on classification.
-        gen_grid(resolution, z=0, dir='generated_grids'): Generate a grid of points in the specified extent and resolution.
+        gen_grid_pdal(...): Generates a grid using an efficient PDAL pipeline.
     """
 
     def __init__(
@@ -63,18 +67,23 @@ class GridGenerator:
         self.filepath = file_path
         self.filename = os.path.basename(file_path)
         self.lidar = self.load_lidar()
-        self.min_x_extent = (
-            min_x_extent if min_x_extent is not None else np.min(self.lidar.x) * 0.3048
-        )
-        self.max_x_extent = (
-            max_x_extent if max_x_extent is not None else np.max(self.lidar.x) * 0.3048
-        )
-        self.min_y_extent = (
-            min_y_extent if min_y_extent is not None else np.min(self.lidar.y) * 0.3048
-        )
-        self.max_y_extent = (
-            max_y_extent if max_y_extent is not None else np.max(self.lidar.y) * 0.3048
-        )
+        
+        # Determine extents, converting from feet to meters if no extents are provided
+        # This assumes the base lidar.x/y/z are in feet if extents are None
+        if min_x_extent is None:
+            # Assuming units are feet if not specified, matching create_point_array logic
+            scale_factor = 0.3048 
+            self.min_x_extent = np.min(self.lidar.x) * scale_factor
+            self.max_x_extent = np.max(self.lidar.x) * scale_factor
+            self.min_y_extent = np.min(self.lidar.y) * scale_factor
+            self.max_y_extent = np.max(self.lidar.y) * scale_factor
+        else:
+            # If extents are provided, assume they are already in the target units (meters)
+            self.min_x_extent = min_x_extent
+            self.max_x_extent = max_x_extent
+            self.min_y_extent = min_y_extent
+            self.max_y_extent = max_y_extent
+
 
     def load_lidar(self):
         """Load LiDAR data from the specified file.
@@ -97,11 +106,12 @@ class GridGenerator:
         and applies extent filtering based on predefined minimum and maximum extents.
 
         Args:
+            orig_units (str, optional): The original units of the LAS file ('feet' or 'meters').
+                                        Defaults to 'feet'.
             point_mask_value (int, optional): The classification value to filter points. Defaults to 2.
 
         Returns:
-            np.ndarray: An array of filtered LiDAR points in meters, within the specified extents. Returns all LiDAR
-                        points if no extent is specified.
+            np.ndarray: An array of filtered LiDAR points in meters, within the specified extents.
         """
         self.point_mask_val = point_mask_value
 
@@ -117,6 +127,7 @@ class GridGenerator:
                 self.lidar.z[point_mask] * 0.3048
             ])
         else:
+            # Data is already in meters
             xyz_m = np.vstack([
                 self.lidar.x[point_mask],
                 self.lidar.y[point_mask],
@@ -124,6 +135,7 @@ class GridGenerator:
             ])
         
         # Apply extent filtering
+        # Assumes self.extents are in meters
         extent_mask = (
             (xyz_m[0] >= self.min_x_extent)
             & (xyz_m[0] <= self.max_x_extent)
@@ -186,85 +198,264 @@ class GridGenerator:
         zarr.save(os.path.join(dir, f"grid_z_{resolution}m.zarr"), grid_z)
 
         return grid_x, grid_y, grid_z
+    
+    # --------------------------------------------------------------------
+    # PDAL IDW/MEAN/MAX METHOD (Corrected)
+    # --------------------------------------------------------------------
+    
+    def gen_grid_pdal(self, resolution, orig_units='feet', point_mask_value=2, 
+                      interpolation_method='idw', radius=None):
+        """Generates an interpolated elevation array using a PDAL pipeline.
 
+        This method provides an efficient way to generate a Digital Elevation Model (DEM)
+        by streaming the source file, filtering, and writing directly to a raster.
+        It uses a temporary file to store the intermediate raster, which is then
+        read into a NumPy array.
 
-    # I've renamed the argument to 'input_points' for clarity
-    def gen_grid_to_geotiff(self, resolution, input_points, out_dir="generated_grids", out_name="output_grid.tif"):
-        """
-        Generates a gridded GeoTIFF directly from NumPy point arrays using PDAL.
-        
         Args:
-            resolution (float): The grid resolution.
-            input_points (tuple or list): A tuple/list containing (x_array, y_array, z_array).
-            out_dir (str): Output directory.
-            out_name (str): Name for the final GeoTIFF file.
-        """
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+            resolution (float): The desired output resolution of the grid in the
+                                target units (meters).
+            orig_units (str, optional): The original units of the LAS file ('feet' or 'meters').
+                                        If 'feet', a transformation will be applied.
+                                        Defaults to 'feet'.
+            point_mask_value (int, optional): The classification value to use for
+                                              interpolation (e.g., 2 for ground).
+                                              Defaults to 2.
+            interpolation_method (str, optional): The interpolation algorithm to use.
+                                                  Common values: 'idw' (default), 'mean', 
+                                                  'min', 'max', 'count'.
+                                                  Defaults to 'idw'.
+            radius (float, optional): The search radius (in meters) to find points
+                                      for interpolation. If None, PDAL uses a
+                                      very small default (res * sqrt(2)) which
+                                      often results in an empty grid.
+                                      **A value of 0.5 or 1.0 is recommended.**
 
-        # --- START REQUIRED FIX ---
-        # Add this entire block to convert your input
+        Returns:
+            np.ndarray: A 2D NumPy array containing the interpolated elevation values.
+                        Areas with no data are filled with np.nan.
         
+        Raises:
+            Exception: If the PDAL pipeline execution fails.
+        """
+        print(f"Generating grid with PDAL (res={resolution}m, class={point_mask_value}, method={interpolation_method})...")
+
+        tmp_filename = None  # Initialize to None
         try:
-            # Assumes input_points is a tuple/list like (x_array, y_array, z_array)
-            x_pts, y_pts, z_pts = input_points[0], input_points[1], input_points[2]
+            # 1. Create a temporary file for the intermediate raster output
+            with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as f:
+                tmp_filename = f.name
             
-            print(f"Structuring {x_pts.shape[0]} points for PDAL...")
-            # Create the structured array that PDAL needs
-            structured_array = np.zeros(
-                x_pts.shape[0], 
-                dtype=[('X', np.float64), ('Y', np.float64), ('Z', np.float64)]
+            # 2. Calculate explicit grid dimensions
+            width = int(np.ceil((self.max_x_extent - self.min_x_extent) / resolution))
+            height = int(np.ceil((self.max_y_extent - self.min_y_extent) / resolution))
+
+            # 3. Define the filter range string
+            filter_range_str = (
+                f"Classification[{point_mask_value}:{point_mask_value}],"
+                f"X[{self.min_x_extent}:{self.max_x_extent}],"
+                f"Y[{self.min_y_extent}:{self.max_y_extent}]"
             )
-            structured_array['X'] = x_pts
-            structured_array['Y'] = y_pts
-            structured_array['Z'] = z_pts
-        except (IndexError, TypeError, AttributeError) as e:
-            print("--- ERROR ---")
-            print("Input 'input_points' is not in the expected format.")
-            print("It must be a tuple or list of 3 NumPy arrays: (x_array, y_array, z_array)")
-            print(f"Received type: {type(input_points)}")
-            print("-------------")
-            raise e
-        # --- END REQUIRED FIX ---
-
-
-        output_tif = os.path.join(out_dir, out_name)
-        bounds = (
-            f"([{self.min_x_extent}, {self.max_x_extent}],"
-            f" [{self.min_y_extent}, {self.max_y_extent}])"
-        )
-
-        pipeline_def = {
-            "pipeline": [
+            
+            # 4. Define the PDAL pipeline stages
+            pipeline_stages = [
                 {
-                    "type": "readers.array",
-                    "tag": "reader"
-                },
-                {
-                    "type": "writers.gdal",
-                    "filename": output_tif,
-                    "output_type": "idw",
-                    "resolution": resolution,
-                    "bounds": bounds,
-                    "gdaldriver": "GTiff"
+                    "type": "readers.las",
+                    "filename": self.filepath
                 }
             ]
-        }
 
-        print(f"Generating GeoTIFF: {output_tif}")
+            # 5. Add unit transformation if necessary
+            if orig_units == 'feet':
+                print("Applying feet-to-meters transformation...")
+                pipeline_stages.append({
+                    "type": "filters.transformation",
+                    "expression": "X = X * 0.3048; Y = Y * 0.3048; Z = Z * 0.3048"
+                })
+
+            # 6. Add filtering stage
+            pipeline_stages.append({
+                "type": "filters.range",
+                "limits": filter_range_str
+            })
+
+            # 7. Define the writer stage (raster/gridding)
+            nodata_value = -9999.0
+            
+            # --- FIX IS HERE ---
+            # Set a default radius if one isn't provided, otherwise
+            # the grid will be empty.
+            if radius is None:
+                # Set a more sensible default than PDAL's
+                # Let's use 10x the resolution
+                radius = resolution * 10
+                print(f"Warning: No radius specified. Defaulting to {radius:.2f}m.")
+            # --- END FIX ---
+                
+            pipeline_stages.append({
+                "type": "writers.gdal",
+                "filename": tmp_filename,
+                "gdaldriver": "GTiff",
+                "output_type": interpolation_method,
+                "resolution": resolution,
+                "nodata": nodata_value,
+                "origin_x": self.min_x_extent,
+                "origin_y": self.min_y_extent,
+                "width": width,
+                "height": height,
+                "radius": radius  # <-- ADDED THE RADIUS
+            })
+
+            # 8. Create and execute the pipeline
+            pipeline_dict = {"pipeline": pipeline_stages}
+            pipeline_json = json.dumps(pipeline_dict)
+            
+            print("Executing PDAL pipeline...")
+            pipeline = pdal.Pipeline(pipeline_json)
+            pipeline.execute()
+            print("PDAL execution complete.")
+
+            # 9. Read the temporary raster file back into a NumPy array
+            with rasterio.open(tmp_filename) as src:
+                elevation_array = src.read(1).astype(float)
+                nodata_val = src.nodata
+                if nodata_val is not None:
+                    elevation_array[elevation_array == nodata_val] = np.nan
+            
+            return elevation_array
+
+        except Exception as e:
+            print(f"Error during PDAL pipeline processing: {e}")
+            raise  # Re-raise the exception to signal failure
         
-        # --- CHANGE THIS LINE ---
-        # Instead of passing 'points_array' (or 'input_points'), 
-        # pass the new 'structured_array' you just created.
+        finally:
+            # 10. Clean up the temporary file
+            if tmp_filename and os.path.exists(tmp_filename):
+                os.remove(tmp_filename)
+                print(f"Cleaned up temporary file: {tmp_filename}")
+                
+    # --------------------------------------------------------------------
+    # NEW PDAL TIN METHOD
+    # --------------------------------------------------------------------
+    
+    def gen_grid_pdal_tin(self, resolution, orig_units='feet', point_mask_value=2):
+        """Generates an interpolated elevation array using a PDAL TIN pipeline.
+
+        This method is for 'linear' interpolation and is the direct PDAL
+        equivalent to scipy's 'linear' (TIN) method. It first builds a
+        Delaunay Triangulation (a 2D mesh) and then creates a raster
+        by interpolating values from that mesh.
+
+        Args:
+            resolution (float): The desired output resolution of the grid in the
+                                target units (meters).
+            orig_units (str, optional): The original units of the LAS file ('feet' or 'meters').
+                                        If 'feet', a transformation will be applied.
+                                        Defaults to 'feet'.
+            point_mask_value (int, optional): The classification value to use for
+                                              interpolation (e.g., 2 for ground).
+                                              Defaults to 2.
+
+        Returns:
+            np.ndarray: A 2D NumPy array containing the interpolated elevation values.
+                        Areas with no data are filled with np.nan.
         
-        # OLD CODE:
-        # pipeline = pdal.Pipeline(json.dumps(pipeline_def), arrays=[points_array])
+        Raises:
+            Exception: If the PDAL pipeline execution fails.
+        """
+        print(f"Generating grid with PDAL (TIN method, res={resolution}m, class={point_mask_value})...")
+
+        tmp_filename = None  # Initialize to None
+        try:
+            # 1. Create a temporary file
+            with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as f:
+                tmp_filename = f.name
+            
+            # 2. Calculate explicit grid dimensions
+            width = int(np.ceil((self.max_x_extent - self.min_x_extent) / resolution))
+            height = int(np.ceil((self.max_y_extent - self.min_y_extent) / resolution))
+
+            # 3. Define the filter range string
+            filter_range_str = (
+                f"Classification[{point_mask_value}:{point_mask_value}],"
+                f"X[{self.min_x_extent}:{self.max_x_extent}],"
+                f"Y[{self.min_y_extent}:{self.max_y_extent}]"
+            )
+            
+            # 4. Define the PDAL pipeline stages
+            pipeline_stages = [
+                {
+                    "type": "readers.las",
+                    "filename": self.filepath
+                }
+            ]
+
+            # 5. Add unit transformation if necessary
+            if orig_units == 'feet':
+                print("Applying feet-to-meters transformation...")
+                pipeline_stages.append({
+                    "type": "filters.transformation",
+                    "expression": "X = X * 0.3048; Y = Y * 0.3048; Z = Z * 0.3048"
+                })
+
+            # 6. Add filtering stage
+            pipeline_stages.append({
+                "type": "filters.range",
+                "limits": filter_range_str
+            })
+
+            # 7. --- PDAL TIN WORKFLOW ---
+            # First, create the Delaunay Triangulation (mesh)
+            pipeline_stages.append({
+                "type": "filters.delaunay"
+            })
+            
+            # Second, create the raster from the mesh
+            nodata_value = -9999.0
+            pipeline_stages.append({
+                "type": "filters.faceraster",
+                "resolution": resolution,
+                "origin_x": self.min_x_extent,
+                "origin_y": self.min_y_extent,
+                "width": width,
+                "height": height,
+                "nodata": nodata_value
+            })
+            
+            # Third, *write* the raster created by faceraster to our file
+            pipeline_stages.append({
+                "type": "writers.raster",
+                "filename": tmp_filename,
+                "gdaldriver": "GTiff"
+                # Note: No 'output_type' or 'resolution' here.
+                # 'writers.raster' just saves what 'faceraster' created.
+            })
+            # --- END PDAL TIN WORKFLOW ---
+
+            # 8. Create and execute the pipeline
+            pipeline_dict = {"pipeline": pipeline_stages}
+            pipeline_json = json.dumps(pipeline_dict)
+            
+            print("Executing PDAL TIN pipeline...")
+            pipeline = pdal.Pipeline(pipeline_json)
+            pipeline.execute()
+            print("PDAL execution complete.")
+
+            # 9. Read the temporary raster file
+            with rasterio.open(tmp_filename) as src:
+                elevation_array = src.read(1).astype(float)
+                nodata_val = src.nodata
+                if nodata_val is not None:
+                    elevation_array[elevation_array == nodata_val] = np.nan
+            
+            return elevation_array
+
+        except Exception as e:
+            print(f"Error during PDAL TIN pipeline processing: {e}")
+            raise
         
-        # NEW CODE:
-        pipeline = pdal.Pipeline(json.dumps(pipeline_def), arrays=[structured_array])
-        # --- END CHANGE ---
-        
-        pipeline.execute()
-        print("Generation complete.")
-        
-        return output_tif
+        finally:
+            # 10. Clean up the temporary file
+            if tmp_filename and os.path.exists(tmp_filename):
+                os.remove(tmp_filename)
+                print(f"Cleaned up temporary file: {tmp_filename}")

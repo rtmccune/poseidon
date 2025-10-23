@@ -16,7 +16,10 @@ It integrates image segmentation and georectification to detect water surfaces a
 
 # Setup
 ## Environment
-
+To create a conda environment for this workflow navigate to your local copy of the 'poseidon' repository and run the following command:
+```bash
+conda env create --file environment.yml
+```
 
 ## C++ Executables
 These executables rely on the opencv library for processing. First, ensure that you have opencv installed on your system.
@@ -46,7 +49,7 @@ After the working 'poseidon' environment and OpenCV have been installed on your 
   ```
 2. Configure the build for your system.
   ```bash
-  cmake /path/to/poseidon/utils/c_helpers
+  cmake /path/to/poseidon/poseidon_utils/c_helpers
   ```
 3. Build the exectuables.
   ```bash
