@@ -18,7 +18,7 @@ It integrates image segmentation and georectification to detect water surfaces a
 ## Environment
 To create a conda environment for this workflow navigate to your local copy of the 'poseidon' repository and run the following command:
 ```bash
-conda env create --file environment.yml
+conda env create --file poseidon_deploy/environment.yml
 ```
 
 ## C++ Executables
