@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" alt="POSEIDON banner" width="500">
+  <img src="logo.png" alt="POSEIDON banner" width="500">
 </p>
 
 <h1 align="center">POSEIDON</h1>
