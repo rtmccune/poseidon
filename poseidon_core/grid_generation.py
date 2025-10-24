@@ -7,28 +7,65 @@ from scipy.interpolate import griddata
 
 
 class GridGenerator:
-    """A class for generating and processing LiDAR data grids.
+    """
+    Generates and processes 2D/3D grids from LiDAR point cloud data.
 
-    This class allows for loading LiDAR data from a specified file, creating point 
-    arrays based on classification values, and generating grids of points in specified 
-    spatial extents and resolutions. The class also provides methods for saving the 
-    generated grids as compressed Zarr files.
+    This class handles loading a LiDAR (.las or .laz) file, filtering
+    points by classification, and generating structured 2D or 3D grids
+    (X, Y, Z) based on specified extents and resolution. Grids are
+    saved to disk as compressed Zarr arrays.
 
-    Attributes:
-        filepath (str): The path to the LiDAR data file.
-        filename (str): The name of the LiDAR data file.
-        lidar (laspy.LasData): The loaded LiDAR data.
-        min_x_extent (float): The minimum x-coordinate extent for grid generation.
-        max_x_extent (float): The maximum x-coordinate extent for grid generation.
-        min_y_extent (float): The minimum y-coordinate extent for grid generation.
-        max_y_extent (float): The maximum y-coordinate extent for grid generation.
-        point_mask_val (int): The classification value used to filter points.
+    Parameters
+    ----------
+    file_path : str
+        The path to the LiDAR data file (.las or .laz).
+    min_x_extent : float, optional
+        The minimum x-coordinate grid extent (in `extent_units`).
+        If None, defaults to the min X of the LiDAR data.
+    max_x_extent : float, optional
+        The maximum x-coordinate grid extent (in `extent_units`).
+        If None, defaults to the max X of the LiDAR data.
+    min_y_extent : float, optional
+        The minimum y-coordinate grid extent (in `extent_units`).
+        If None, defaults to the min Y of the LiDAR data.
+    max_y_extent : float, optional
+        The maximum y-coordinate grid extent (in `extent_units`).
+        If None, defaults to the max Y of the LiDAR data.
+    extent_units : {'meters', 'feet'}, optional
+        The units of the provided extent parameters.
+        Default is 'meters'.
+    lidar_units : {'feet', 'meters'}, optional
+        The source units of the LiDAR file's coordinates.
+        Default is 'feet'.
+        This is used for conversion by `create_point_array`.
 
-    Methods:
-        load_lidar(): Load LiDAR data from the specified file.
-        create_point_array(point_mask_value=2): Create an array of filtered LiDAR points
-            based on classification.
-        gen_grid(...): Generates a grid using an efficient PDAL pipeline.
+    Attributes
+    ----------
+    filepath : str
+        The path to the LiDAR data file.
+    filename : str
+        The name of the LiDAR data file.
+    lidar : laspy.LasData
+        The loaded LiDAR data object.
+    min_x_extent : float
+        The minimum x-coordinate extent for grid generation (in meters).
+    max_x_extent : float
+        The maximum x-coordinate extent for grid generation (in meters).
+    min_y_extent : float
+        The minimum y-coordinate extent for grid generation (in meters).
+    max_y_extent : float
+        The maximum y-coordinate extent for grid generation (in meters).
+    point_mask_val : int
+        The classification value used to filter points (set by
+        `create_point_array`).
+
+    Notes
+    -----
+    The typical workflow is:
+    1. Initialize the class with a `file_path`.
+    2. Call `create_point_array()` for a filtered set of ground points.
+    3. Pass the result of (2) to `gen_grid()` to interpolate a Z grid.
+    Alternatively, call `gen_grid(z=0)` to create a flat grid.
     """
 
     def __init__(
@@ -38,33 +75,33 @@ class GridGenerator:
         max_x_extent=None,
         min_y_extent=None,
         max_y_extent=None,
-        extent_units='meters',
-        lidar_units='feet'
+        extent_units="meters",
+        lidar_units="feet",
     ):
-        """Initialize the LiDAR processing object.
+        """Initialize the GridGenerator.
 
-        This constructor initializes the LiDAR processing object by loading the LiDAR 
-        data from the specified file path. It sets the spatial extents for the LiDAR 
-        data, which can be specified or automatically determined from the loaded data.
-
-        Args:
-            file_path (str): The path to the LiDAR data file to be loaded.
-            min_x_extent (float, optional): The minimum x-coordinate grid extent.
-                                            Defaults to None, which will set it to the 
-                                            minimum x-coordinate of the LiDAR data 
-                                            converted to meters.
-            max_x_extent (float, optional): The maximum x-coordinate grid extent.
-                                            Defaults to None, which will set it to the 
-                                            maximum x-coordinate of the LiDAR data 
-                                            converted to meters.
-            min_y_extent (float, optional): The minimum y-coordinate grid extent.
-                                            Defaults to None, which will set it to the 
-                                            minimum y-coordinate of the LiDAR data 
-                                            converted to meters.
-            max_y_extent (float, optional): The maximum y-coordinate grid extent.
-                                            Defaults to None, which will set it to the 
-                                            maximum y-coordinate of the LiDAR data 
-                                            converted to meters.
+        Parameters
+        ----------
+        file_path : str
+            The path to the LiDAR data file (.las or .laz).
+        min_x_extent : float, optional
+            Minimum x-coordinate grid extent (in `extent_units`).
+            Defaults to None (autodetect from LiDAR file).
+        max_x_extent : float, optional
+            Maximum x-coordinate grid extent (in `extent_units`).
+            Defaults to None (autodetect from LiDAR file).
+        min_y_extent : float, optional
+            Minimum y-coordinate grid extent (in `extent_units`).
+            Defaults to None (autodetect from LiDAR file).
+        max_y_extent : float, optional
+            Maximum y-coordinate grid extent (in `extent_units`).
+            Defaults to None (autodetect from LiDAR file).
+        extent_units : {'meters', 'feet'}, optional
+            Units of the provided extent parameters.
+            Default is 'meters'.
+        lidar_units : {'feet', 'meters'}, optional
+            Source units of the LiDAR file's coordinates.
+            Default is 'feet'.
         """
         self.filepath = file_path
         self.filename = os.path.basename(file_path)
@@ -72,58 +109,63 @@ class GridGenerator:
         self.lidar_units = lidar_units
         self.lidar = self.load_lidar()
 
-        # Determine extents, converting from feet to meters if provided extent units
-        # are in feet. Otherwise, they are assumed to be in meters.
-        if extent_units == 'feet':
-            # If extent provided in feet, convert matching create_point_array logic
+        # Determine extents, converting from feet to meters if provided
+        # extent units are in feet. Otherwise, they are assumed to be in
+        # meters.
+        if extent_units == "feet":
+            # If extent provided in feet, convert matching
+            # the create_point_array logic
             scale_factor = 0.3048
             self.min_x_extent = np.min(self.lidar.x) * scale_factor
             self.max_x_extent = np.max(self.lidar.x) * scale_factor
             self.min_y_extent = np.min(self.lidar.y) * scale_factor
             self.max_y_extent = np.max(self.lidar.y) * scale_factor
         else:
-            # If extent units are not feet, assume they are already in meters
+            # If extent units are not feet, assume they are in meters
             self.min_x_extent = min_x_extent
             self.max_x_extent = max_x_extent
             self.min_y_extent = min_y_extent
             self.max_y_extent = max_y_extent
 
     def load_lidar(self):
-        """Load LiDAR data from the specified file.
+        """Load LiDAR data from the `self.filepath`.
 
-        This function reads the LiDAR data from the file located at `self.filepath`
-        and returns the LiDAR object for further processing.
-
-        Returns:
-            laspy.LasData: The LiDAR data loaded from the file.
+        Returns
+        -------
+        laspy.LasData
+            The LiDAR data loaded from the file.
         """
         lidar = laspy.read(self.filepath)
 
         return lidar
 
     def create_point_array(self, point_mask_value=2):
-        """Create an array of LiDAR points based on classification.
+        """Create a filtered array of LiDAR points.
 
-        This function filters the LiDAR data to select points that match the
-        specified classification value, converts their coordinates from feet to meters,
-        and applies extent filtering based on predefined minimum and maximum extents.
+        Filters the LiDAR data by classification, applies extent
+        filtering (based on `self.min/max_x/y_extent`), and converts
+        coordinates to meters if `self.lidar_units` is 'feet'.
 
-        Args:
-            orig_units (str, optional): The original units of the LAS file ('feet' or 
-                'meters'). Defaults to 'feet'.
-            point_mask_value (int, optional): The classification value to filter points.
-                Defaults to 2.
+        Parameters
+        ----------
+        point_mask_value : int, optional
+            The classification value to filter points. Default is 2
+            (typically "ground").
 
-        Returns:
-            np.ndarray: An array of filtered LiDAR points in meters, within the 
-                specified extents.
+        Returns
+        -------
+        np.ndarray
+            A (3, N) array of filtered [X, Y, Z] LiDAR points in meters,
+            within the specified extents.
+
+        Notes
+        -----
+        This method also sets the `self.point_mask_val` attribute.
         """
         self.point_mask_val = point_mask_value
 
         # Mask points based on classification
-        point_mask = (
-            self.lidar.classification == point_mask_value
-        )  
+        point_mask = self.lidar.classification == point_mask_value
 
         if self.lidar_units == "feet":
             # Convert feet to meters and stack into an array
@@ -153,33 +195,63 @@ class GridGenerator:
             & (xyz_m[1] <= self.max_y_extent)
         )
 
-        return xyz_m[:, extent_mask]  # Keep only the points within the extents
+        # Keep only the points within the extents
+        return xyz_m[:, extent_mask]
 
-    def gen_grid(self, resolution, z=0, dir="data/generated_grids", grid_descriptor=""):
-        """Generate a grid of points in the specified extent and resolution.
+    def gen_grid(
+        self, resolution, z=0, dir="data/generated_grids", grid_descriptor=""
+    ):
+        """Generate and save a grid of points.
 
-        This function creates a grid based on the specified resolution and z-value. It 
-        can generate a uniform grid at a specified elevation (z) or interpolate a set of
-        points provided in a 2D array. The generated grid arrays are saved as compressed
-        Zarr files in the specified directory.
+        Creates X, Y, and Z grids based on the class extents and a given
+        resolution. The Z grid is either a flat plane
+        (if `z` is a number) or an interpolated surface
+        (if `z` is a point array).
 
-        Args:
-            resolution (float): The spacing between grid points in x and y dimensions.
-            z (int, float, np.ndarray, optional): The elevation value to use for the z 
-                dimension. Defaults to 0.
-            dir (str, optional): The directory where the generated grid files will be 
-                saved. Defaults to 'generated_grids'.
-            grid_descriptor (str, optional): A unique name to prepend to the
-                output filenames (e.g., 'ground_points'). Defaults to "".
+        The generated grids are saved as compressed Zarr files.
 
-        Returns:
-            tuple: A tuple containing three numpy arrays:
-                - grid_x (np.ndarray): The x-coordinates of the grid points.
-                - grid_y (np.ndarray): The y-coordinates of the grid points.
-                - grid_z (np.ndarray): The z-coordinates of the grid points.
+        Parameters
+        ----------
+        resolution : float
+            The spacing (in meters) between grid points in x and y
+            dimensions.
+        z : int, float, or np.ndarray, optional
+            The elevation data.
+            - If int or float: Creates a flat grid at that constant Z
+            value.
+            - If np.ndarray (shape 3,N): Interpolates Z values from
+            these [X, Y, Z] points.
+            Default is 0.
+        dir : str, optional
+            Directory to save the generated Zarr grid files.
+            Default is 'data/generated_grids'.
+        grid_descriptor : str, optional
+            A prefix for the output filenames (e.g., 'ground_points').
+            Default is "".
+
+        Returns
+        -------
+        grid_x : np.ndarray
+            The 2D array of grid x-coordinates
+            (transposed to Y, X shape).
+        grid_y : np.ndarray
+            The 2D array of grid y-coordinates
+            (transposed to Y, X shape).
+        grid_z : np.ndarray
+            The 2D array of grid z-coordinates
+            (transposed to Y, X shape).
+
+        Notes
+        -----
+        The grids are generated using `np.mgrid` and then transposed to
+        have a (Y, X) shape. If `z` is an array,
+        `scipy.interpolate.griddata` is used with a 'linear' method.
         """
         # --- Start Logging ---
-        print(f"\n--- Starting grid generation for '{grid_descriptor}' at {resolution}m ---")
+        print(
+            f"\n--- Starting grid generation for '{grid_descriptor}' at "
+            f"{resolution}m ---"
+        )
         start_time = time.time()
 
         # Check that the path exists
@@ -188,12 +260,16 @@ class GridGenerator:
             print(f"  [IO] Directory created: {dir}")
         else:
             print(f"  [IO] Using existing directory: {dir}")
-        
+
         # Generate structured grid for extents and resolution
-        print(f"  [GRID] Generating grid coordinates...")
-        # Using :.2f to format floats to 2 decimal places for cleaner logs
-        print(f"    X Extent: {self.min_x_extent:.2f} to {self.max_x_extent:.2f}")
-        print(f"    Y Extent: {self.min_y_extent:.2f} to {self.max_y_extent:.2f}")
+        print("  [GRID] Generating grid coordinates...")
+        # Using :.2f to format floats to 2 decimal places for clean logs
+        print(
+            f"    X Extent: {self.min_x_extent:.2f} to {self.max_x_extent:.2f}"
+        )
+        print(
+            f"    Y Extent: {self.min_y_extent:.2f} to {self.max_y_extent:.2f}"
+        )
         grid_x, grid_y = np.mgrid[
             self.min_x_extent : self.max_x_extent : resolution,
             self.min_y_extent : self.max_y_extent : resolution,
@@ -201,7 +277,7 @@ class GridGenerator:
         print(f"    Initial grid shape (before transpose): {grid_x.shape}")
 
         # --- Z-Grid Generation Logic ---
-        
+
         # If int or float provided for z, create set elevation grid
         if isinstance(z, int) or isinstance(z, float):
             print(f"  [GRID] Creating flat Z grid with constant value: {z}")
@@ -209,65 +285,97 @@ class GridGenerator:
 
         # If points array is provided, fit points to structured grid
         elif isinstance(z, np.ndarray):
-            print(f"  [GRID] Interpolating Z grid from {z.shape[1]} input points...")
+            print(
+                f"  [GRID] Interpolating Z grid from {z.shape[1]} input points"
+                f"..."
+            )
             x = z[0]
             y = z[1]
-            z_vals = z[2] # Use a different variable name to avoid confusion
+            # Use a different variable name to avoid confusion
+            z_vals = z[2]
             grid_z = griddata((x, y), z_vals, (grid_x, grid_y), method="linear")
-            
+
             # Check for NaNs, which can happen if interpolation fails
             nan_count = np.count_nonzero(np.isnan(grid_z))
             if nan_count > 0:
-                print(f"    [WARN] {nan_count} grid points were outside the "
-                      f"interpolation area (set to NaN).")
+                print(
+                    f"    [WARN] {nan_count} grid points were outside the "
+                    f"interpolation area (set to NaN)."
+                )
                 # You might want to fill these NaNs, e.g.:
                 # grid_z = np.nan_to_num(grid_z, nan=-9999.0)
                 # print("    [INFO] NaN values filled with -9999.0")
-        
+
         # Add a check for bad input
         else:
             print(f"  [ERROR] Z parameter is of an unsupported type: {type(z)}")
-            raise TypeError(f"Z parameter must be int, float, or np.ndarray, not {type(z)}")
+            raise TypeError(
+                f"Z parameter must be int, float, or np.ndarray, not {type(z)}"
+            )
 
         # --- Transpose ---
-        print(f"  [GRID] Transposing grids to (Y, X) convention.")
+        print("  [GRID] Transposing grids to (Y, X) convention.")
         grid_x = grid_x.T
         grid_y = grid_y.T
         grid_z = grid_z.T
         print(f"    Final grid shape: {grid_x.shape}")
 
         # --- Save to Zarr ---
-        
+
         # Handle the descriptor string to make sure filename is clean
-        if grid_descriptor and not grid_descriptor.endswith('_'):
+        if grid_descriptor and not grid_descriptor.endswith("_"):
             grid_descriptor_str = f"{grid_descriptor}_"
         elif not grid_descriptor:
-             grid_descriptor_str = "" # Empty string if none provided
+            grid_descriptor_str = ""  # Empty string if none provided
         else:
-            grid_descriptor_str = grid_descriptor # Use as-is if it ends in '_'
+            # Use as-is if it ends in '_'
+            grid_descriptor_str = grid_descriptor
 
         # Define file paths
-        path_x = os.path.join(dir, f"{grid_descriptor_str}grid_x_{resolution}m.zarr")
-        path_y = os.path.join(dir, f"{grid_descriptor_str}grid_y_{resolution}m.zarr")
-        path_z = os.path.join(dir, f"{grid_descriptor_str}grid_z_{resolution}m.zarr")
-        
-        print(f"  [IO] Saving compressed Zarr arrays (mode='w', overwriting)...")
-        
+        path_x = os.path.join(
+            dir, f"{grid_descriptor_str}grid_x_{resolution}m.zarr"
+        )
+        path_y = os.path.join(
+            dir, f"{grid_descriptor_str}grid_y_{resolution}m.zarr"
+        )
+        path_z = os.path.join(
+            dir, f"{grid_descriptor_str}grid_z_{resolution}m.zarr"
+        )
+
+        print("  [IO] Saving compressed Zarr arrays (mode='w', overwriting)...")
+
         print(f"    X -> {path_x}")
-        zarr.open(path_x, mode='w', shape=grid_x.shape, dtype=grid_x.dtype, 
-                  chunks=True)[:] = grid_x
-        
+        zarr.open(
+            path_x,
+            mode="w",
+            shape=grid_x.shape,
+            dtype=grid_x.dtype,
+            chunks=True,
+        )[:] = grid_x
+
         print(f"    Y -> {path_y}")
-        zarr.open(path_y, mode='w', shape=grid_y.shape, dtype=grid_y.dtype, 
-                  chunks=True)[:] = grid_y
-        
+        zarr.open(
+            path_y,
+            mode="w",
+            shape=grid_y.shape,
+            dtype=grid_y.dtype,
+            chunks=True,
+        )[:] = grid_y
+
         print(f"    Z -> {path_z}")
-        zarr.open(path_z, mode='w', shape=grid_z.shape, dtype=grid_z.dtype, 
-                  chunks=True)[:] = grid_z
+        zarr.open(
+            path_z,
+            mode="w",
+            shape=grid_z.shape,
+            dtype=grid_z.dtype,
+            chunks=True,
+        )[:] = grid_z
 
         # --- Finish Logging ---
         end_time = time.time()
-        print(f"--- Grid generation successful in {end_time - start_time:.2f} seconds. " 
-              f"---")
+        print(
+            f"--- Grid generation successful in {end_time - start_time:.2f} "
+            f"seconds. ---"
+        )
 
         return grid_x, grid_y, grid_z

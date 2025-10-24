@@ -7,8 +7,9 @@ import poseidon_core
 from tqdm import tqdm
 from mpi4py import MPI
 
+
 class RoadwayAnalyzer:
-    
+
     def __init__(self, main_dir, virtual_sensor_locations):
 
         self.main_dir = main_dir
@@ -31,7 +32,7 @@ class RoadwayAnalyzer:
         ]
 
         return flood_event_folders
-    
+
     def gen_transect_depths(self, flood_event_path):
 
         depth_maps_zarr_dir = os.path.join(
@@ -45,7 +46,9 @@ class RoadwayAnalyzer:
 
         if os.path.exists(depth_maps_zarr_dir):
             file_names = [
-                f for f in os.listdir(depth_maps_zarr_dir) if f.endswith("_95_perc")
+                f
+                for f in os.listdir(depth_maps_zarr_dir)
+                if f.endswith("_95_perc")
             ]
             num_files = len(file_names)
             print(num_files)
@@ -57,7 +60,9 @@ class RoadwayAnalyzer:
             )
 
             for idx, file_name in enumerate(file_names):
-                timestamp = image_processing.image_utils.extract_timestamp(file_name)
+                timestamp = image_processing.image_utils.extract_timestamp(
+                    file_name
+                )
                 timestamp_list.append(timestamp)
 
                 file_zarr_store = os.path.join(depth_maps_zarr_dir, file_name)
@@ -80,10 +85,14 @@ class RoadwayAnalyzer:
             # root.create_array("timestamps", shape=datetimes.shape, dtype="U")
             # root["timestamps"][:] = datetimes  # Assign data
             root.create_array("timestamps", data=datetimes)
-            
-            root.create_array("roadway_transect_depths", shape=transect_depth_array.shape, dtype=np.float32)
+
+            root.create_array(
+                "roadway_transect_depths",
+                shape=transect_depth_array.shape,
+                dtype=np.float32,
+            )
             root["roadway_transect_depths"][:] = transect_depth_array
-            
+
     def preprocess_flood_events(self):
 
         flood_event_folders = self.list_flood_event_folders()
@@ -96,8 +105,7 @@ class RoadwayAnalyzer:
 
             flood_event_path = os.path.join(self.main_dir, flood_event)
             self.gen_transect_depths(flood_event_path)
-    
-    
+
     def load_transect_depths(self, flood_event_path):
 
         zarr_store_path = os.path.join(
@@ -116,25 +124,28 @@ class RoadwayAnalyzer:
             return datetimes, transect_depths
         else:
             return None, None
-            #raise FileNotFoundError(f"Zarr store not found: {zarr_store_path}")
-        
+            # raise FileNotFoundError(f"Zarr store not found: {zarr_store_path}")
+
     def process_roadway_accessibility(self):
-        
+
         flood_event_folders = self.list_flood_event_folders()
-        
-        
+
         for flood_event in tqdm(
             flood_event_folders, desc="Plotting flood events...", unit="event"
-            ):
-            
+        ):
+
             flood_event_path = os.path.join(self.main_dir, flood_event)
-            datetimes, transect_depths = self.load_transect_depths(flood_event_path)
-            
+            datetimes, transect_depths = self.load_transect_depths(
+                flood_event_path
+            )
+
             # impassable = np.any(transect_depths > 0, axis=1).astype(int)  # convert True/False to 1/0
             if transect_depths is None:
-                print(f"Warning: Transect data not found for '{flood_event}'. Skipping.")
+                print(
+                    f"Warning: Transect data not found for '{flood_event}'. Skipping."
+                )
                 return  # Exit the method for this event
-            
+
             # Calculate impassable status (1 if any depth > 0, else 0)
             impassable = np.any(transect_depths > 0, axis=1).astype(int)
 
@@ -145,33 +156,39 @@ class RoadwayAnalyzer:
             min_depths = np.nanmin(transect_depths, axis=1)
 
             # Create DataFrame with the original and new columns
-            roadway_stats_df = pd.DataFrame({
-                'Time': datetimes,
-                'Impassable': impassable,
-                'MeanDepth': mean_depths,
-                'MedianDepth': median_depths,
-                'MaxDepth': max_depths,
-                'MinDepth': min_depths
-            })
+            roadway_stats_df = pd.DataFrame(
+                {
+                    "Time": datetimes,
+                    "Impassable": impassable,
+                    "MeanDepth": mean_depths,
+                    "MedianDepth": median_depths,
+                    "MaxDepth": max_depths,
+                    "MinDepth": min_depths,
+                }
+            )
 
             # Ensure 'Time' is a datetime object and sort the DataFrame
-            roadway_stats_df['Time'] = pd.to_datetime(roadway_stats_df['Time'])
-            roadway_stats_df = roadway_stats_df.sort_values(by='Time')
-            
+            roadway_stats_df["Time"] = pd.to_datetime(roadway_stats_df["Time"])
+            roadway_stats_df = roadway_stats_df.sort_values(by="Time")
+
             # Save the DataFrame to a CSV file
-            output_path = os.path.join(self.main_dir, flood_event, 'roadway_accessibility_time_series.csv')
+            output_path = os.path.join(
+                self.main_dir,
+                flood_event,
+                "roadway_accessibility_time_series.csv",
+            )
             roadway_stats_df.to_csv(output_path, index=False)
             # # Create DataFrame
             # impassable_time_series = pd.DataFrame({
             #     'Time': datetimes,
             #     'Impassable': impassable
             # })
-            
+
             # impassable_time_series['Time'] = pd.to_datetime(impassable_time_series['Time'])
             # impassable_time_series = impassable_time_series.sort_values(by='Time')
-            
+
             # impassable_time_series.to_csv(os.path.join(self.main_dir, flood_event, 'roadway_accessibility_time_series.csv'))
-        
+
     def process_roadway_access_HPC(self):
         """
         Processes and generates plots for flood events in parallel using MPI.

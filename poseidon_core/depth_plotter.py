@@ -25,9 +25,16 @@ from matplotlib.colors import Normalize
 
 class DepthPlotter:
 
-    def __init__(self, main_dir, min_x_extent, max_x_extent,
-                 min_y_extent, max_y_extent, virtual_sensor_locations,
-                 bbox_crs='EPSG:32119'):
+    def __init__(
+        self,
+        main_dir,
+        min_x_extent,
+        max_x_extent,
+        min_y_extent,
+        max_y_extent,
+        virtual_sensor_locations,
+        bbox_crs="EPSG:32119",
+    ):
         """
         Initializes the visualization class with directory paths and virtual sensor locations.
 
@@ -68,7 +75,7 @@ class DepthPlotter:
         self.sensor_1_color = cmocean.cm.phase(0.1)
         self.sensor_2_color = cmocean.cm.phase(0.3)
         self.sensor_3_color = cmocean.cm.phase(0.5)
-        
+
         self.min_x_extent = min_x_extent
         self.max_x_extent = max_x_extent
         self.min_y_extent = min_y_extent
@@ -115,7 +122,9 @@ class DepthPlotter:
             Writes the matched data to a CSV file in the flood event directory.
         """
 
-        sunnyd_data = pd.read_csv(os.path.join(flood_event_path, flood_event + ".csv"))
+        sunnyd_data = pd.read_csv(
+            os.path.join(flood_event_path, flood_event + ".csv")
+        )
         sunnyd_data["time_UTC"] = pd.to_datetime(sunnyd_data["time_UTC"])
 
         orig_images_path = os.path.join(flood_event_path, "orig_images")
@@ -125,10 +134,14 @@ class DepthPlotter:
         # Iterate over image filenames
         for filename in image_list:
             # Extract the sensor id and timestamp
-            sensor_id = image_processing.image_utils.extract_camera_name(filename)[4:]
+            sensor_id = image_processing.image_utils.extract_camera_name(
+                filename
+            )[4:]
             timestamp = image_processing.image_utils.extract_timestamp(filename)
 
-            timestamp = pytz.utc.localize(datetime.strptime(timestamp, "%Y%m%d%H%M%S"))
+            timestamp = pytz.utc.localize(
+                datetime.strptime(timestamp, "%Y%m%d%H%M%S")
+            )
 
             # Filter the dataframe by sensor id
             filtered_df = sunnyd_data[sunnyd_data["sensor_ID"] == sensor_id]
@@ -143,7 +156,8 @@ class DepthPlotter:
                 result = {
                     "image_filename": filename,
                     "closest_utc_time": closest_row["time_UTC"].values[0],
-                    "water_level": closest_row["water_level"].values[0] * 0.3048,
+                    "water_level": closest_row["water_level"].values[0]
+                    * 0.3048,
                     # 'sensor_water_level': (closest_row['sensor_water_level_adj'].values[0] - 3.05) * 0.3048
                 }
                 match.append(result)
@@ -184,7 +198,9 @@ class DepthPlotter:
 
         if os.path.exists(depth_maps_zarr_dir):
             file_names = [
-                f for f in os.listdir(depth_maps_zarr_dir) if f.endswith("wse_map_95_perc")
+                f
+                for f in os.listdir(depth_maps_zarr_dir)
+                if f.endswith("wse_map_95_perc")
             ]
             num_files = len(file_names)
 
@@ -196,7 +212,9 @@ class DepthPlotter:
             )
 
             for idx, file_name in enumerate(file_names):
-                timestamp = image_processing.image_utils.extract_timestamp(file_name)
+                timestamp = image_processing.image_utils.extract_timestamp(
+                    file_name
+                )
                 timestamp_list.append(timestamp)
 
                 file_zarr_store = os.path.join(depth_maps_zarr_dir, file_name)
@@ -234,17 +252,16 @@ class DepthPlotter:
 
             # root.create_array("vs_depths", shape=vs_depth_array.shape, dtype=np.float32)
             # root["vs_depths"][:] = vs_depth_array
-            
+
             # 1. Create the NumPy array with a specific, hardcoded string dtype.
             #    A length like 'U30' is safe for standard ISO format datetimes.
             datetimes_np = np.array(
-                pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30"
+                pd.to_datetime(timestamp_list, utc=True).astype(str),
+                dtype="U30",
             )
 
             # 2. Open the Zarr store for writing.
-            root = zarr.open_group(
-                output_zarr_store, mode="w"
-            )
+            root = zarr.open_group(output_zarr_store, mode="w")
 
             # 3. Create the Zarr arrays using the 'data' argument.
             #    This is the simplest and safest way. Zarr will correctly infer
@@ -422,9 +439,13 @@ class DepthPlotter:
                         orig_image_rects_zarr_dir, orig_file_name
                     )
                     orig_img_store = zarr.open(orig_zarr_store_path, mode="r")
-                    orig_image = orig_img_store[:]  # Consider downsampling if necessary
+                    orig_image = orig_img_store[
+                        :
+                    ]  # Consider downsampling if necessary
 
-                    zarr_store_path = os.path.join(depth_map_zarr_dir, file_name)
+                    zarr_store_path = os.path.join(
+                        depth_map_zarr_dir, file_name
+                    )
                     img_store = zarr.open(zarr_store_path, mode="r")
                     depth_map = img_store[
                         :
@@ -433,7 +454,10 @@ class DepthPlotter:
                     # print(f"Processing depth map: {file_name}")
 
                     fig, (ax1, ax3) = plt.subplots(
-                        2, 1, figsize=(12, 12), gridspec_kw={"height_ratios": [1.5, 1]}
+                        2,
+                        1,
+                        figsize=(12, 12),
+                        gridspec_kw={"height_ratios": [1.5, 1]},
                     )
 
                     # Plot depth map
@@ -441,7 +465,10 @@ class DepthPlotter:
                         orig_image, cmap="gray"
                     )  # Assuming orig_image is grayscale
                     im = ax1.imshow(
-                        depth_map, cmap=cmocean.cm.deep, vmin=depth_min, vmax=depth_max
+                        depth_map,
+                        cmap=cmocean.cm.deep,
+                        vmin=depth_min,
+                        vmax=depth_max,
                     )
                     ax1.scatter(
                         self.virtual_sensor_loc[0][0],
@@ -476,7 +503,9 @@ class DepthPlotter:
                         transform=ax1.transAxes,
                         fontsize=12,
                         verticalalignment="top",
-                        bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
+                        bbox=dict(
+                            facecolor="white", alpha=0.8, edgecolor="black"
+                        ),
                     )
 
                     # Plot water levels
@@ -513,7 +542,9 @@ class DepthPlotter:
                     ax3.axvline(x=date, color="k", linestyle="-", zorder=1)
                     ax3.set_ylim(-0.25, 0.75)
                     ax3.tick_params(axis="x", rotation=45)
-                    ax3.set_title("Water Level From Virtual Sensor Locations Over Time")
+                    ax3.set_title(
+                        "Water Level From Virtual Sensor Locations Over Time"
+                    )
                     ax3.set_ylabel("Water Depth (m)")
                     ax3.grid(True)
                     ax3.legend(loc="upper right")
@@ -532,9 +563,16 @@ class DepthPlotter:
                     del orig_image, depth_map  # Delete large variables
                     gc.collect()  # Force garbage collection
 
-    
-    def plot_flood_from_numpy(depth_array, min_x, max_x, min_y, max_y,
-                                    resolution_m=0.05, bbox_crs='EPSG:32119', output_folder='figures'):
+    def plot_flood_from_numpy(
+        depth_array,
+        min_x,
+        max_x,
+        min_y,
+        max_y,
+        resolution_m=0.05,
+        bbox_crs="EPSG:32119",
+        output_folder="figures",
+    ):
         """
         Plots a flood numpy array, correcting for a "bottom-left" array origin by
         flipping the array vertically before georeferencing.
@@ -553,9 +591,7 @@ class DepthPlotter:
 
         transform = Affine(resolution_m, 0.0, min_x, 0.0, -resolution_m, max_y)
         da_hmax = xr.DataArray(
-            data=data_for_xarray,
-            dims=["y", "x"],
-            name='flood_depth'
+            data=data_for_xarray, dims=["y", "x"], name="flood_depth"
         )
         da_hmax.rio.write_crs(bbox_crs, inplace=True)
         da_hmax.rio.write_transform(transform, inplace=True)
@@ -586,33 +622,33 @@ class DepthPlotter:
             vmin=0,
             vmax=0.25,
             alpha=0.7,
-            interpolation='none',
-            zorder=10
+            interpolation="none",
+            zorder=10,
         )
 
         ax.text(
-                0.05,
-                0.95,
-                f"Spatial Extent ($m^2$): {round((np.sum(~np.isnan(depth_array))) * 0.0025, 2)}",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment="top",
-                bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
-            )
-        
+            0.05,
+            0.95,
+            f"Spatial Extent ($m^2$): {round((np.sum(~np.isnan(depth_array))) * 0.0025, 2)}",
+            transform=ax.transAxes,
+            fontsize=12,
+            verticalalignment="top",
+            bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
+        )
+
         # 8. Manually create a colorbar.
         cbar = fig.colorbar(im, ax=ax, shrink=0.6, aspect=30)
-        cbar.set_label('Depth (m)')
-        
+        cbar.set_label("Depth (m)")
+
         # 9. Clean up and save
         png_path = Path(output_folder) / "flood_map_final.png"
         png_path.parent.mkdir(parents=True, exist_ok=True)
 
-        ax.set_title('')
+        ax.set_title("")
         ax.set_axis_off()
         plt.tight_layout()
 
-        plt.savefig(png_path, dpi=300, bbox_inches='tight', pad_inches=0)
+        plt.savefig(png_path, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
         print(f"Plot created successfully and saved to {png_path}.")
 
@@ -648,7 +684,7 @@ class DepthPlotter:
         """
 
         flood_event_folders = self.list_flood_event_folders()
-        
+
         self.preprocess_flood_events()
 
         for flood_event in tqdm(
@@ -661,7 +697,9 @@ class DepthPlotter:
                 self.load_virtual_sensor_depths(flood_event_path)
             )
 
-            plotting_folder = os.path.join(flood_event_path, "plots", plotting_dir)
+            plotting_folder = os.path.join(
+                flood_event_path, "plots", plotting_dir
+            )
             os.makedirs(plotting_folder, exist_ok=True)
 
             depth_maps_zarr_dir = os.path.join(
@@ -672,7 +710,9 @@ class DepthPlotter:
             )
 
             obs_to_img_matches = pd.read_csv(
-                os.path.join(flood_event_path, "wtr_lvl_obs_to_image_matches.csv")
+                os.path.join(
+                    flood_event_path, "wtr_lvl_obs_to_image_matches.csv"
+                )
             )
             obs_to_img_matches["closest_utc_time"] = pd.to_datetime(
                 obs_to_img_matches["closest_utc_time"], utc=True
@@ -758,10 +798,18 @@ class DepthPlotter:
         ):
             self.process_single_flood_event(flood_event)
 
-
-    def plot_flood_wse_map(self, depth_array_path, min_x, max_x, min_y, max_y,
-                                    output_filename, resolution_m=0.05, 
-                                    bbox_crs='EPSG:32119', output_folder='figures'):
+    def plot_flood_wse_map(
+        self,
+        depth_array_path,
+        min_x,
+        max_x,
+        min_y,
+        max_y,
+        output_filename,
+        resolution_m=0.05,
+        bbox_crs="EPSG:32119",
+        output_folder="figures",
+    ):
         """
         Plots a flood numpy array, correcting for a "bottom-left" array origin by
         flipping the array vertically before georeferencing.
@@ -774,17 +822,16 @@ class DepthPlotter:
         """
         array_store = zarr.open(depth_array_path, mode="r")
         depth_array = array_store[:]
-        print(f"    -> DEBUG: Number of valid (non-NaN) data points: {np.count_nonzero(~np.isnan(depth_array))}")
-
+        print(
+            f"    -> DEBUG: Number of valid (non-NaN) data points: {np.count_nonzero(~np.isnan(depth_array))}"
+        )
 
         # 1. Build and georeferenced the DataArray.
         data_for_xarray = np.flipud(depth_array).astype(float)
 
         transform = Affine(resolution_m, 0.0, min_x, 0.0, -resolution_m, max_y)
         da_hmax = xr.DataArray(
-            data=data_for_xarray,
-            dims=["y", "x"],
-            name='flood_depth'
+            data=data_for_xarray, dims=["y", "x"], name="flood_depth"
         )
         da_hmax.rio.write_crs(bbox_crs, inplace=True)
         da_hmax.rio.write_transform(transform, inplace=True)
@@ -805,52 +852,68 @@ class DepthPlotter:
         ax.set_ylim(miny, maxy)
 
         # 6. Add the basemap FIRST.
-        #ctx.add_basemap(ax, source=ctx.providers.Esri.WorldImagery, zorder=1)
-        
-        vmin=np.nanmin(data_to_plot)
-        vmax=np.nanmax(data_to_plot)
-        
+        # ctx.add_basemap(ax, source=ctx.providers.Esri.WorldImagery, zorder=1)
+
+        vmin = np.nanmin(data_to_plot)
+        vmax = np.nanmax(data_to_plot)
+
         # 7. Use ax.imshow() to plot the data ON TOP.
         im = ax.imshow(
             data_to_plot,
             extent=(minx, maxx, miny, maxy),
-            cmap='Blues',
+            cmap="Blues",
             alpha=0.7,
-            interpolation='none',
-            zorder=10
+            interpolation="none",
+            zorder=10,
         )
 
         ax.text(
-                0.05,
-                0.95,
-                f"Spatial Extent ($m^2$): {round((np.sum(~np.isnan(depth_array))) * 0.0025, 2)}",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment="top",
-                bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
-            )
-        
+            0.05,
+            0.95,
+            f"Spatial Extent ($m^2$): {round((np.sum(~np.isnan(depth_array))) * 0.0025, 2)}",
+            transform=ax.transAxes,
+            fontsize=12,
+            verticalalignment="top",
+            bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
+        )
+
         # 8. Manually create a colorbar.
-        norm = Normalize(vmin=np.nanmin(data_to_plot), vmax=np.nanmax(data_to_plot))
-        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap='Blues'), ax=ax, shrink=0.6, aspect=30)
-        cbar.set_label('Water Surface Elevation (m)')
-        
+        norm = Normalize(
+            vmin=np.nanmin(data_to_plot), vmax=np.nanmax(data_to_plot)
+        )
+        cbar = fig.colorbar(
+            cm.ScalarMappable(norm=norm, cmap="Blues"),
+            ax=ax,
+            shrink=0.6,
+            aspect=30,
+        )
+        cbar.set_label("Water Surface Elevation (m)")
+
         # 9. Clean up and save
         # --- FIX: Use the dynamic output_filename parameter ---
         png_path = Path(output_folder) / output_filename
         png_path.parent.mkdir(parents=True, exist_ok=True)
 
-        ax.set_title('')
+        ax.set_title("")
         ax.set_axis_off()
         plt.tight_layout()
 
-        plt.savefig(png_path, dpi=300, bbox_inches='tight', pad_inches=0)
+        plt.savefig(png_path, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
         print(f"Plot created successfully and saved to {png_path}.")
-    
-    def plot_flood_depth_map(self, depth_array_path, min_x, max_x, min_y, max_y,
-                                output_filename, resolution_m=0.05, 
-                                bbox_crs='EPSG:32119', output_folder='figures'):
+
+    def plot_flood_depth_map(
+        self,
+        depth_array_path,
+        min_x,
+        max_x,
+        min_y,
+        max_y,
+        output_filename,
+        resolution_m=0.05,
+        bbox_crs="EPSG:32119",
+        output_folder="figures",
+    ):
         """
         Plots a flood numpy array, correcting for a "bottom-left" array origin by
         flipping the array vertically before georeferencing.
@@ -864,33 +927,37 @@ class DepthPlotter:
         array_store = zarr.open(depth_array_path, mode="r")
         depth_array = array_store[:]
 
-        print(f"    -> DEBUG: Number of valid (non-NaN) data points: {np.count_nonzero(~np.isnan(depth_array))}")
+        print(
+            f"    -> DEBUG: Number of valid (non-NaN) data points: {np.count_nonzero(~np.isnan(depth_array))}"
+        )
 
         # 1. Build and georeferenced the DataArray.
         data_for_xarray = np.flipud(depth_array).astype(float)
 
         transform = Affine(resolution_m, 0.0, min_x, 0.0, -resolution_m, max_y)
         da_hmax = xr.DataArray(
-            data=data_for_xarray,
-            dims=["y", "x"],
-            name='flood_depth'
+            data=data_for_xarray, dims=["y", "x"], name="flood_depth"
         )
         da_hmax.rio.write_crs(bbox_crs, inplace=True)
         da_hmax.rio.write_transform(transform, inplace=True)
         da_hmax.rio.write_nodata(np.nan, inplace=True)
-        
+
         # Downsample the array by a factor of 2 in each dimension before reprojecting.
         # This reduces the total number of pixels by 75%, making reprojection MUCH faster.
         # Adjust the factor as needed; 4 would be even faster.
-        coarsen_factor = 2 
-        da_hmax_coarse = da_hmax.coarsen(x=coarsen_factor, y=coarsen_factor, boundary="trim").mean()
-        print(f"    -> Coarsened array shape: {da_hmax_coarse.shape}", flush=True)
+        coarsen_factor = 2
+        da_hmax_coarse = da_hmax.coarsen(
+            x=coarsen_factor, y=coarsen_factor, boundary="trim"
+        ).mean()
+        print(
+            f"    -> Coarsened array shape: {da_hmax_coarse.shape}", flush=True
+        )
 
         # 2. Reproject the SMALLER, coarsened array. (THIS WILL BE FAST)
         da_hmax_mercator = da_hmax_coarse.rio.reproject(3857)
 
         # 2. Reproject the raster to Web Mercator.
-        #da_hmax_mercator = da_hmax.rio.reproject(3857)
+        # da_hmax_mercator = da_hmax.rio.reproject(3857)
 
         # 3. Create the plot axes
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -904,11 +971,11 @@ class DepthPlotter:
         ax.set_ylim(miny, maxy)
 
         # 6. Add the basemap FIRST.
-        #ctx.add_basemap(ax, source=ctx.providers.Esri.WorldImagery, zorder=1)
+        # ctx.add_basemap(ax, source=ctx.providers.Esri.WorldImagery, zorder=1)
 
         vmin = 0
         vmax = 0.25
-        
+
         # 7. Use ax.imshow() to plot the data ON TOP.
         im = ax.imshow(
             data_to_plot,
@@ -917,35 +984,34 @@ class DepthPlotter:
             vmin=vmin,
             vmax=vmax,
             alpha=0.7,
-            interpolation='none',
-            zorder=10
+            interpolation="none",
+            zorder=10,
         )
 
         ax.text(
-                0.05,
-                0.95,
-                f"Spatial Extent ($m^2$): {round((np.sum(~np.isnan(depth_array))) * 0.0025, 2)}",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment="top",
-                bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
-            )
-        
+            0.05,
+            0.95,
+            f"Spatial Extent ($m^2$): {round((np.sum(~np.isnan(depth_array))) * 0.0025, 2)}",
+            transform=ax.transAxes,
+            fontsize=12,
+            verticalalignment="top",
+            bbox=dict(facecolor="white", alpha=0.8, edgecolor="black"),
+        )
+
         # 8. Manually create a colorbar.
         cbar = fig.colorbar(im, ax=ax, shrink=0.6, aspect=30)
-        cbar.set_label('Depth (m)')
+        cbar.set_label("Depth (m)")
 
-        
         # 9. Clean up and save
         # --- FIX: Use the dynamic output_filename parameter ---
         png_path = Path(output_folder) / output_filename
         png_path.parent.mkdir(parents=True, exist_ok=True)
 
-        ax.set_title('')
+        ax.set_title("")
         ax.set_axis_off()
         plt.tight_layout()
 
-        plt.savefig(png_path, dpi=300, bbox_inches='tight', pad_inches=0)
+        plt.savefig(png_path, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
         print(f"Plot created successfully and saved to {png_path}.")
 
@@ -956,9 +1022,14 @@ class DepthPlotter:
         flood_event_path = os.path.join(self.main_dir, flood_event)
 
         try:
-            datetimes, _, _, _ = self.load_virtual_sensor_depths(flood_event_path)
+            datetimes, _, _, _ = self.load_virtual_sensor_depths(
+                flood_event_path
+            )
         except FileNotFoundError:
-            print(f"WARNING: Could not load virtual sensor depths for {flood_event}. Skipping.", flush=True)
+            print(
+                f"WARNING: Could not load virtual sensor depths for {flood_event}. Skipping.",
+                flush=True,
+            )
             return
 
         depth_maps_zarr_dir = os.path.join(
@@ -966,14 +1037,20 @@ class DepthPlotter:
         )
 
         if not os.path.isdir(depth_maps_zarr_dir):
-            print(f"ERROR: Directory not found at '{depth_maps_zarr_dir}'", flush=True)
+            print(
+                f"ERROR: Directory not found at '{depth_maps_zarr_dir}'",
+                flush=True,
+            )
             return
 
         # List the contents of the directory
         try:
             contents = os.listdir(depth_maps_zarr_dir)
         except OSError as e:
-            print(f"ERROR: Could not list contents of '{depth_maps_zarr_dir}': {e}", flush=True)
+            print(
+                f"ERROR: Could not list contents of '{depth_maps_zarr_dir}': {e}",
+                flush=True,
+            )
             return
 
         # Loop through every item found in the directory
@@ -988,34 +1065,45 @@ class DepthPlotter:
             try:
                 output_png_filename = f"{zarr_name}.png"
 
-                if 'wse' in zarr_name:
+                if "wse" in zarr_name:
                     print(f" -> Processing WSE file: {zarr_name}", flush=True)
-                    plotting_dir = 'WSE_maps'
-                    plotting_folder = os.path.join(flood_event_path, "plots", plotting_dir)
+                    plotting_dir = "WSE_maps"
+                    plotting_folder = os.path.join(
+                        flood_event_path, "plots", plotting_dir
+                    )
 
                     self.plot_flood_wse_map(
                         full_zarr_path,
-                        self.min_x_extent, self.max_x_extent,
-                        self.min_y_extent, self.max_y_extent,
+                        self.min_x_extent,
+                        self.max_x_extent,
+                        self.min_y_extent,
+                        self.max_y_extent,
                         output_png_filename,
                         bbox_crs=self.bbox_crs,
-                        output_folder=plotting_folder
+                        output_folder=plotting_folder,
                     )
 
-                elif 'depth' in zarr_name:
+                elif "depth" in zarr_name:
                     print(f" -> Processing DEPTH file: {zarr_name}", flush=True)
-                    plotting_dir = 'depth_maps'
-                    plotting_folder = os.path.join(flood_event_path, "plots", plotting_dir)
+                    plotting_dir = "depth_maps"
+                    plotting_folder = os.path.join(
+                        flood_event_path, "plots", plotting_dir
+                    )
 
                     self.plot_flood_depth_map(
                         full_zarr_path,
-                        self.min_x_extent, self.max_x_extent,
-                        self.min_y_extent, self.max_y_extent,
+                        self.min_x_extent,
+                        self.max_x_extent,
+                        self.min_y_extent,
+                        self.max_y_extent,
                         output_png_filename,
                         bbox_crs=self.bbox_crs,
-                        output_folder=plotting_folder
+                        output_folder=plotting_folder,
                     )
 
             except Exception as e:
                 # --- FIX 2: Use flush=True to guarantee the error message is printed immediately ---
-                print(f"   -> An ERROR occurred while processing {zarr_name}: {e}", flush=True)
+                print(
+                    f"   -> An ERROR occurred while processing {zarr_name}: {e}",
+                    flush=True,
+                )

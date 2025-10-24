@@ -102,7 +102,9 @@ class DepthMapper:
                 - A dictionary mapping each pond ID to an array of elevation values at contour pixels.`
         """
         unique_ponds = cp.unique(labeled_data)
-        unique_ponds = unique_ponds[unique_ponds != 0]  # Exclude background label
+        unique_ponds = unique_ponds[
+            unique_ponds != 0
+        ]  # Exclude background label
 
         pond_contours = {}
         arr = cp.where(gpu_label_array.squeeze() == 1, self.elev_grid, 0)
@@ -112,7 +114,9 @@ class DepthMapper:
         arr_np = cp.asnumpy(arr)
 
         for pond_id in unique_ponds:
-            pond_id_int = int(pond_id.get())  # Convert cupy scalar to Python int
+            pond_id_int = int(
+                pond_id.get()
+            )  # Convert cupy scalar to Python int
             pond_mask = labeled_data_np == pond_id_int
             pond_arr = np.where(pond_mask, arr_np, 0)
 
@@ -146,7 +150,9 @@ class DepthMapper:
 
         return contour_pixels_per_pond, contour_values_per_pond
 
-    def calculate_depths(self, labeled_data, contour_values_per_pond, method, output_format):
+    def calculate_depths(
+        self, labeled_data, contour_values_per_pond, method, output_format
+    ):
         """Calculates the depth of each pond based on elevation differences.
 
         Args:
@@ -165,7 +171,9 @@ class DepthMapper:
 
         unique_pond_ids = cp.unique(labeled_data)  # array of unique pond labels
 
-        if len(unique_pond_ids) == 1 and unique_pond_ids[0] == 0:  # If no ponds present
+        if (
+            len(unique_pond_ids) == 1 and unique_pond_ids[0] == 0
+        ):  # If no ponds present
             pond_depths[1] = cp.full_like(
                 self.elev_grid, cp.nan
             )  # Fill pond depths with NaN (background, no water)
@@ -174,9 +182,11 @@ class DepthMapper:
         for pond_id in unique_pond_ids:
             if pond_id == 0:  # Skip background
                 continue
-            
+
             if pond_id.item() not in contour_values_per_pond:
-                print(f"Warning: No contours found for pond_id {pond_id.item()}. Skipping depth calculation for this pond.")
+                print(
+                    f"Warning: No contours found for pond_id {pond_id.item()}. Skipping depth calculation for this pond."
+                )
                 continue
 
             pond_mask = labeled_data == pond_id  # mask to current pond only
@@ -184,45 +194,52 @@ class DepthMapper:
                 pond_mask, self.elev_grid, cp.nan
             )  # replace any other values not belonging to this pond with NaN
 
-            
-            if method == 'mean':
+            if method == "mean":
                 max_elevation = cp.nanmean(
                     cp.array(contour_values_per_pond[pond_id.item()])
                 )  # calculate mean of edges
-            
-            elif method == 'median':
+
+            elif method == "median":
                 max_elevation = cp.nanmedian(
                     cp.array(contour_values_per_pond[pond_id.item()])
                 )  # calculate median of edges
-            
-            elif method == '95_perc':
+
+            elif method == "95_perc":
                 max_elevation = cp.percentile(
                     cp.array(contour_values_per_pond[pond_id.item()]), 95
                 )  # calculate 95th percentile of edges
-                
-            elif method == '90_perc':
+
+            elif method == "90_perc":
                 max_elevation = cp.percentile(
                     cp.array(contour_values_per_pond[pond_id.item()]), 90
                 )  # calculate 90th percentile of edges
-            
-            if output_format == 'wse':
+
+            if output_format == "wse":
                 # Where pond_mask is True, use max_elevation. Everywhere else, use NaN.
                 # This correctly preserves the NaN background.
                 depth_map = cp.where(pond_mask, max_elevation, cp.nan)
-                
-            elif output_format == 'depth':
-                depth_map = masked_elevations - max_elevation  # calculate depth across pond
+
+            elif output_format == "depth":
+                depth_map = (
+                    masked_elevations - max_elevation
+                )  # calculate depth across pond
                 depth_map[depth_map > 0] = (
                     0  # set depths greater than 0 to 0 to handle edges above 95th percentile
                 )
-                depth_map = cp.abs(depth_map)  # take the absolute value of the depths
+                depth_map = cp.abs(
+                    depth_map
+                )  # take the absolute value of the depths
 
             pond_depths[pond_id.item()] = depth_map
 
         return pond_depths
 
     def plot_pond_edge_elevations(
-        self, labeled_data, contour_values_per_pond, pond_edge_elev_plot_dir, file_name
+        self,
+        labeled_data,
+        contour_values_per_pond,
+        pond_edge_elev_plot_dir,
+        file_name,
     ):
         """
         Plots and saves histograms of edge elevations for individual ponds and all ponds combined.
@@ -262,9 +279,11 @@ class DepthMapper:
         for pond_id in unique_pond_ids:
             if pond_id == 0:  # Skip background
                 continue
-            
+
             if pond_id.item() not in contour_values_per_pond:
-                print(f"Warning: No contours found for pond_id {pond_id.item()}. Skipping plotting for this pond.")
+                print(
+                    f"Warning: No contours found for pond_id {pond_id.item()}. Skipping plotting for this pond."
+                )
                 continue
 
             pond_edge_elevs = cp.array(contour_values_per_pond[pond_id.item()])
@@ -334,7 +353,11 @@ class DepthMapper:
         # Plot histogram for all ponds combined
         plt.figure(figsize=(8, 6))
         plt.hist(
-            all_edge_elevs, bins=bins, color="lightcoral", edgecolor="black", alpha=0.7
+            all_edge_elevs,
+            bins=bins,
+            color="lightcoral",
+            edgecolor="black",
+            alpha=0.7,
         )
 
         # Compute global statistics
@@ -424,34 +447,33 @@ class DepthMapper:
     #             # We need to restore NaN for the background.
     #             combined_map = cp.where(cp.isnan(maps_to_combine[0]) & cp.isnan(current_map), cp.nan, combined_map)
 
-
     #     return combined_map
-    
-    #def combine_depth_maps(self, pond_depths):
+
+    # def combine_depth_maps(self, pond_depths):
     #    """Combines multiple pond depth maps into a single depth map.
-#
-     #   Args:
-      #      pond_depths (list of cupy.ndarray): A list of depth maps where each element
- #               represents the depth values for a specific pond.
+    #
+    #   Args:
+    #      pond_depths (list of cupy.ndarray): A list of depth maps where each element
+    #               represents the depth values for a specific pond.
 
-  #      Returns:
-   #         cupy.ndarray: A combined depth map where overlapping pond depths are summed,
+    #      Returns:
+    #         cupy.ndarray: A combined depth map where overlapping pond depths are summed,
     #        and NaN values are handled appropriately.
-     #   """
-      #  combined_depth_map = pond_depths[1]
-#
- #       for i in range(2, len(pond_depths) + 1):
-  #          combined_depth_map = cp.where(
-   #             cp.isnan(combined_depth_map),
+    #   """
+    #  combined_depth_map = pond_depths[1]
+    #
+    #       for i in range(2, len(pond_depths) + 1):
+    #          combined_depth_map = cp.where(
+    #             cp.isnan(combined_depth_map),
     #            pond_depths[i],  # If combined_depth_map has NaN, use pond_depths[i]
-     #           cp.where(
-      #              cp.isnan(pond_depths[i]),
-       #             combined_depth_map,  # If pond_depths[i] has NaN, keep combined_depth_map
-        #            combined_depth_map + pond_depths[i],
-         #       ),
-          #  )  # Otherwise, sum the values
+    #           cp.where(
+    #              cp.isnan(pond_depths[i]),
+    #             combined_depth_map,  # If pond_depths[i] has NaN, keep combined_depth_map
+    #            combined_depth_map + pond_depths[i],
+    #       ),
+    #  )  # Otherwise, sum the values
 
-        #return combined_depth_map
+    # return combined_depth_map
     def combine_depth_maps(self, pond_depths):
         """Combines multiple pond depth maps into a single depth map.
 
@@ -468,7 +490,7 @@ class DepthMapper:
 
         # Handle the edge case where there are no ponds to combine
         if not maps_to_combine:
-           # Return a grid full of NaNs with the same shape as the elevation grid
+            # Return a grid full of NaNs with the same shape as the elevation grid
             return cp.full_like(self.elev_grid, cp.nan)
 
         # Start with the first map in the list as the base
@@ -506,20 +528,25 @@ class DepthMapper:
         img_store = zarr.open(zarr_store_path)
         array = img_store[:]  # open image array
 
-        gpu_label_array = cp.array(array)  # convert to cupy array for GPU processing
+        gpu_label_array = cp.array(
+            array
+        )  # convert to cupy array for GPU processing
         labeled_data = self.label_ponds(gpu_label_array)  # separate ponds
 
-        contour_pixels_per_pond, contour_values_per_pond = self.extract_contours(
-            labeled_data, gpu_label_array
+        contour_pixels_per_pond, contour_values_per_pond = (
+            self.extract_contours(labeled_data, gpu_label_array)
         )  # extract elevations of pond edges
 
         self.plot_pond_edge_elevations(
-            labeled_data, contour_values_per_pond, pond_edge_elev_plot_dir, file_name
+            labeled_data,
+            contour_values_per_pond,
+            pond_edge_elev_plot_dir,
+            file_name,
         )
-        
-        methods = ['mean', '95_perc', '90_perc', 'median']
-        output_formats = ['wse', 'depth']
-        
+
+        methods = ["mean", "95_perc", "90_perc", "median"]
+        output_formats = ["wse", "depth"]
+
         for method in methods:
             for output_format in output_formats:
                 pond_depths = self.calculate_depths(
@@ -547,8 +574,12 @@ class DepthMapper:
             labels_zarr_dir (str): Path to zarr directory containing rectified labels.
             depth_map_zarr_dir (str): Path to the directory where processed depth maps will be saved.
         """
-        for file_name in os.listdir(labels_zarr_dir):  # for each rectified label array
-            if file_name.endswith("_rectified"):  # confirm that it has been rectified
+        for file_name in os.listdir(
+            labels_zarr_dir
+        ):  # for each rectified label array
+            if file_name.endswith(
+                "_rectified"
+            ):  # confirm that it has been rectified
                 rectified_label_array = os.path.join(
                     labels_zarr_dir, file_name
                 )  # combine file path
@@ -560,7 +591,9 @@ class DepthMapper:
                     depth_data
                 )  # create dataframe from dictionary output
 
-                self.save_depth_maps(depth_maps, depth_map_zarr_dir)  # save to zarr
+                self.save_depth_maps(
+                    depth_maps, depth_map_zarr_dir
+                )  # save to zarr
 
     def save_depth_maps(self, depth_maps_dataframe, depth_map_zarr_dir):
         """Saves depth maps from a DataFrame into a Zarr store.

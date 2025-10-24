@@ -66,8 +66,12 @@ def organize_images_by_flood_events(
     df = pd.read_csv(csv_file)
 
     # Convert the start and end time columns to datetime
-    df["start_time_UTC"] = pd.to_datetime(df["start_time_UTC"], utc=True) - pd.Timedelta(hours=3)
-    df["end_time_UTC"] = pd.to_datetime(df["end_time_UTC"], utc=True) + pd.Timedelta(hours=3)
+    df["start_time_UTC"] = pd.to_datetime(
+        df["start_time_UTC"], utc=True
+    ) - pd.Timedelta(hours=3)
+    df["end_time_UTC"] = pd.to_datetime(
+        df["end_time_UTC"], utc=True
+    ) + pd.Timedelta(hours=3)
 
     # Format datetime to string for folder naming
     df["start_time_str"] = df["start_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
@@ -134,7 +138,8 @@ def orig_rgb_to_gray_labels(rgb_image, color_map, use_gpu):
 
         # Create masks for each color in the color map
         masks = [
-            (rgb_image == cp.array(color)).all(axis=2) for color in color_map.values()
+            (rgb_image == cp.array(color)).all(axis=2)
+            for color in color_map.values()
         ]
 
         # Combine masks to find the label for each pixel
@@ -148,7 +153,8 @@ def orig_rgb_to_gray_labels(rgb_image, color_map, use_gpu):
 
         # Create masks for each color in the color map
         masks = [
-            (rgb_image == np.array(color)).all(axis=2) for color in color_map.values()
+            (rgb_image == np.array(color)).all(axis=2)
+            for color in color_map.values()
         ]
 
         # Combine masks to find the label for each pixel
@@ -213,7 +219,11 @@ def process_image(
 
 
 def create_labels_from_predsegs(
-    predictions_dir, labels_destination, color_map=None, use_gpu=False, batch_size=20
+    predictions_dir,
+    labels_destination,
+    color_map=None,
+    use_gpu=False,
+    batch_size=20,
 ):
     """
     Converts predicted segmentation images into integer-labeled grayscale label maps and saves them to disk.
@@ -268,7 +278,9 @@ def create_labels_from_predsegs(
         }
 
     # Precompute RGB values from keys in color map.
-    orig_rgb = [ImageColor.getrgb(hex_color_in) for hex_color_in in color_map.keys()]
+    orig_rgb = [
+        ImageColor.getrgb(hex_color_in) for hex_color_in in color_map.keys()
+    ]
 
     # Create new dictionary mapping of integers to RGB values.
     orig_rgb_dict = {0: (0, 0, 0)}
@@ -294,7 +306,8 @@ def create_labels_from_predsegs(
 
                 # Allocate a large CuPy array for the entire batch
                 batch_labels = cp.zeros(
-                    (len(batch_predictions), batch_height, batch_width), dtype=cp.uint8
+                    (len(batch_predictions), batch_height, batch_width),
+                    dtype=cp.uint8,
                 )
 
                 for j, prediction in enumerate(batch_predictions):

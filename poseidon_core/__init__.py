@@ -15,5 +15,5 @@ __all__ = [
     "RoadwayAnalyzer",
     "plotting_utils",
     "image_utils",
-    "photo_utils"
+    "photo_utils",
 ]

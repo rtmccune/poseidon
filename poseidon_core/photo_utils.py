@@ -44,7 +44,9 @@ def filter_files(file_list, start_time, end_time):
             # strip timestamp from file name
             file_name = os.path.basename(file)
             file_timestamp_str = file_name.split("_")[3].split(".")[0]
-            file_timestamp = datetime.strptime(file_timestamp_str, "%Y%m%d%H%M%S")
+            file_timestamp = datetime.strptime(
+                file_timestamp_str, "%Y%m%d%H%M%S"
+            )
 
             # and localize to time aware UTC
             utc_timezone = pytz.utc
@@ -156,7 +158,8 @@ def filter_images_by_daylight(file_list):
             "filename": [
                 file_list[i]
                 for i, utc_time in enumerate(utc_times)
-                if pytz.utc.localize(utc_time).astimezone(eastern).hour in range(6, 18)
+                if pytz.utc.localize(utc_time).astimezone(eastern).hour
+                in range(6, 18)
             ]
         }
     )
@@ -199,10 +202,14 @@ def gen_image_and_label_dataframes(img_dir, labels_dir):
 
     # Extract timestamps
     image_timestamps = [extract_timestamp(filename) for filename in image_list]
-    label_timestamps = [extract_timestamp(filename) for filename in labeled_image_list]
+    label_timestamps = [
+        extract_timestamp(filename) for filename in labeled_image_list
+    ]
 
     # Extract sensor IDs
-    image_sensor_ids = [extract_sensor_name(filename) for filename in image_list]
+    image_sensor_ids = [
+        extract_sensor_name(filename) for filename in image_list
+    ]
     label_sensor_ids = [
         extract_sensor_name(filename) for filename in labeled_image_list
     ]
@@ -210,10 +217,12 @@ def gen_image_and_label_dataframes(img_dir, labels_dir):
     image_df = pd.DataFrame(
         {
             "sensor": [
-                image_sensor_ids[i] for i, sensor_id in enumerate(image_sensor_ids)
+                image_sensor_ids[i]
+                for i, sensor_id in enumerate(image_sensor_ids)
             ],
             "timestamp": [
-                image_timestamps[i] for i, timestamp in enumerate(image_timestamps)
+                image_timestamps[i]
+                for i, timestamp in enumerate(image_timestamps)
             ],
         }
     )
@@ -221,10 +230,12 @@ def gen_image_and_label_dataframes(img_dir, labels_dir):
     label_df = pd.DataFrame(
         {
             "sensor": [
-                label_sensor_ids[i] for i, sensor_id in enumerate(label_sensor_ids)
+                label_sensor_ids[i]
+                for i, sensor_id in enumerate(label_sensor_ids)
             ],
             "timestamp": [
-                label_timestamps[i] for i, timestamp in enumerate(label_timestamps)
+                label_timestamps[i]
+                for i, timestamp in enumerate(label_timestamps)
             ],
         }
     )
@@ -308,7 +319,10 @@ def get_random_images(base_dir, camera_id, num_images, start_year, end_year):
     while len(selected_images) < num_images and all_dates:
         date = all_dates.pop()
         date_dir = os.path.join(
-            base_dir, f"{date.year} Archive", camera_id, date.strftime("%Y-%m-%d")
+            base_dir,
+            f"{date.year} Archive",
+            camera_id,
+            date.strftime("%Y-%m-%d"),
         )
 
         if os.path.exists(date_dir):
@@ -316,7 +330,9 @@ def get_random_images(base_dir, camera_id, num_images, start_year, end_year):
             images = list_files_in_image_directory(date_dir)
 
             # Filter out the daytime images
-            filtered_images = filter_images_by_daylight(images)["filename"].tolist()
+            filtered_images = filter_images_by_daylight(images)[
+                "filename"
+            ].tolist()
             random.shuffle(filtered_images)
 
             # Random percentage (1% to 10%) of filtered images from this date's folder
@@ -337,7 +353,12 @@ def get_random_images(base_dir, camera_id, num_images, start_year, end_year):
 
 
 def create_test_image_set(
-    base_dir, destination_folder, camera_id, num_images, start_year=2022, end_year=2023
+    base_dir,
+    destination_folder,
+    camera_id,
+    num_images,
+    start_year=2022,
+    end_year=2023,
 ):
 
     random_images = get_random_images(
@@ -370,7 +391,10 @@ def orig_rgb_to_gray_labels(rgb_image, color_map):
     labels_image = np.zeros(rgb_image.shape[:2], dtype=np.uint8)
 
     # Create masks for each color in the color map
-    masks = [(rgb_image == np.array(color)).all(axis=2) for color in color_map.values()]
+    masks = [
+        (rgb_image == np.array(color)).all(axis=2)
+        for color in color_map.values()
+    ]
 
     # Combine masks to find the label for each pixel
     for label, mask in enumerate(masks):
@@ -399,7 +423,9 @@ def create_labels_from_preds(preds_folder, labels_destination, color_map=None):
         }
 
     # Precompute RGB values from keys in color map.
-    orig_rgb = [ImageColor.getrgb(hex_color_in) for hex_color_in in color_map.keys()]
+    orig_rgb = [
+        ImageColor.getrgb(hex_color_in) for hex_color_in in color_map.keys()
+    ]
 
     # Create new dictionary mapping of integers to RGB values.
     orig_rgb_dict = {0: (0, 0, 0)}
@@ -427,7 +453,9 @@ def create_labels_from_preds(preds_folder, labels_destination, color_map=None):
 
         cv2.imwrite(label_image_path, gray_img)
 
-    with tqdm(total=len(preds_list), desc="Generating labels from predictions") as pbar:
+    with tqdm(
+        total=len(preds_list), desc="Generating labels from predictions"
+    ) as pbar:
         with ThreadPoolExecutor() as executor:
             for _ in executor.map(process_image, preds_list):
                 pbar.update(1)
@@ -447,7 +475,8 @@ def quantify_water_on_roadway(labels_folder, roadway_mask_path, csv_path=None):
 
     # Process each image in the folder
     with tqdm(
-        total=len(os.listdir(labels_folder)), desc="Quantifying water on the roadway"
+        total=len(os.listdir(labels_folder)),
+        desc="Quantifying water on the roadway",
     ) as pbar:
         for image_name in os.listdir(labels_folder):
             if image_name.endswith(".png"):
