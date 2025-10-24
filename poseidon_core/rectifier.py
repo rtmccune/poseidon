@@ -116,10 +116,10 @@ class ImageRectifier:
         self.Ud, self.Vd = (
             # Compute list of distorted U and V coord. corresponding to
             # world xyz coord.
-            self.compute_Ud_Vd()
+            self._compute_Ud_Vd()
         )
 
-    def load_image(self, image_path, labels):
+    def _load_image(self, image_path, labels):
         """Load an image from the specified path.
 
         Parameters
@@ -158,7 +158,7 @@ class ImageRectifier:
         else:
             return I
 
-    def reshape_grids(self):
+    def _reshape_grids(self):
         """Reshape the grid arrays into a single 2D array of XYZ coord.
 
         Returns
@@ -190,7 +190,7 @@ class ImageRectifier:
 
         return xyz
 
-    def get_pixels(self, image):
+    def _get_pixels(self, image):
         """Extract pixel values from an image at specified grid points.
 
         Parameters
@@ -218,99 +218,59 @@ class ImageRectifier:
         that fall outside the image boundaries are masked and assigned
         NaN (for GPU) or 0 (for CPU) to indicate invalid pixels.
         """
+        # Set the array module (numpy or cupy) and interpolator function
+        if self.use_gpu:
+            xp = cp
+            reg_interp_func = reg_interp_gpu
+        else:
+            xp = np
+            reg_interp_func = reg_interp
 
         im_s = image.shape
 
-        # Use regular grid interpolator to grab points
-        if self.use_gpu:  # Use cupy library if GPU processing
-            if len(im_s) > 2:
-                ir = cp.full(
-                    (self.grid_shape[0], self.grid_shape[1], im_s[2]), cp.nan
-                )
-                for i in range(im_s[2]):
-                    rgi = reg_interp_gpu(
-                        (
-                            cp.arange(0, image.shape[0]),
-                            cp.arange(0, image.shape[1]),
-                        ),
-                        image[:, :, i],
-                        bounds_error=False,
-                        fill_value=cp.nan,
-                    )
-                    ir[:, :, i] = rgi((self.Vd, self.Ud))
-            else:
-                ir = cp.full(
-                    (self.grid_shape[0], self.grid_shape[1], 1), cp.nan
-                )
-                rgi = reg_interp_gpu(
-                    (
-                        cp.arange(0, image.shape[0]),
-                        cp.arange(0, image.shape[1]),
-                    ),
-                    image,
-                    bounds_error=False,
-                    fill_value=np.nan,
-                )
-                ir[:, :, 0] = rgi((self.Vd, self.Ud))
+        # Unify 2D/3D logic by adding a channel dimension to 2D images
+        # This allows same logic for RGB and grayscale images
+        if len(im_s) == 2:
+            image = image[:, :, xp.newaxis]
+            im_s = image.shape  # Update shape to (H, W, 1)
 
-            # Mask out values out of range
-            mask_u = cp.logical_or(self.Ud <= 1, self.Ud >= image.shape[1])
-            mask_v = cp.logical_or(self.Vd <= 1, self.Vd >= image.shape[0])
-            mask = cp.logical_or(mask_u, mask_v)
+        # Define the grid axes
+        points = (xp.arange(im_s[0]), xp.arange(im_s[1]))
 
-            # Use cp.where to assign NaN where the mask is True
-            if len(im_s) > 2:
-                mask = mask[
-                    :, :, None
-                ]  # Adding a channel dimension (matching ir's shape)
-                ir = cp.where(mask, cp.nan, ir)  # For multi-channel data
-            else:
-                ir[mask] = cp.nan  # For 2D data
+        # Create interpolator
+        rgi = reg_interp_func(
+            points,
+            image,  # Pass the (H, W, C) image directly
+            bounds_error=False,
+            fill_value=xp.nan,
+        )
 
-        else:  # Else, use numpy library for CPU processing
-            if len(im_s) > 2:
-                ir = np.full(
-                    (self.grid_shape[0], self.grid_shape[1], im_s[2]), np.nan
-                )
-                for i in range(im_s[2]):
-                    rgi = reg_interp(
-                        (
-                            np.arange(0, image.shape[0]),
-                            np.arange(0, image.shape[1]),
-                        ),
-                        image[:, :, i],
-                        bounds_error=False,
-                        fill_value=np.nan,
-                    )
-                    ir[:, :, i] = rgi((self.Vd, self.Ud))
-            else:
-                ir = np.full(
-                    (self.grid_shape[0], self.grid_shape[1], 1), np.nan
-                )
-                rgi = reg_interp(
-                    (
-                        np.arange(0, image.shape[0]),
-                        np.arange(0, image.shape[1]),
-                    ),
-                    image,
-                    bounds_error=False,
-                    fill_value=np.nan,
-                )
-                ir[:, :, 0] = rgi((self.Vd, self.Ud))
+        # Call the interpolator to get all channel values
+        ir = rgi((self.Vd, self.Ud))
 
-            # Mask out values out of range
-            with np.errstate(invalid="ignore"):
-                mask_u = np.logical_or(self.Ud <= 1, self.Ud >= image.shape[1])
-                mask_v = np.logical_or(self.Vd <= 1, self.Vd >= image.shape[0])
-            mask = np.logical_or(mask_u, mask_v)
-            if len(im_s) > 2:
-                ir[mask, :] = 0
-            else:
-                ir[mask] = 0
+        # Apply custom boundary mask and set fill values
+        if self.use_gpu:
+            # GPU/CuPy path (no 'errstate')
+            mask_u = xp.logical_or(self.Ud <= 1, self.Ud >= im_s[1])
+            mask_v = xp.logical_or(self.Vd <= 1, self.Vd >= im_s[0])
+            mask = xp.logical_or(mask_u, mask_v)
+
+            # Apply mask (fills with NaN)
+            ir = xp.where(mask[:, :, xp.newaxis], xp.nan, ir)
+
+        else:
+            # CPU/NumPy path (use 'errstate' to suppress warnings)
+            with xp.errstate(invalid="ignore"):
+                mask_u = xp.logical_or(self.Ud <= 1, self.Ud >= im_s[1])
+                mask_v = xp.logical_or(self.Vd <= 1, self.Vd >= im_s[0])
+                mask = xp.logical_or(mask_u, mask_v)
+
+            # Apply mask (fills with 0)
+            ir[mask] = 0
 
         return ir
 
-    def CIRN_angles_to_R(self):
+    def _CIRN_angles_to_R(self):
         """Calculate the rotation matrix from CIRN angles
         (azimuth, tilt, swing).
 
@@ -333,34 +293,34 @@ class ImageRectifier:
         """
         R = np.empty((3, 3))  # Initialize empty 3x3 rotation matrix
 
+        # Pre-calculate all 6 trig values once
+        ca = np.cos(self.azimuth)
+        sa = np.sin(self.azimuth)
+        ct = np.cos(self.tilt)
+        st = np.sin(self.tilt)
+        cs = np.cos(self.swing)
+        ss = np.sin(self.swing)
+
         # Calculate rotation matrix values
         # Note: using numpy rather than cupy even for GPU processing as
         # it is a small matrix that is only calculated once.
         # Porting to GPU would only add time.
-        R[0, 0] = -np.cos(self.azimuth) * np.cos(self.swing) - np.sin(
-            self.azimuth
-        ) * np.cos(self.tilt) * np.sin(self.swing)
-        R[0, 1] = np.cos(self.swing) * np.sin(self.azimuth) - np.sin(
-            self.swing
-        ) * np.cos(self.tilt) * np.cos(self.azimuth)
-        R[0, 2] = -np.sin(self.swing) * np.sin(self.tilt)
-        R[1, 0] = -np.sin(self.swing) * np.cos(self.azimuth) + np.cos(
-            self.swing
-        ) * np.cos(self.tilt) * np.sin(self.azimuth)
-        R[1, 1] = np.sin(self.swing) * np.sin(self.azimuth) + np.cos(
-            self.swing
-        ) * np.cos(self.tilt) * np.cos(self.azimuth)
-        R[1, 2] = np.cos(self.swing) * np.sin(self.tilt)
-        R[2, 0] = np.sin(self.tilt) * np.sin(self.azimuth)
-        R[2, 1] = np.sin(self.tilt) * np.cos(self.azimuth)
-        R[2, 2] = -np.cos(self.tilt)
+        R[0, 0] = -ca * cs - sa * ct * ss
+        R[0, 1] = cs * sa - ss * ct * ca
+        R[0, 2] = -ss * st
+        R[1, 0] = -ss * ca + cs * ct * sa
+        R[1, 1] = ss * sa + cs * ct * ca
+        R[1, 2] = cs * st
+        R[2, 0] = st * sa
+        R[2, 1] = st * ca
+        R[2, 2] = -ct
 
         if self.use_gpu:  # Return as a cupy array if GPU processing
             return cp.array(R)
         else:
             return R
 
-    def build_K(self):
+    def _build_K(self):
         """Constructs the camera intrinsic matrix K.
 
         This matrix is used to go from camera coordinates to undistorted
@@ -406,7 +366,7 @@ class ImageRectifier:
 
         return K
 
-    def intrinsics_extrinsics_to_P(self):
+    def _intrinsics_extrinsics_to_P(self):
         """Computes the camera projection matrix P.
 
         Combines intrinsics and extrinsics to form the 4x4 projection
@@ -415,7 +375,7 @@ class ImageRectifier:
         Returns
         -------
         P : np.ndarray or cp.ndarray
-            4x4 camera projection matrix.
+            3x4 camera projection matrix.
         K : np.ndarray or cp.ndarray
             3x3 intrinsic matrix.
         R : np.ndarray or cp.ndarray
@@ -439,31 +399,30 @@ class ImageRectifier:
         last row of the projection matrix is normalized by dividing by
         P[2, 3].
         """
+        # Set the array module (numpy or cupy)
+        xp = cp if self.use_gpu else np
+
         # Generate K and R matrices
-        K = self.build_K()
-        R = self.CIRN_angles_to_R()
+        K = self._build_K()
+        R = self._CIRN_angles_to_R()
 
         x = self.extrinsics[0]
         y = self.extrinsics[1]
         z = self.extrinsics[2]
 
-        if (
-            self.use_gpu
-        ):  # If GPU processing, create translation matrix with cupy
-            column_vec = cp.array([-x, -y, -z]).reshape(-1, 1)
-            IC = cp.concatenate([cp.eye(3), column_vec], axis=1)
-            P = cp.dot(K, cp.dot(R, IC))  # Combine K, R, and IC into P
+        # Create translation matrix
+        column_vec = xp.array([-x, -y, -z]).reshape(-1, 1)
+        IC = xp.concatenate([xp.eye(3), column_vec], axis=1)
 
-        else:  # Else, create translation matrix with numpy
-            column_vec = np.array([-x, -y, -z]).reshape(-1, 1)
-            IC = np.concatenate([np.eye(3), column_vec], axis=1)
-            P = np.dot(K, np.dot(R, IC))  # Combine K, R, and IC into P
+        # Combine K, R, and IC into P
+        P = xp.dot(K, xp.dot(R, IC))
 
-        P /= P[2, 3]  # Normalize for homogeneous coordinates
+        # Normalize for homogeneous coordinates
+        P /= P[2, 3]
 
         return P, K, R, IC
 
-    def distort_UV(self, UV):
+    def _distort_UV(self, UV):
         """Distort UV coordinates based on camera intrinsic parameters.
 
         Parameters
@@ -493,6 +452,9 @@ class ImageRectifier:
         cupy for GPU processing; otherwise, it uses numpy for CPU
         processing.
         """
+        # Set the array module (numpy or cupy)
+        xp = cp if self.use_gpu else np
+
         # Assign coefficients out of intrinsic matrix
         NU = self.intrinsics[0]
         NV = self.intrinsics[1]
@@ -528,18 +490,14 @@ class ImageRectifier:
         Ud = xd * fx + c0U
         Vd = yd * fy + c0V
 
-        # Find negative UV coordinates
+        # Find and mask negative UV coordinates
         flag_mask = (Ud < 0) | (Ud > NU) | (Vd < 0) | (Vd > NV)
         Ud[flag_mask] = 0
         Vd[flag_mask] = 0
 
         # Define maximum possible tangential distortion at the corners
-        if self.use_gpu:
-            Um = cp.array([0, 0, NU.item(), NU.item()])
-            Vm = cp.array([0, NV.item(), NV.item(), 0])
-        else:
-            Um = np.array([0, 0, NU.item(), NU.item()])
-            Vm = np.array([0, NV.item(), NV.item(), 0])
+        Um = xp.array([0, 0, NU.item(), NU.item()])
+        Vm = xp.array([0, NV.item(), NV.item(), 0])
 
         # Normalization
         xm = (Um - c0U) / fx
@@ -550,37 +508,22 @@ class ImageRectifier:
         dxm = 2 * t1 * xm * ym + t2 * (r2m + 2 * xm**2)
         dym = t1 * (r2m + 2 * ym**2) + 2 * t2 * xm * ym
 
-        if self.use_gpu:
-            # Find values larger than those at corners
-            max_dym = cp.max(cp.abs(dym))
-            max_dxm = cp.max(cp.abs(dxm))
+        # Find max values at corners
+        max_dym = xp.max(xp.abs(dym))
+        max_dxm = xp.max(xp.abs(dxm))
 
-            # Indices where distortion values are larger than those at
-            # corners
-            exceeds_dy = cp.where(cp.abs(dy) > max_dym)
-            exceeds_dx = cp.where(cp.abs(dx) > max_dxm)
+        # Use direct boolean masking (more efficient than np.where)
+        mask_dy = xp.abs(dy) > max_dym
+        mask_dx = xp.abs(dx) > max_dxm
 
-            # Initialize flag array (assuming it’s previously defined)
-            flag = cp.ones_like(Ud)
-        else:
-            # Find values larger than those at corners
-            max_dym = np.max(np.abs(dym))
-            max_dxm = np.max(np.abs(dxm))
-
-            # Indices where distortion values are larger than those at
-            # corners
-            exceeds_dy = np.where(np.abs(dy) > max_dym)
-            exceeds_dx = np.where(np.abs(dx) > max_dxm)
-
-            # Initialize flag array (assuming it’s previously defined)
-            flag = np.ones_like(Ud)
-
-        flag[exceeds_dy] = 0.0
-        flag[exceeds_dx] = 0.0
+        # Initialize and set flag array
+        flag = xp.ones_like(Ud)
+        flag[mask_dy] = 0.0
+        flag[mask_dx] = 0.0
 
         return Ud, Vd, flag
 
-    def xyz_to_dist_UV(self):
+    def _xyz_to_dist_UV(self):
         """Maps 3D world (XYZ) coordinates to distorted 2D (UV) image
         coordinates.
 
@@ -607,41 +550,43 @@ class ImageRectifier:
         for CPU processing. The final distorted U and V coordinates
         are returned, multiplied by the flag to indicate valid points.
         """
-        # Create matrix P
-        P, K, R, IC = self.intrinsics_extrinsics_to_P()
 
-        xyz = (
-            self.reshape_grids()
-        )  # Reshape grids to single array of XYZ coordinates
+        # Set the array module (numpy or cupy)
+        xp = cp if self.use_gpu else np
 
-        if self.use_gpu:
-            xyz_homogeneous = cp.vstack((xyz.T, cp.ones(xyz.shape[0])))
-            UV_homogeneous = cp.dot(P, xyz_homogeneous)
-        else:
-            xyz_homogeneous = np.vstack((xyz.T, np.ones(xyz.shape[0])))
-            UV_homogeneous = np.dot(P, xyz_homogeneous)
+        # Create matrix P and its components
+        P, K, R, IC = self._intrinsics_extrinsics_to_P()
 
+        # Reshape grids
+        xyz = self._reshape_grids()  # (N, 3)
+
+        # Create homogeneous coordinates and project to image plane
+        xyz_homogeneous = xp.vstack((xyz.T, xp.ones(xyz.shape[0])))
+        UV_homogeneous = xp.dot(P, xyz_homogeneous)
+
+        # Perspective divide
         UV = UV_homogeneous[:2, :] / UV_homogeneous[2, :]
-        Ud, Vd, flag = self.distort_UV(UV)
+
+        # Apply distortion
+        Ud, Vd, flag = self._distort_UV(UV)  # (N,) (N,) (N,)
         DU = Ud.reshape(self.grid_shape, order="F")
         DV = Vd.reshape(self.grid_shape, order="F")
 
         # Compute camera coordinates
-        if self.use_gpu:
-            xyzC = cp.dot(cp.dot(R, IC), xyz_homogeneous)
-            # Find negative Zc coordinates (Z <= 0) and update the flag
-            negative_z_indices = cp.where(xyzC[2, :] <= 0.0)
-        else:
-            xyzC = np.dot(np.dot(R, IC), xyz_homogeneous)
-            # Find negative Zc coordinates (Z <= 0) and update the flag
-            negative_z_indices = np.where(xyzC[2, :] <= 0.0)
+        xyzC = xp.dot(xp.dot(R, IC), xyz_homogeneous)  # (3, N)
 
-        flag[negative_z_indices] = 0.0
+        # Find negative Zc coordinates (Z <= 0) and update the flag
+        # negative_z_indices = xp.where(xyzC[2, :] <= 0.0)
+        mask_z = xyzC[2, :] <= 0.0
+
+        # Apply the mask to the flag
+        # flag[negative_z_indices] = 0.0
+        flag[mask_z] = 0.0
         flag = flag.reshape(self.grid_shape, order="F")
 
         return DU * flag, DV * flag
 
-    def compute_Ud_Vd(self):
+    def _compute_Ud_Vd(self):
         """Compute the distorted U and V coordinates from 3D points.
 
         Returns
@@ -661,17 +606,16 @@ class ImageRectifier:
         NumPy for CPU processing or CuPy for GPU processing based on the
         value of `self.use_gpu`.
         """
+        # Set the array module
+        xp = cp if self.use_gpu else np
+
         Ud, Vd = (
-            self.xyz_to_dist_UV()
+            self._xyz_to_dist_UV()
         )  # Calculate distorted U and V coordinates
 
         # Round to the nearest integer to represent pixel indices
-        if self.use_gpu:
-            Ud = cp.round(Ud).astype(int)
-            Vd = cp.round(Vd).astype(int)
-        else:
-            Ud = np.round(Ud).astype(int)
-            Vd = np.round(Vd).astype(int)
+        Ud = xp.round(Ud).astype(int)
+        Vd = xp.round(Vd).astype(int)
 
         return Ud, Vd
 
@@ -702,9 +646,9 @@ class ImageRectifier:
         represent pixel values.
         """
         # Load image from path
-        image = self.load_image(image_path, labels)
+        image = self._load_image(image_path, labels)
 
-        rectified_image = self.get_pixels(
+        rectified_image = self._get_pixels(
             image
         )  # Collect pixel values for real world coordinates
 
