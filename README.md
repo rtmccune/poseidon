@@ -59,4 +59,8 @@ The compiled executables will now exist in the 'build' directory for use. You ca
 ```bash
 /home/directory/poseidon/docs/tests/test_compiled_funcs.sh
 ```
-
+## Tests
+To test the core poseidon functions, navigates to 'poseidon/docs/tests' and run the following command. Be sure to change the path to your local path to poseidon.
+  ```bash
+  PYTHONPATH=/path/to/poseidon pytest -v
+  ```

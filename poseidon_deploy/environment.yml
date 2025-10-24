@@ -23,3 +23,7 @@ dependencies:
   - contextily
   - cxx-compiler
   - c-compiler
+  - rasterio
+  - pytest
+  - pytest-cov
+  - pytest-mock
