@@ -4,7 +4,7 @@ import laspy
 import zarr
 import os
 from unittest.mock import MagicMock, call
-from poseidon_core import GridGenerator  # Assumes your class is in grid_generator.py
+from poseidon_core import GridGenerator
 
 # --- Fixtures: Reusable Mock Objects ---
 
@@ -62,13 +62,16 @@ def mock_zarr_open(mocker):
 
 
 # Use mocks for all tests in this class
-@pytest.mark.usefixtures("mock_laspy_read", "mock_os_makedirs", "mock_zarr_open")
+@pytest.mark.usefixtures(
+    "mock_laspy_read", "mock_os_makedirs", "mock_zarr_open"
+)
 class TestGridGenerator:
 
     def test_init_lidar_units_feet(self, mock_laspy_read, mock_lidar_data):
         """
         Tests initialization when lidar_units='feet'.
-        It should NOT use provided extents, but calculate them from the data.
+        It should NOT use provided extents, but calculate them from the
+        data.
         """
         gen = GridGenerator(
             "fake.las",
@@ -82,7 +85,8 @@ class TestGridGenerator:
         # Check that the lidar object is our mock
         assert gen.lidar is mock_lidar_data
 
-        # Check that extents were calculated and converted (100ft * 0.3048 = 30.48)
+        # Check that extents were calculated and converted
+        # (100ft * 0.3048 = 30.48)
         assert gen.min_x_extent == pytest.approx(100.0 * 0.3048)
         assert gen.max_x_extent == pytest.approx(400.0 * 0.3048)
         assert gen.min_y_extent == pytest.approx(100.0 * 0.3048)
@@ -99,7 +103,7 @@ class TestGridGenerator:
             max_x_extent=50.0,
             min_y_extent=20.0,
             max_y_extent=60.0,
-            extent_units="meters",  # This tells it to use provided extents
+            extent_units="meters",  # Use provided extents
             lidar_units="meters",
         )
 
@@ -206,7 +210,7 @@ class TestGridGenerator:
         mock_os_makedirs.assert_called_once_with("test/output")
 
         # 2. Check grid generation
-        # np.mgrid[10:30:10] gives [10, 20]. Shape (2, 2) before transpose
+        # np.mgrid[10:30:10] gives [10, 20]. Shape (2, 2) before
         # After transpose, shape is (2, 2)
         assert grid_x.shape == (2, 2)
 
@@ -305,7 +309,9 @@ class TestGridGenerator:
         )
 
         # Check that a string raises a TypeError
-        with pytest.raises(TypeError, match="must be int, float, or np.ndarray"):
+        with pytest.raises(
+            TypeError, match="must be int, float, or np.ndarray"
+        ):
             gen.gen_grid(resolution=10, z="this is not valid")
 
     def test_gen_grid_filename_descriptors(self, mock_zarr_open):
@@ -330,12 +336,20 @@ class TestGridGenerator:
         mock_zarr_open.reset_mock()
 
         # --- Test 2: Descriptor without underscore ---
-        gen.gen_grid(resolution=5, z=0, dir="test/out", grid_descriptor="ground")
+        gen.gen_grid(
+            resolution=5, z=0, dir="test/out", grid_descriptor="ground"
+        )
         first_call_args = mock_zarr_open.call_args_list[0].args
-        assert first_call_args[0] == os.path.join("test/out", "ground_grid_x_5m.zarr")
+        assert first_call_args[0] == os.path.join(
+            "test/out", "ground_grid_x_5m.zarr"
+        )
 
         # --- Test 3: Descriptor with underscore ---
         mock_zarr_open.reset_mock()
-        gen.gen_grid(resolution=5, z=0, dir="test/out", grid_descriptor="ground_")
+        gen.gen_grid(
+            resolution=5, z=0, dir="test/out", grid_descriptor="ground_"
+        )
         first_call_args = mock_zarr_open.call_args_list[0].args
-        assert first_call_args[0] == os.path.join("test/out", "ground_grid_x_5m.zarr")
+        assert first_call_args[0] == os.path.join(
+            "test/out", "ground_grid_x_5m.zarr"
+        )
