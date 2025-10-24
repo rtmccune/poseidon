@@ -15,7 +15,7 @@ except ImportError:
     cp = None  # Define cp as None to avoid linter errors
 
 # Import the class to be tested
-from poseidon_core.rectifier import ImageRectifier
+from poseidon_core import ImageRectifier
 
 # --- Pytest Fixtures ---
 
@@ -334,8 +334,7 @@ def test_merge_rectify_folder(
 ):
     """End-to-end test for batch processing a folder to a Zarr store."""
 
-    # FIX 4: Use the correct module path `poseidon_core.rectifier`
-    mocker.patch("poseidon_core.rectifier.tqdm", lambda x, **kwargs: x)
+    mocker.patch("poseidon_core.image_rectifier.tqdm", lambda x, **kwargs: x)
 
     folder_path, num_images = dummy_image_folder
     zarr_store_path = str(tmp_path / "output.zarr")

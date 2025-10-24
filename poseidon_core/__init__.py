@@ -1,5 +1,5 @@
-from .grid_generation import GridGenerator
-from .rectifier import ImageRectifier
+from .grid_generator import GridGenerator
+from .image_rectifier import ImageRectifier
 from .depth_mapper import DepthMapper
 from .depth_plotter import DepthPlotter
 from .roadway_analyzer import RoadwayAnalyzer
