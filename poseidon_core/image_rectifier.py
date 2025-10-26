@@ -133,6 +133,156 @@ class ImageRectifier:
         _log("  ...Distortion map computation complete.")
         _log("--- ImageRectifier Initialization Complete ---")
 
+    def merge_rectify(self, image_path, labels=False, verbose=False):
+        """Merge and rectify an image based on the provided path.
+
+        Parameters
+        ----------
+        image_path : str
+            The path to the image file to be loaded and rectified.
+        labels : bool, optional
+            A flag indicating whether to load the image in grayscale
+            (True) or in color (False). Default is False.
+        verbose : bool, optional
+            If True, print a log message when rectifying this image.
+            Default is False, to avoid spamming logs during batch jobs.
+
+        Returns
+        -------
+        np.ndarray or cp.ndarray
+            The rectified image as an array of type uint8.
+
+        Notes
+        -----
+        This function loads an image from the specified path using the
+        `load_image` method, processes it to obtain rectified pixel
+        values using the `get_pixels` method, and returns the rectified
+        image. The function utilizes CuPy for GPU processing if
+        `self.use_gpu` is set to True; otherwise, it uses NumPy for CPU
+        processing. The output is cast to an array of type uint8 to
+        represent pixel values.
+        """
+        if verbose:
+            _log(f"Rectifying single image: {image_path}")
+
+        # Load image from path
+        image = self._load_image(image_path, labels)
+
+        rectified_image = self._get_pixels(
+            image
+        )  # Collect pixel values for real world coordinates
+
+        if self.use_gpu:  # If GPU processing, return image as cupy arr
+            return cp.array(rectified_image, dtype=np.uint8)
+
+        else:  # Else, return as numpy array
+            return np.array(rectified_image, dtype=np.uint8)
+
+    def merge_rectify_folder(self, folder_path, zarr_store_path, labels=False):
+        """Merge and rectify all images in a specified folder and save
+        them to a Zarr store.
+
+        Parameters
+        ----------
+        folder_path : str
+            The path to the folder containing images to be rectified.
+        zarr_store_path : str
+            The path to the Zarr store where rectified images will be
+            saved.
+        labels : bool, optional
+            A flag indicating whether to load the image in grayscale
+            (True) or in color (False). Default is False.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This function iterates over all image files in the specified
+        folder, rectifies each image using the `merge_rectify` method,
+        and saves the resulting rectified images to the specified Zarr
+        store. The dataset names in the Zarr store are created by
+        appending '_rectified' to the original image names. The Zarr
+        store is opened in append mode before processing the images,
+        allowing for multiple images to be saved efficiently. CuPy is
+        utilized for GPU processing if `self.use_gpu` is set to True;
+        otherwise, standard arrays are used.
+        """
+        _log("\n=== Starting Batch Rectification ===")
+        _log(f"  Source folder: {folder_path}")
+        _log(f"  Output Zarr store: {zarr_store_path}")
+
+        # Open the Zarr store once before the loop
+        try:
+            store = zarr.open_group(zarr_store_path, mode="a")
+        except Exception as e:
+            _log(
+                f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}"
+            )
+            _log("=== Batch Rectification Aborted ===")
+            return
+
+        # Get a list of all images in the folder
+        try:
+            image_names = os.listdir(folder_path)
+        except FileNotFoundError:
+            _log(f"  ERROR: Source folder not found at {folder_path}.")
+            _log("=== Batch Rectification Aborted ===")
+            return
+
+        total_images = len(image_names)
+
+        if total_images == 0:
+            _log("  WARNING: No images found in source folder. Nothing to do.")
+            _log("=== Batch Rectification Complete ===")
+            return
+
+        _log(f"  Found {total_images} images to process.")
+
+        # Determine report interval (print ~10 updates + first/last)
+        report_interval = max(1, total_images // 10)
+
+        for i, image_name in enumerate(image_names):
+            # Log progress periodically
+            if (
+                (i + 1) % report_interval == 0
+                or i == 0
+                or (i + 1) == total_images
+            ):
+                _log(f"  Processing image {i + 1}/{total_images}: {image_name}")
+
+            image_path = os.path.join(folder_path, image_name)
+
+            try:
+                rectified_image = self.merge_rectify(
+                    image_path, labels, verbose=False  # Keep this quiet
+                )
+            except Exception as e:
+                _log(f"  ERROR: Failed to rectify image {image_name}. {e}")
+                continue  # Skip to the next image
+
+            # Create a dataset name by appending 'rectified' to the
+            # original image name
+            dataset_name = f"{os.path.splitext(image_name)[0]}_rectified"
+
+            # Save the rectified image array to the Zarr store
+            try:
+                if self.use_gpu:  # If GPU processing
+                    store[dataset_name] = (
+                        rectified_image.get()
+                    )  # Port GPU array to CPU and save
+                else:  # Else, save array
+                    store[dataset_name] = rectified_image
+            except Exception as e:
+                _log(
+                    f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}"
+                )
+
+        # Print success message after all images are processed
+        _log(f"  Successfully processed {total_images} images.")
+        _log("=== Batch Rectification Complete ===")
+
     def _load_image(self, image_path, labels):
         """Load an image from the specified path.
 
@@ -162,8 +312,21 @@ class ImageRectifier:
         # If grayscale image of labels, read as grayscale image
         if labels:
             I = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+            if I is None:
+                raise FileNotFoundError(
+                    f"Image file not found or could not be read: {image_path}"
+                )
+
         else:  # Else, read in as RGB
             I = cv2.imread(image_path)
+
+            if I is None:
+                # Raise a standard, predictable error
+                raise FileNotFoundError(
+                    f"Image file not found or could not be read: {image_path}"
+                )
+
             I = cv2.cvtColor(I, cv2.COLOR_BGR2RGB)
 
         # Convert numpy array from OpenCV to cupy array for GPU process.
@@ -632,153 +795,3 @@ class ImageRectifier:
         Vd = xp.round(Vd).astype(int)
 
         return Ud, Vd
-
-    def merge_rectify(self, image_path, labels=False, verbose=False):
-        """Merge and rectify an image based on the provided path.
-
-        Parameters
-        ----------
-        image_path : str
-            The path to the image file to be loaded and rectified.
-        labels : bool, optional
-            A flag indicating whether to load the image in grayscale
-            (True) or in color (False). Default is False.
-        verbose : bool, optional
-            If True, print a log message when rectifying this image.
-            Default is False, to avoid spamming logs during batch jobs.
-
-        Returns
-        -------
-        np.ndarray or cp.ndarray
-            The rectified image as an array of type uint8.
-
-        Notes
-        -----
-        This function loads an image from the specified path using the
-        `load_image` method, processes it to obtain rectified pixel
-        values using the `get_pixels` method, and returns the rectified
-        image. The function utilizes CuPy for GPU processing if
-        `self.use_gpu` is set to True; otherwise, it uses NumPy for CPU
-        processing. The output is cast to an array of type uint8 to
-        represent pixel values.
-        """
-        if verbose:
-            _log(f"Rectifying single image: {image_path}")
-
-        # Load image from path
-        image = self._load_image(image_path, labels)
-
-        rectified_image = self._get_pixels(
-            image
-        )  # Collect pixel values for real world coordinates
-
-        if self.use_gpu:  # If GPU processing, return image as cupy arr
-            return cp.array(rectified_image, dtype=np.uint8)
-
-        else:  # Else, return as numpy array
-            return np.array(rectified_image, dtype=np.uint8)
-
-    def merge_rectify_folder(self, folder_path, zarr_store_path, labels=False):
-        """Merge and rectify all images in a specified folder and save
-        them to a Zarr store.
-
-        Parameters
-        ----------
-        folder_path : str
-            The path to the folder containing images to be rectified.
-        zarr_store_path : str
-            The path to the Zarr store where rectified images will be
-            saved.
-        labels : bool, optional
-            A flag indicating whether to load the image in grayscale
-            (True) or in color (False). Default is False.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This function iterates over all image files in the specified
-        folder, rectifies each image using the `merge_rectify` method,
-        and saves the resulting rectified images to the specified Zarr
-        store. The dataset names in the Zarr store are created by
-        appending '_rectified' to the original image names. The Zarr
-        store is opened in append mode before processing the images,
-        allowing for multiple images to be saved efficiently. CuPy is
-        utilized for GPU processing if `self.use_gpu` is set to True;
-        otherwise, standard arrays are used.
-        """
-        _log("\n=== Starting Batch Rectification ===")
-        _log(f"  Source folder: {folder_path}")
-        _log(f"  Output Zarr store: {zarr_store_path}")
-
-        # Open the Zarr store once before the loop
-        try:
-            store = zarr.open_group(zarr_store_path, mode="a")
-        except Exception as e:
-            _log(
-                f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}"
-            )
-            _log("=== Batch Rectification Aborted ===")
-            return
-
-        # Get a list of all images in the folder
-        try:
-            image_names = os.listdir(folder_path)
-        except FileNotFoundError:
-            _log(f"  ERROR: Source folder not found at {folder_path}.")
-            _log("=== Batch Rectification Aborted ===")
-            return
-
-        total_images = len(image_names)
-
-        if total_images == 0:
-            _log("  WARNING: No images found in source folder. Nothing to do.")
-            _log("=== Batch Rectification Complete ===")
-            return
-
-        _log(f"  Found {total_images} images to process.")
-
-        # Determine report interval (print ~10 updates + first/last)
-        report_interval = max(1, total_images // 10)
-
-        for i, image_name in enumerate(image_names):
-            # Log progress periodically
-            if (
-                (i + 1) % report_interval == 0
-                or i == 0
-                or (i + 1) == total_images
-            ):
-                _log(f"  Processing image {i + 1}/{total_images}: {image_name}")
-
-            image_path = os.path.join(folder_path, image_name)
-
-            try:
-                rectified_image = self.merge_rectify(
-                    image_path, labels, verbose=False  # Keep this quiet
-                )
-            except Exception as e:
-                _log(f"  ERROR: Failed to rectify image {image_name}. {e}")
-                continue  # Skip to the next image
-
-            # Create a dataset name by appending 'rectified' to the
-            # original image name
-            dataset_name = f"{os.path.splitext(image_name)[0]}_rectified"
-
-            # Save the rectified image array to the Zarr store
-            try:
-                if self.use_gpu:  # If GPU processing
-                    store[dataset_name] = (
-                        rectified_image.get()
-                    )  # Port GPU array to CPU and save
-                else:  # Else, save array
-                    store[dataset_name] = rectified_image
-            except Exception as e:
-                _log(
-                    f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}"
-                )
-
-        # Print success message after all images are processed
-        _log(f"  Successfully processed {total_images} images.")
-        _log("=== Batch Rectification Complete ===")

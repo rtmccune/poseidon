@@ -17,342 +17,492 @@ except ImportError:
 # Import the class to be tested
 from poseidon_core import ImageRectifier
 
-# --- Pytest Fixtures ---
+# --- Test Suite ---
 
 
-@pytest.fixture(
-    params=[
-        False,
-        pytest.param(
-            True,
-            marks=pytest.mark.skipif(
-                not CUPY_AVAILABLE,
-                reason="CuPy or cupyx.scipy.interpolate is not installed.",
+class TestImageRectifier:
+    """
+    Test suite for the ImageRectifier class, covering both CPU (numpy)
+    and GPU (cupy) execution paths.
+    """
+
+    ## --- Pytest Fixtures ---
+
+    @pytest.fixture(
+        params=[
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.skipif(
+                    not CUPY_AVAILABLE,
+                    reason="CuPy or cupyx.scipy.interpolate is not installed.",
+                ),
             ),
-        ),
-    ]
-)
-def use_gpu(request):
-    """Parametrized fixture to test both CPU (False) and GPU (True) paths."""
-    return request.param
-
-
-@pytest.fixture
-def xp(use_gpu):
-    """Fixture to provide the correct array module (np or cp)."""
-    return cp if use_gpu else np
-
-
-@pytest.fixture
-def sample_intrinsics():
-    """Provides a sample 11-element intrinsics array."""
-    # [NU, NV, c0U, c0V, fx, fy, d1, d2, d3, t1, t2]
-    return np.array(
-        [
-            1920,
-            1080,
-            960,
-            540,  # Image size and principal point
-            1000,
-            1000,  # Focal lengths
-            0.1,
-            0.01,
-            0,
-            0,
-            0,  # Distortion coefficients (small)
-        ],
-        dtype=np.float64,
+        ]
     )
+    def use_gpu(self, request):
+        """Parametrized fixture to test both CPU (False) and GPU (True)
+        paths.
+        """
+        return request.param
 
+    @pytest.fixture
+    def xp(self, use_gpu):
+        """Fixture to provide the correct array module (np or cp)."""
+        return cp if use_gpu else np
 
-@pytest.fixture
-def sample_extrinsics():
-    """Provides a sample 6-element extrinsics array."""
-    # [X, Y, Z, Azimuth, Tilt, Swing]
-    # 100m high, 45-degree tilt
-    return np.array([0, 0, 100, 0, np.pi / 4, 0], dtype=np.float64)
-
-
-@pytest.fixture
-def sample_grids():
-    """Provides sample 10x10 X, Y, Z grids."""
-    shape = (10, 10)
-    x = np.linspace(-50, 50, shape[1])
-    y = np.linspace(-50, 50, shape[0])
-    grid_x, grid_y = np.meshgrid(x, y)
-    grid_z = np.zeros(shape, dtype=np.float64)
-    return grid_x, grid_y, grid_z
-
-
-@pytest.fixture
-def rectifier_instance(
-    sample_intrinsics, sample_extrinsics, sample_grids, use_gpu
-):
-    """
-    Creates a full ImageRectifier instance for testing.
-    This fixture implicitly tests the entire __init__ chain.
-    """
-    grid_x, grid_y, grid_z = sample_grids
-    return ImageRectifier(
-        sample_intrinsics,
-        sample_extrinsics,
-        grid_x,
-        grid_y,
-        grid_z,
-        use_gpu=use_gpu,
-    )
-
-
-@pytest.fixture
-def dummy_image_file(tmp_path):
-    """Creates a dummy 100x100 RGB image file and returns its path."""
-    img_path = tmp_path / "test_image.png"
-    # Create a simple gradient image for predictable interpolation
-    y, x = np.indices((100, 100))
-    img = np.zeros((100, 100, 3), dtype=np.uint8)
-    img[..., 0] = x * 2.5  # Red gradient
-    img[..., 1] = y * 2.5  # Green gradient
-    img[..., 2] = 128  # Blue constant
-    cv2.imwrite(str(img_path), img)
-    return img_path, img
-
-
-@pytest.fixture
-def dummy_image_folder(tmp_path):
-    """Creates a folder with 3 dummy images."""
-    folder_path = tmp_path / "image_folder"
-    folder_path.mkdir()
-    num_images = 3
-    for i in range(num_images):
-        img_path = folder_path / f"img_{i}.png"
-        img = np.random.randint(0, 256, (50, 50, 3), dtype=np.uint8)
-        cv2.imwrite(str(img_path), img)
-    return folder_path, num_images
-
-
-# --- Test Cases ---
-
-
-def test_initialization(
-    rectifier_instance, sample_extrinsics, sample_grids, use_gpu, xp
-):
-    """
-    Test that the __init__ method correctly sets all attributes
-    and that their types (np vs cp) are correct.
-    """
-    rect = rectifier_instance
-    grid_x, _, _ = sample_grids
-    grid_shape = grid_x.shape
-
-    assert rect.use_gpu is use_gpu
-    assert isinstance(rect.intrinsics, xp.ndarray)
-    assert isinstance(rect.extrinsics, xp.ndarray)
-    assert isinstance(rect.grid_x, xp.ndarray)
-    assert isinstance(rect.grid_y, xp.ndarray)
-    assert isinstance(rect.grid_z, xp.ndarray)
-
-    assert rect.azimuth == sample_extrinsics[3]
-    assert rect.tilt == sample_extrinsics[4]
-    assert rect.swing == sample_extrinsics[5]
-    assert rect.grid_shape == grid_shape
-
-    # Test that the computed UV maps were created
-    assert rect.Ud is not None
-    assert rect.Vd is not None
-    assert rect.Ud.shape == grid_shape
-    assert rect.Vd.shape == grid_shape
-    assert rect.Ud.dtype == int
-    assert rect.Vd.dtype == int
-
-
-def test_load_image(rectifier_instance, dummy_image_file, use_gpu, xp):
-    """Test loading both color and grayscale images."""
-    img_path, _ = dummy_image_file
-
-    # Test loading in color (default)
-    img_color = rectifier_instance._load_image(str(img_path), labels=False)
-    assert isinstance(img_color, xp.ndarray)
-    assert img_color.ndim == 3
-    assert img_color.shape == (100, 100, 3)
-
-    # Test loading in grayscale (labels=True)
-    img_gray = rectifier_instance._load_image(str(img_path), labels=True)
-    assert isinstance(img_gray, xp.ndarray)
-    assert img_gray.ndim == 2
-    assert img_gray.shape == (100, 100)
-
-
-def test_reshape_grids(rectifier_instance, xp):
-    """Test the grid reshaping logic."""
-    xyz = rectifier_instance._reshape_grids()
-    assert isinstance(xyz, xp.ndarray)
-    # 10x10 grid = 100 points. Shape should be (100, 3)
-    assert xyz.shape == (100, 3)
-
-
-def test_cirn_angles_to_r(rectifier_instance, xp):
-    """Test rotation matrix calculation."""
-    R = rectifier_instance._CIRN_angles_to_R()
-    assert isinstance(R, xp.ndarray)
-    assert R.shape == (3, 3)
-
-
-# FIX 1: Add `use_gpu` to the function signature
-def test_build_k(rectifier_instance, sample_intrinsics, xp, use_gpu):
-    """Test intrinsic matrix (K) construction."""
-    K = rectifier_instance._build_K()
-    assert isinstance(K, xp.ndarray)
-    assert K.shape == (3, 3)
-
-    # Check that values were assigned correctly
-    if use_gpu:
-        K = K.get()  # Move to CPU for numpy comparison
-
-    assert K[0, 0] == -sample_intrinsics[4]  # -fx
-    assert K[1, 1] == -sample_intrinsics[5]  # -fy
-    assert K[0, 2] == sample_intrinsics[2]  # c0U
-    assert K[1, 2] == sample_intrinsics[3]  # c0V
-    assert K[2, 2] == 1
-
-
-def test_intrinsics_extrinsics_to_p(rectifier_instance, xp):
-    """Test projection matrix (P) calculation."""
-    P, K, R, IC = rectifier_instance._intrinsics_extrinsics_to_P()
-
-    assert isinstance(P, xp.ndarray)
-    assert P.shape == (3, 4)
-    assert isinstance(K, xp.ndarray)
-    assert K.shape == (3, 3)
-    assert isinstance(R, xp.ndarray)
-    assert R.shape == (3, 3)
-    assert isinstance(IC, xp.ndarray)
-    assert IC.shape == (3, 4)
-
-
-def test_get_pixels_logic(rectifier_instance, xp, use_gpu):
-    """
-    Test the core interpolation logic of _get_pixels.
-    We "monkey-patch" the Ud and Vd attributes to force known
-    sampling points for a predictable result.
-    """
-    rect = rectifier_instance
-
-    # Create a simple 10x10 gradient image
-    # Values from 0 to 99
-    img_data = np.arange(100).reshape(10, 10).astype(np.float32)
-    img = xp.asarray(img_data)
-
-    # --- Test 1: Identity mapping (sample known pixels) ---
-
-    # FIX 2: Change coordinates to be inside the valid mask
-    # (Vd > 1 and Ud > 1) and (Vd < shape[0] and Ud < shape[1])
-    # Let's sample points:
-    # (Vd=2, Ud=2) -> value 22
-    # (Vd=2, Ud=3) -> value 23
-    # (Vd=5, Ud=2) -> value 52
-    # (Vd=8, Ud=8) -> value 88
-    rect.Vd = xp.array([[2, 2], [5, 8]])  # Rows (all valid)
-    rect.Ud = xp.array([[2, 3], [2, 8]])  # Cols (all valid)
-
-    pixels = rect._get_pixels(img)
-
-    # FIX 3: Update expected values to match new coordinates
-    expected_values = xp.array([[[22.0], [23.0]], [[52.0], [88.0]]])
-
-    xp.testing.assert_allclose(pixels, expected_values)
-
-    # --- Test 2: Out-of-bounds mapping ---
-    # Sample points: (row, col)
-    # (0, 5)   -> out (Vd=0 is masked)
-    # (5, 100) -> out (Ud=100 is > shape)
-    # (5, 5)   -> in (value 55)
-    # (1, 1)   -> out (Vd=1 is masked)
-    rect.Vd = xp.array([[0, 5], [5, 1]])
-    rect.Ud = xp.array([[5, 100], [5, 1]])
-
-    pixels = rect._get_pixels(img)
-
-    # GPU uses NaN, CPU uses 0 for fill
-    fill_val = xp.nan if use_gpu else 0.0
-
-    expected_values = xp.array([[[fill_val], [fill_val]], [[55.0], [fill_val]]])
-
-    # FIX: Handle np vs cp assertion
-    if use_gpu:
-        # cupy.testing.assert_allclose doesn't support equal_nan
-        # 1. Test that NaN locations are identical
-        xp.testing.assert_array_equal(
-            xp.isnan(pixels), xp.isnan(expected_values)
+    @pytest.fixture
+    def sample_intrinsics(self):
+        """Provides a sample 11-element intrinsics array."""
+        # [NU, NV, c0U, c0V, fx, fy, d1, d2, d3, t1, t2]
+        return np.array(
+            [
+                1920,
+                1080,
+                960,
+                540,  # Image size and principal point
+                1000,
+                1000,  # Focal lengths
+                0.1,
+                0.01,
+                0,
+                0,
+                0,  # Distortion coefficients (small)
+            ],
+            dtype=np.float64,
         )
 
-        # 2. Test that non-NaN values are close (fill NaNs with 0)
-        pixels_nonan = xp.nan_to_num(pixels, nan=0.0)
-        expected_nonan = xp.nan_to_num(expected_values, nan=0.0)
-        xp.testing.assert_allclose(pixels_nonan, expected_nonan)
-    else:
-        # numpy.testing.assert_allclose *does* support equal_nan
-        xp.testing.assert_allclose(pixels, expected_values, equal_nan=True)
+    @pytest.fixture
+    def sample_extrinsics(self):
+        """Provides a sample 6-element extrinsics array."""
+        # [X, Y, Z, Azimuth, Tilt, Swing]
+        # 100m high, 45-degree tilt
+        return np.array([0, 0, 100, 0, np.pi / 4, 0], dtype=np.float64)
 
-    # --- Test 3: 3-Channel image ---
-    img_3c_data = np.stack([img_data, img_data * 2, img_data + 10], axis=-1)
-    img_3c = xp.asarray(img_3c_data)
+    @pytest.fixture
+    def sample_grids(self):
+        """Provides sample 10x10 X, Y, Z grids."""
+        shape = (10, 10)
+        x = np.linspace(-50, 50, shape[1])
+        y = np.linspace(-50, 50, shape[0])
+        grid_x, grid_y = np.meshgrid(x, y)
+        grid_z = np.zeros(shape, dtype=np.float64)
+        return grid_x, grid_y, grid_z
 
-    # Sample point (Vd=2, Ud=4) -> val=24
-    rect.Vd = xp.array([[2]])
-    rect.Ud = xp.array([[4]])
+    @pytest.fixture
+    def rectifier_instance(
+        self, sample_intrinsics, sample_extrinsics, sample_grids, use_gpu
+    ):
+        """
+        Creates a full ImageRectifier instance for testing.
+        This fixture implicitly tests the entire __init__ chain.
+        """
+        grid_x, grid_y, grid_z = sample_grids
+        return ImageRectifier(
+            sample_intrinsics,
+            sample_extrinsics,
+            grid_x,
+            grid_y,
+            grid_z,
+            use_gpu=use_gpu,
+        )
 
-    pixels = rect._get_pixels(img_3c)
+    @pytest.fixture
+    def dummy_image_file(self, tmp_path):
+        """Creates a dummy 100x100 RGB image file and returns its
+        path.
+        """
+        img_path = tmp_path / "test_image.png"
+        # Create a simple gradient image for predictable interpolation
+        y, x = np.indices((100, 100))
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        img[..., 0] = x * 2.5  # Red gradient
+        img[..., 1] = y * 2.5  # Green gradient
+        img[..., 2] = 128  # Blue constant
+        cv2.imwrite(str(img_path), img)
+        return img_path, img
 
-    # Expected: [val, val*2, val+10] where val = 24
-    expected_values = xp.array([[[24.0, 48.0, 34.0]]])
-    xp.testing.assert_allclose(pixels, expected_values)
+    @pytest.fixture
+    def dummy_image_folder(self, tmp_path):
+        """Creates a folder with 3 dummy images."""
+        folder_path = tmp_path / "image_folder"
+        folder_path.mkdir()
+        num_images = 3
+        for i in range(num_images):
+            img_path = folder_path / f"img_{i}.png"
+            img = np.random.randint(0, 256, (50, 50, 3), dtype=np.uint8)
+            cv2.imwrite(str(img_path), img)
+        return folder_path, num_images
 
+    ## --- Fixtures for New Tests ---
 
-def test_merge_rectify(rectifier_instance, dummy_image_file, xp):
-    """End-to-end test for rectifying a single image."""
-    img_path, _ = dummy_image_file
-    grid_shape = rectifier_instance.grid_shape
+    @pytest.fixture
+    def zero_extrinsics(self):
+        """Provides extrinsics with zero rotation angles."""
+        # [X, Y, Z, Azimuth, Tilt, Swing]
+        return np.array([0, 0, 100, 0, 0, 0], dtype=np.float64)
 
-    # Test color rectification
-    rect_img = rectifier_instance.merge_rectify(str(img_path), labels=False)
+    @pytest.fixture
+    def rectifier_zero_angles(
+        self, sample_intrinsics, zero_extrinsics, sample_grids, use_gpu
+    ):
+        """Rectifier instance with zero rotation angles."""
+        grid_x, grid_y, grid_z = sample_grids
+        return ImageRectifier(
+            sample_intrinsics,
+            zero_extrinsics,
+            grid_x,
+            grid_y,
+            grid_z,
+            use_gpu=use_gpu,
+        )
 
-    assert isinstance(rect_img, xp.ndarray)
-    assert rect_img.dtype == np.uint8
-    assert rect_img.shape == (grid_shape[0], grid_shape[1], 3)
+    @pytest.fixture
+    def no_distortion_intrinsics(self, sample_intrinsics):
+        """Intrinsics with d1-d3 and t1-t2 set to zero."""
+        intrinsics = sample_intrinsics.copy()
+        intrinsics[6:11] = 0  # Set d1, d2, d3, t1, t2 to 0
+        return intrinsics
 
-    # Test grayscale (label) rectification
-    rect_label = rectifier_instance.merge_rectify(str(img_path), labels=True)
+    @pytest.fixture
+    def rectifier_no_distortion(
+        self, no_distortion_intrinsics, sample_extrinsics, sample_grids, use_gpu
+    ):
+        """Rectifier instance with no distortion parameters."""
+        grid_x, grid_y, grid_z = sample_grids
+        return ImageRectifier(
+            no_distortion_intrinsics,
+            sample_extrinsics,
+            grid_x,
+            grid_y,
+            grid_z,
+            use_gpu=use_gpu,
+        )
 
-    assert isinstance(rect_label, xp.ndarray)
-    assert rect_label.dtype == np.uint8
-    # 2D images get a channel dim added by _get_pixels
-    assert rect_label.shape == (grid_shape[0], grid_shape[1], 1)
+    ## --- Test Cases ---
 
+    def test_initialization(
+        self, rectifier_instance, sample_extrinsics, sample_grids, use_gpu, xp
+    ):
+        """
+        Test that the __init__ method correctly sets all attributes
+        and that their types (np vs cp) are correct.
+        """
+        rect = rectifier_instance
+        grid_x, _, _ = sample_grids
+        grid_shape = grid_x.shape
 
-def test_merge_rectify_folder(
-    rectifier_instance, dummy_image_folder, tmp_path, mocker
-):
-    """End-to-end test for batch processing a folder to a Zarr store."""
+        assert rect.use_gpu is use_gpu
+        assert isinstance(rect.intrinsics, xp.ndarray)
+        assert isinstance(rect.extrinsics, xp.ndarray)
+        assert isinstance(rect.grid_x, xp.ndarray)
+        assert isinstance(rect.grid_y, xp.ndarray)
+        assert isinstance(rect.grid_z, xp.ndarray)
 
-    folder_path, num_images = dummy_image_folder
-    zarr_store_path = str(tmp_path / "output.zarr")
-    grid_shape = rectifier_instance.grid_shape
+        assert rect.azimuth == sample_extrinsics[3]
+        assert rect.tilt == sample_extrinsics[4]
+        assert rect.swing == sample_extrinsics[5]
+        assert rect.grid_shape == grid_shape
 
-    rectifier_instance.merge_rectify_folder(
-        str(folder_path), zarr_store_path, labels=False
-    )
+        # Test that the computed UV maps were created
+        assert rect.Ud is not None
+        assert rect.Vd is not None
+        assert rect.Ud.shape == grid_shape
+        assert rect.Vd.shape == grid_shape
+        assert rect.Ud.dtype == int
+        assert rect.Vd.dtype == int
 
-    # Check that the Zarr store was created and has the correct content
-    assert os.path.exists(zarr_store_path)
-    store = zarr.open_group(zarr_store_path, mode="r")
+    def test_load_image(
+        self, rectifier_instance, dummy_image_file, use_gpu, xp
+    ):
+        """Test loading both color and grayscale images."""
+        img_path, _ = dummy_image_file
 
-    # Check correct number of images
-    assert len(list(store.keys())) == num_images
+        # Test loading in color (default)
+        img_color = rectifier_instance._load_image(str(img_path), labels=False)
+        assert isinstance(img_color, xp.ndarray)
+        assert img_color.ndim == 3
+        assert img_color.shape == (100, 100, 3)
 
-    # Check names and shapes
-    assert "img_0_rectified" in store
-    assert "img_1_rectified" in store
-    assert "img_2_rectified" in store
+        # Test loading in grayscale (labels=True)
+        img_gray = rectifier_instance._load_image(str(img_path), labels=True)
+        assert isinstance(img_gray, xp.ndarray)
+        assert img_gray.ndim == 2
+        assert img_gray.shape == (100, 100)
 
-    dset = store["img_0_rectified"]
-    assert dset.shape == (grid_shape[0], grid_shape[1], 3)
+    def test_reshape_grids(self, rectifier_instance, xp):
+        """Test the grid reshaping logic."""
+        xyz = rectifier_instance._reshape_grids()
+        assert isinstance(xyz, xp.ndarray)
+        # 10x10 grid = 100 points. Shape should be (100, 3)
+        assert xyz.shape == (100, 3)
+
+    def test_cirn_angles_to_r(self, rectifier_instance, xp):
+        """Test rotation matrix calculation (shape)."""
+        R = rectifier_instance._CIRN_angles_to_R()
+        assert isinstance(R, xp.ndarray)
+        assert R.shape == (3, 3)
+
+    def test_build_k(self, rectifier_instance, sample_intrinsics, xp, use_gpu):
+        """Test intrinsic matrix (K) construction."""
+        # This test now correctly requests `use_gpu`,
+        # which `xp` depends on.
+        K = rectifier_instance._build_K()
+        assert isinstance(K, xp.ndarray)
+        assert K.shape == (3, 3)
+
+        # Check that values were assigned correctly
+        if use_gpu:
+            K = K.get()  # Move to CPU for numpy comparison
+
+        assert K[0, 0] == -sample_intrinsics[4]  # -fx
+        assert K[1, 1] == -sample_intrinsics[5]  # -fy
+        assert K[0, 2] == sample_intrinsics[2]  # c0U
+        assert K[1, 2] == sample_intrinsics[3]  # c0V
+        assert K[2, 2] == 1
+
+    def test_intrinsics_extrinsics_to_p(self, rectifier_instance, xp):
+        """Test projection matrix (P) calculation."""
+        P, K, R, IC = rectifier_instance._intrinsics_extrinsics_to_P()
+
+        assert isinstance(P, xp.ndarray)
+        assert P.shape == (3, 4)
+        assert isinstance(K, xp.ndarray)
+        assert K.shape == (3, 3)
+        assert isinstance(R, xp.ndarray)
+        assert R.shape == (3, 3)
+        assert isinstance(IC, xp.ndarray)
+        assert IC.shape == (3, 4)
+
+    def test_get_pixels_logic(self, rectifier_instance, xp, use_gpu):
+        """
+        Test the core interpolation logic of _get_pixels.
+        We "monkey-patch" the Ud and Vd attributes to force known
+        sampling points for a predictable result.
+        """
+        rect = rectifier_instance
+
+        # Create a simple 10x10 gradient image
+        # Values from 0 to 99
+        img_data = np.arange(100).reshape(10, 10).astype(np.float32)
+        img = xp.asarray(img_data)
+
+        # --- Test 1: Identity mapping (sample known pixels) ---
+        # Let's sample points:
+        # (Vd=2, Ud=2) -> value 22
+        # (Vd=2, Ud=3) -> value 23
+        # (Vd=5, Ud=2) -> value 52
+        # (Vd=8, Ud=8) -> value 88
+        rect.Vd = xp.array([[2, 2], [5, 8]])  # Rows (all valid)
+        rect.Ud = xp.array([[2, 3], [2, 8]])  # Cols (all valid)
+
+        pixels = rect._get_pixels(img)
+        expected_values = xp.array([[[22.0], [23.0]], [[52.0], [88.0]]])
+        xp.testing.assert_allclose(pixels, expected_values)
+
+        # --- Test 2: Out-of-bounds mapping ---
+        # Sample points: (row, col)
+        # (0, 5)   -> out (Vd=0 is masked)
+        # (5, 100) -> out (Ud=100 is > shape)
+        # (5, 5)   -> in (value 55)
+        # (1, 1)   -> out (Vd=1 is masked)
+        rect.Vd = xp.array([[0, 5], [5, 1]])
+        rect.Ud = xp.array([[5, 100], [5, 1]])
+
+        pixels = rect._get_pixels(img)
+
+        # GPU uses NaN, CPU uses 0 for fill
+        fill_val = xp.nan if use_gpu else 0.0
+        expected_values = xp.array(
+            [[[fill_val], [fill_val]], [[55.0], [fill_val]]]
+        )
+
+        if use_gpu:
+            # 1. Test that NaN locations are identical
+            xp.testing.assert_array_equal(
+                xp.isnan(pixels), xp.isnan(expected_values)
+            )
+            # 2. Test that non-NaN values are close
+            pixels_nonan = xp.nan_to_num(pixels, nan=0.0)
+            expected_nonan = xp.nan_to_num(expected_values, nan=0.0)
+            xp.testing.assert_allclose(pixels_nonan, expected_nonan)
+        else:
+            xp.testing.assert_allclose(pixels, expected_values, equal_nan=True)
+
+        # --- Test 3: 3-Channel image ---
+        img_3c_data = np.stack([img_data, img_data * 2, img_data + 10], axis=-1)
+        img_3c = xp.asarray(img_3c_data)
+
+        # Sample point (Vd=2, Ud=4) -> val=24
+        rect.Vd = xp.array([[2]])
+        rect.Ud = xp.array([[4]])
+
+        pixels = rect._get_pixels(img_3c)
+
+        # Expected: [val, val*2, val+10] where val = 24
+        expected_values = xp.array([[[24.0, 48.0, 34.0]]])
+        xp.testing.assert_allclose(pixels, expected_values)
+
+    ## --- New Tests for Private Methods ---
+
+    def test_cirn_angles_to_r_zero_angles(self, rectifier_zero_angles, xp):
+        """Tests the rotation matrix math for a zero-rotation case."""
+        R = rectifier_zero_angles._CIRN_angles_to_R()
+        # Based on manual calculation, this is the expected matrix
+        # for the CIRN standard with zero angles.
+        expected_R_data = [[-1, 0, 0], [0, 1, 0], [0, 0, -1]]
+        expected_R = xp.array(expected_R_data, dtype=R.dtype)
+        xp.testing.assert_allclose(R, expected_R, atol=1e-15)
+
+    def test_distort_uv_no_distortion(self, rectifier_no_distortion, xp):
+        """Tests _distort_UV with all distortion params at 0.
+        Ud/Vd should equal U/V."""
+        rect = rectifier_no_distortion
+        # Create sample undistorted U/V coordinates within bounds
+        # (NU=1920, NV=1080, c0U=960, c0V=540)
+        U = xp.array([100, 500, 960, 1500])
+        V = xp.array([100, 540, 800, 1000])
+        UV = xp.vstack([U, V])
+
+        Ud, Vd, flag = rect._distort_UV(UV)
+
+        # With no distortion, Ud == U and Vd == V
+        xp.testing.assert_allclose(Ud, U)
+        xp.testing.assert_allclose(Vd, V)
+        # All flags should be 1 (valid)
+        xp.testing.assert_allclose(flag, xp.ones_like(flag))
+
+    ## --- Tests for Public Methods (End-to-End & Edge Cases) ---
+
+    def test_merge_rectify(self, rectifier_instance, dummy_image_file, xp):
+        """End-to-end test for rectifying a single image."""
+        img_path, _ = dummy_image_file
+        grid_shape = rectifier_instance.grid_shape
+
+        # Test color rectification
+        rect_img = rectifier_instance.merge_rectify(str(img_path), labels=False)
+
+        assert isinstance(rect_img, xp.ndarray)
+        assert rect_img.dtype == np.uint8
+        assert rect_img.shape == (grid_shape[0], grid_shape[1], 3)
+
+        # Test grayscale (label) rectification
+        rect_label = rectifier_instance.merge_rectify(
+            str(img_path), labels=True
+        )
+
+        assert isinstance(rect_label, xp.ndarray)
+        assert rect_label.dtype == np.uint8
+        # 2D images get a channel dim added by _get_pixels
+        assert rect_label.shape == (grid_shape[0], grid_shape[1], 1)
+
+    def test_merge_rectify_file_not_found(self, rectifier_instance):
+        """Tests that merge_rectify fails with an AttributeError
+        when cv2.imread returns None for a bad path."""
+        with pytest.raises(FileNotFoundError, match="Image file not found"):
+            rectifier_instance.merge_rectify("non_existent_file.png")
+
+    def test_merge_rectify_folder(
+        self, rectifier_instance, dummy_image_folder, tmp_path
+    ):
+        """End-to-end test for batch processing a folder to a Zarr
+        store.
+        """
+
+        folder_path, num_images = dummy_image_folder
+        zarr_store_path = str(tmp_path / "output.zarr")
+        grid_shape = rectifier_instance.grid_shape
+
+        rectifier_instance.merge_rectify_folder(
+            str(folder_path), zarr_store_path, labels=False
+        )
+
+        # Check that the Zarr store was created and has the correct
+        # content
+        assert os.path.exists(zarr_store_path)
+        store = zarr.open_group(zarr_store_path, mode="r")
+
+        # Check correct number of images
+        assert len(list(store.keys())) == num_images
+
+        # Check names and shapes
+        assert "img_0_rectified" in store
+        assert "img_1_rectified" in store
+        assert "img_2_rectified" in store
+
+        dset = store["img_0_rectified"]
+        assert dset.shape == (grid_shape[0], grid_shape[1], 3)
+
+    def test_merge_rectify_folder_invalid_source(
+        self, rectifier_instance, tmp_path
+    ):
+        """Tests batch job when the source folder does not exist."""
+        zarr_store_path = str(tmp_path / "output.zarr")
+        invalid_folder = str(tmp_path / "non_existent_folder")
+
+        # Function should catch FileNotFoundError, log it, and return.
+        rectifier_instance.merge_rectify_folder(invalid_folder, zarr_store_path)
+
+        # The zarr store *is* created before the os.listdir check.
+        assert os.path.exists(zarr_store_path)
+        # But it should be empty.
+        store = zarr.open_group(zarr_store_path, mode="r")
+        assert len(list(store.keys())) == 0
+
+    def test_merge_rectify_folder_empty_source(
+        self, rectifier_instance, tmp_path
+    ):
+        """Tests batch job when the source folder is empty."""
+        zarr_store_path = str(tmp_path / "output.zarr")
+        empty_folder = tmp_path / "empty_folder"
+        empty_folder.mkdir()
+
+        rectifier_instance.merge_rectify_folder(
+            str(empty_folder), zarr_store_path
+        )
+
+        # Store will be created, but should be empty
+        assert os.path.exists(zarr_store_path)
+        store = zarr.open_group(zarr_store_path, mode="r")
+        assert len(list(store.keys())) == 0
+
+    def test_merge_rectify_folder_one_corrupt_image(
+        self, rectifier_instance, dummy_image_folder, tmp_path, mocker
+    ):
+        """
+        Tests batch job when one image is corrupt and fails to rectify.
+        The batch job should skip the bad file and continue.
+        """
+        folder_path, num_images = dummy_image_folder  # Has 3 images
+        zarr_store_path = str(tmp_path / "output.zarr")
+
+        # Mock the internal `merge_rectify` to fail on one image
+        # Let's make it fail on 'img_1.png'
+        original_merge_rectify = rectifier_instance.merge_rectify
+
+        def mock_merge_rectify(image_path, labels, verbose):
+            if "img_1.png" in image_path:
+                raise ValueError("Simulated processing failure")
+            else:
+                # Must call the *original* method, not the mock itself
+                return original_merge_rectify(image_path, labels, verbose)
+
+        mocker.patch.object(
+            rectifier_instance, "merge_rectify", side_effect=mock_merge_rectify
+        )
+
+        rectifier_instance.merge_rectify_folder(
+            str(folder_path), zarr_store_path, labels=False
+        )
+
+        # Check that the Zarr store was created
+        assert os.path.exists(zarr_store_path)
+        store = zarr.open_group(zarr_store_path, mode="r")
+
+        # Check that the *other* images were processed
+        assert "img_0_rectified" in store
+        assert "img_2_rectified" in store
+        # Check that the *failed* image is NOT present
+        assert "img_1_rectified" not in store
+        # Check total count
+        assert len(list(store.keys())) == num_images - 1
