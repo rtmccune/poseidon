@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 import pandas as pd
 import zarr
+import matplotlib.pyplot as plt
 from unittest.mock import MagicMock, call, patch
 
 # --- Test Setup: Handle Optional CuPy Import ---
@@ -312,6 +313,285 @@ class TestDepthMapProcessor:
         expected_empty = cp.full((10, 10), cp.nan)
         # Check one map, they should all be the same
         cp.testing.assert_allclose(all_maps["wse_map_mean"], expected_empty)
+
+    def test_plot_histogram_helper_logic(self, local_10x10_processor, mock_plt):
+        """
+        Tests the core logic of the generic _plot_histogram_helper.
+        Ensures it calculates stats and calls matplotlib functions 
+        correctly.
+        """
+        mock_savefig, mock_close = mock_plt
+        # Get mocks for the functions we want to check
+        mock_hist = patch.object(plt, "hist").start()
+        mock_axvline = patch.object(plt, "axvline").start()
+        mock_title = patch.object(plt, "title").start()
+
+        # Simple data for easy-to-check stats
+        # Mean = 2.0, Median = 1.5, 95th %ile = 3.7
+        test_data = np.array([1.0, 1.0, 2.0, 4.0])
+        test_bins = np.linspace(0, 5, 11)
+        test_title = "My Test Title"
+        test_path = "save/here/plot.png"
+        test_color = "test_color"
+
+        local_10x10_processor._plot_histogram_helper(
+            test_data, test_bins, test_title, test_path, test_color
+        )
+
+        # Check that hist was called with the right data
+        mock_hist.assert_called_once()
+        np.testing.assert_array_equal(mock_hist.call_args[0][0], test_data)
+        assert mock_hist.call_args[1]["bins"] is test_bins
+        assert mock_hist.call_args[1]["color"] == test_color
+
+        # --- Check axvline calls robustly ---
+        assert mock_axvline.call_count == 3
+
+        # Get all calls made to axvline
+        all_calls = mock_axvline.call_args_list
+
+        # Convert calls to a dict keyed by label for easier checking
+        calls_by_label = {}
+        for c in all_calls:
+            args, kwargs = c
+            # We assume 'label' is in kwargs, which it should be
+            calls_by_label[kwargs["label"]] = {
+                "value": args[0],
+                "kwargs": kwargs,
+            }
+
+        # Check Mean
+        mean_label = "Mean: 2.00"
+        assert mean_label in calls_by_label
+        # Mean is a precise float, so direct comparison is fine
+        assert calls_by_label[mean_label]["value"] == 2.0
+        assert calls_by_label[mean_label]["kwargs"]["color"] == "red"
+        assert calls_by_label[mean_label]["kwargs"]["linestyle"] == "dashed"
+
+        # Check Median
+        median_label = "Median: 1.50"
+        assert median_label in calls_by_label
+        # Median is also a precise float here
+        assert calls_by_label[median_label]["value"] == 1.5
+        assert calls_by_label[median_label]["kwargs"]["color"] == "green"
+        assert calls_by_label[median_label]["kwargs"]["linestyle"] == "solid"
+
+        # Check 95th Percentile (the failing one)
+        perc_label = "95th %ile: 3.70"
+        assert perc_label in calls_by_label
+        # Use assert_allclose for robust floating point comparison
+        np.testing.assert_allclose(calls_by_label[perc_label]["value"], 3.7)
+        assert calls_by_label[perc_label]["kwargs"]["color"] == "purple"
+        assert calls_by_label[perc_label]["kwargs"]["linestyle"] == "dashdot"
+
+        # Check title, save, and close
+        mock_title.assert_called_once_with(test_title)
+        mock_savefig.assert_called_once_with(test_path)
+        mock_close.assert_called_once()
+
+        # Stop the patches started in this test
+        patch.stopall()
+
+    def test_plot_histogram_helper_empty_data(
+        self, local_10x10_processor, mock_plt
+    ):
+        """
+        Tests that the histogram helper correctly handles empty data.
+        """
+        mock_savefig, mock_close = mock_plt
+        mock_hist = patch.object(plt, "hist").start()
+
+        local_10x10_processor._plot_histogram_helper(
+            np.array([]), np.linspace(0, 1, 2), "Empty", "path", "color"
+        )
+
+        # Should not attempt to plot or save
+        mock_hist.assert_not_called()
+        mock_savefig.assert_not_called()
+        mock_close.assert_not_called()  # Doesn't even create a figure
+
+        # Stop the patches started in this test
+        patch.stopall()
+
+    def test_plot_individual_histograms_delegation(
+        self, local_10x10_processor, mocker
+    ):
+        """
+        Tests that _plot_individual_histograms loops and calls the
+        helper method with the correct arguments for each pond.
+        """
+        mock_helper = mocker.patch.object(
+            local_10x10_processor, "_plot_histogram_helper"
+        )
+
+        test_bins = np.linspace(0, 10, 5)
+        test_dir = "test/ind_dir"
+        test_base = "file_base"
+        test_data = {
+            1: np.array([1, 2]),
+            5: np.array([5, 6, 7]),
+        }
+
+        local_10x10_processor._plot_individual_histograms(
+            test_data, test_bins, test_dir, test_base
+        )
+
+        assert mock_helper.call_count == 2
+        expected_calls = [
+            call(
+                test_data[1],
+                test_bins,
+                "Elevation Histogram for Pond 1",
+                "test/ind_dir/file_base_Pond_1",
+                color="lightblue",
+            ),
+            call(
+                test_data[5],
+                test_bins,
+                "Elevation Histogram for Pond 5",
+                "test/ind_dir/file_base_Pond_5",
+                color="lightblue",
+            ),
+        ]
+
+        # Check calls manually to handle numpy array comparison
+        call_1_args, call_1_kwargs = mock_helper.call_args_list[0]
+        call_2_args, call_2_kwargs = mock_helper.call_args_list[1]
+
+        expected_call_1_args = expected_calls[0].args
+        expected_call_2_args = expected_calls[1].args
+
+        np.testing.assert_array_equal(call_1_args[0], expected_call_1_args[0])
+        assert call_1_args[1:] == expected_call_1_args[1:]
+        assert call_1_kwargs == expected_calls[0].kwargs
+
+        np.testing.assert_array_equal(call_2_args[0], expected_call_2_args[0])
+        assert call_2_args[1:] == expected_call_2_args[1:]
+        assert call_2_kwargs == expected_calls[1].kwargs
+
+    def test_plot_combined_histogram_delegation(
+        self, local_10x10_processor, mocker
+    ):
+        """
+        Tests that _plot_combined_histogram calls the helper method
+        once with the correct arguments.
+        """
+        mock_helper = mocker.patch.object(
+            local_10x10_processor, "_plot_histogram_helper"
+        )
+
+        test_bins = np.linspace(0, 10, 5)
+        test_dir = "test/all_dir"
+        test_base = "file_base"
+        test_data = np.array([1, 2, 5, 6, 7])
+
+        local_10x10_processor._plot_combined_histogram(
+            test_data, test_bins, test_dir, test_base
+        )
+
+        mock_helper.assert_called_once()
+
+        # Check call arguments, handling numpy array separately
+        args, kwargs = mock_helper.call_args
+        expected_args = (
+            test_data,
+            test_bins,
+            "Elevation Histogram - All Ponds Combined",
+            "test/all_dir/file_base_All_Ponds_Histogram",
+        )
+
+        np.testing.assert_array_equal(args[0], expected_args[0])
+        assert args[1:] == expected_args[1:]
+        assert kwargs == {"color": "lightcoral"}
+
+    def test_plot_pond_edge_elevations_orchestrator(
+        self, local_10x10_processor, mock_os, mocker
+    ):
+        """
+        Tests that the refactored _plot_pond_edge_elevations
+        orchestrates directory creation and calls the new helper
+        methods correctly.
+        """
+        _, mock_makedirs = mock_os
+        mock_ind_plot = mocker.patch.object(
+            local_10x10_processor, "_plot_individual_histograms"
+        )
+        mock_comb_plot = mocker.patch.object(
+            local_10x10_processor, "_plot_combined_histogram"
+        )
+
+        # Pond 1: Has data
+        # Pond 2: No data in contour_values
+        # Pond 3: Has data
+        labeled_data = cp.zeros((10, 10), dtype=int)
+        labeled_data[1, 1] = 1
+        labeled_data[2, 2] = 2
+        labeled_data[3, 3] = 3
+
+        # Note: pond 2 is missing
+        contour_values = {1: np.array([1.0, 2.0]), 3: np.array([3.0, 4.0])}
+        file_name = "test_file"
+
+        local_10x10_processor._plot_pond_edge_elevations(
+            labeled_data, contour_values, file_name
+        )
+
+        # 1. Check directory creation
+        expected_dirs = [
+            call("test_data/plots/all_ponds", exist_ok=True),
+            call("test_data/plots/ind_ponds", exist_ok=True),
+        ]
+        mock_makedirs.assert_has_calls(expected_dirs)
+
+        # 2. Check call to individual plotter (with filtered data)
+        mock_ind_plot.assert_called_once()
+        args_ind, _ = mock_ind_plot.call_args
+
+        expected_filtered_dict = {1: contour_values[1], 3: contour_values[3]}
+        assert args_ind[0].keys() == expected_filtered_dict.keys()
+        np.testing.assert_array_equal(args_ind[0][1], expected_filtered_dict[1])
+        np.testing.assert_array_equal(args_ind[0][3], expected_filtered_dict[3])
+        assert args_ind[2] == "test_data/plots/ind_ponds"  # output dir
+        assert args_ind[3] == file_name  # file_name_base
+
+        # 3. Check call to combined plotter (with concatenated data)
+        mock_comb_plot.assert_called_once()
+        args_comb, _ = mock_comb_plot.call_args
+
+        expected_concat_array = np.array([1.0, 2.0, 3.0, 4.0])
+        np.testing.assert_array_equal(args_comb[0], expected_concat_array)
+        assert args_comb[2] == "test_data/plots/all_ponds"  # output dir
+        assert args_comb[3] == file_name  # file_name_base
+
+    def test_plot_pond_edge_elevations_no_data(
+        self, local_10x10_processor, mock_os, mocker
+    ):
+        """
+        Tests that the orchestrator exits cleanly if no valid
+        pond data is found.
+        """
+        _, mock_makedirs = mock_os
+        mock_ind_plot = mocker.patch.object(
+            local_10x10_processor, "_plot_individual_histograms"
+        )
+        mock_comb_plot = mocker.patch.object(
+            local_10x10_processor, "_plot_combined_histogram"
+        )
+
+        labeled_data = cp.zeros((10, 10), dtype=int)
+        labeled_data[1, 1] = 1  # Pond 1 exists
+        contour_values = {}  # But has no contour data
+
+        local_10x10_processor._plot_pond_edge_elevations(
+            labeled_data, contour_values, "test_file"
+        )
+
+        # It should still make the directories
+        assert mock_makedirs.call_count == 2
+
+        # It should NOT call the plotters
+        mock_ind_plot.assert_not_called()
+        mock_comb_plot.assert_not_called()
 
     def test_plot_pond_edge_elevations(
         self, local_10x10_processor, mock_os, mock_plt

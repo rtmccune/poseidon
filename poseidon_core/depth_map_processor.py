@@ -4,9 +4,14 @@ import cupy as cp
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import datetime
 from cucim.skimage.measure import label
 from cucim.skimage.morphology import binary_closing
 from skimage.measure import find_contours
+
+def _log(message):
+    """Helper function for timestamped logging."""
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
 
 class DepthMapProcessor:
@@ -119,11 +124,11 @@ class DepthMapProcessor:
         return depth_data
 
     def process_depth_maps(self, labels_zarr_dir, depth_map_zarr_dir):
-        """Creates and saves depth maps as zarr arrays.
+        """Creates and saves depth maps as zarr arrays with logging.
 
         Given a zarr directory containing rectified labels, this method
         processes each file and saves the resulting depth maps to the
-        destination directory.
+        destination directory. Logs progress and errors.
 
         Parameters
         ----------
@@ -137,26 +142,83 @@ class DepthMapProcessor:
         -------
         None
         """
-        for file_name in os.listdir(
-            labels_zarr_dir
-        ):  # for each rectified label array
-            if file_name.endswith(
-                "_rectified"
-            ):  # confirm that it has been rectified
-                rectified_label_array = os.path.join(
-                    labels_zarr_dir, file_name
-                )  # combine file path
+        _log("\n=== Starting Depth Map Generation ===")
+        _log(f"  Source Zarr directory: {labels_zarr_dir}")
+        _log(f"  Output Zarr directory: {depth_map_zarr_dir}")
+
+        # Get a list of all files in the source directory
+        try:
+            all_files = os.listdir(labels_zarr_dir)
+        except FileNotFoundError:
+            _log(f"  ERROR: Source directory not found at {labels_zarr_dir}.")
+            _log("=== Depth Map Generation Aborted ===")
+            return
+        except Exception as e:
+            _log(f"  ERROR: Could not read directory {labels_zarr_dir}. {e}")
+            _log("=== Depth Map Generation Aborted ===")
+            return
+
+        # Filter for the files we actually need to process
+        files_to_process = [
+            f for f in all_files if f.endswith("_rectified")
+        ]
+        total_files = len(files_to_process)
+
+        if total_files == 0:
+            _log(f"  WARNING: No '_rectified' files found in {labels_zarr_dir}. Nothing to do.")
+            _log("=== Depth Map Generation Complete ===")
+            return
+
+        _log(f"  Found {total_files} rectified label arrays to process.")
+
+        # Determine report interval (print ~10 updates + first/last)
+        report_interval = max(1, total_files // 10)
+        processed_count = 0
+
+        for i, file_name in enumerate(files_to_process):
+            # Log progress periodically
+            if (
+                (i + 1) % report_interval == 0
+                or i == 0
+                or (i + 1) == total_files
+            ):
+                _log(f"  Processing file {i + 1}/{total_files}: {file_name}")
+
+            rectified_label_path = os.path.join(
+                labels_zarr_dir, file_name
+            )
+
+            # Generate depth map
+            try:
                 depth_data = self.process_single_depth_map(
-                    rectified_label_array, file_name
-                )  # generate depth map
+                    rectified_label_path, file_name
+                )
+            except Exception as e:
+                _log(f"  ERROR: Failed to process depth map for {file_name}. {e}")
+                continue  # Skip to the next file
 
-                depth_maps = pd.DataFrame(
-                    depth_data
-                )  # create dataframe from dictionary output
+            # Create DataFrame 
+            try:
+                depth_maps = pd.DataFrame(depth_data)
+                if depth_maps.empty:
+                    _log(f"  WARNING: No depth data generated for {file_name}. Skipping save.")
+                    continue
+            except Exception as e:
+                _log(f"  ERROR: Failed to create DataFrame for {file_name}. {e}")
+                continue  # Skip to the next file
 
-                self._save_depth_maps(
-                    depth_maps, depth_map_zarr_dir
-                )  # save to zarr
+            # Save to Zarr
+            try:
+                self._save_depth_maps(depth_maps, depth_map_zarr_dir)
+            except Exception as e:
+                _log(f"  ERROR: Failed to save depth maps for {file_name} to {depth_map_zarr_dir}. {e}")
+                continue  # Skip to the next file
+            
+            processed_count += 1
+
+        # Print success message after all images are processed
+        _log(f"  Successfully processed {processed_count}/{total_files} files.")
+        _log("=== Depth Map Generation Complete ===")
 
     def _label_ponds(self, gpu_label_array):
         """Labels and processes pond regions efficiently using a LUT.
@@ -501,172 +563,204 @@ class DepthMapProcessor:
         file_name,
     ):
         """
-        Plots/saves histograms of edge elevations for individual ponds.
+        Orchestrates the plotting of edge elevation histograms.
+
+        This method prepares the data and directories, then calls
+        helper methods to plot histograms for individual ponds and
+        for all ponds combined.
 
         Parameters
         ----------
         labeled_data : cp.ndarray
-            A CuPy array containing labeled pond segmentation data. Each
-            unique non-zero value represents a different pond.
+            A CuPy array containing labeled pond segmentation data.
         contour_values_per_pond : dict[int, np.ndarray]
-            A dictionary mapping pond IDs (integers) to NumPy arrays of
-            edge elevation values for each pond.
+            A dictionary mapping pond IDs to NumPy arrays of
+            edge elevation values.
         file_name : str
             Base filename used for saving the plots.
 
         Returns
         -------
         None
-
-        Notes
-        -----
-        - Individual pond elevation histograms include vertical lines
-        for the mean, median, and 95th percentile values.
-        - If no ponds are found (i.e., `edge_elevs` is empty), the
-        method exits early without creating a combined plot.
         """
+        # Setup directories for all plots and individual pond plots
         all_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "all_ponds")
         ind_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "ind_ponds")
         os.makedirs(all_pond_dir, exist_ok=True)
         os.makedirs(ind_pond_dir, exist_ok=True)
 
-        edge_elevs = []  # List will hold NumPy arrays
-
-        # Get unique IDs from GPU, but transfer this small array to CPU
-        unique_pond_ids = cp.unique(labeled_data).get()
-
         bins = np.linspace(0, 2, 51)
 
-        # Loop over the CPU (NumPy) array of IDs
+        # Extract and validate data
+        # We create a new dict of just the valid NumPy arrays
+        edge_elevs_by_pond = {}
+        unique_pond_ids = cp.unique(labeled_data).get()  # Get IDs on CPU
+
         for pond_id in unique_pond_ids:
             if pond_id == 0:  # Skip background
                 continue
 
-            # Use .item() for safe dict key lookup
             pond_id_key = pond_id.item()
-
-            if pond_id_key not in contour_values_per_pond:
+            # Only add ponds that have corresponding contour data
+            if pond_id_key in contour_values_per_pond:
+                edge_elevs_by_pond[pond_id_key] = contour_values_per_pond[
+                    pond_id_key
+                ]
+            else:
                 print(
-                    f"Warning: No contours found for pond_id {pond_id_key}. "
-                    f"Skipping plotting for this pond."
+                    f"Warning: No contours for pond_id {pond_id_key}. "
+                    f"Skipping plot."
                 )
-                continue
 
-            # Data is already a NumPy array in the dictionary
-            pond_edge_elevs_np = contour_values_per_pond[pond_id_key]
-
-            # Append the NumPy array directly
-            edge_elevs.append(pond_edge_elevs_np)
-
-            # Compute statistics using NumPy
-            mean_val = np.mean(pond_edge_elevs_np)
-            median_val = np.median(pond_edge_elevs_np)
-            percentile_95 = np.percentile(pond_edge_elevs_np, 95)
-
-            # Plot histogram
-            plt.figure(figsize=(8, 6))
-            plt.hist(
-                pond_edge_elevs_np,
-                bins=bins,
-                color="lightblue",
-                edgecolor="black",
-                alpha=0.7,
-            )
-
-            # Overlay vertical lines
-            plt.axvline(
-                mean_val,
-                color="red",
-                linestyle="dashed",
-                linewidth=2,
-                label=f"Mean: {mean_val:.2f}",
-            )
-            plt.axvline(
-                median_val,
-                color="green",
-                linestyle="solid",
-                linewidth=2,
-                label=f"Median: {median_val:.2f}",
-            )
-            plt.axvline(
-                percentile_95,
-                color="purple",
-                linestyle="dashdot",
-                linewidth=2,
-                label=f"95th %ile: {percentile_95:.2f}",
-            )
-
-            plt.xlim(0, 2)
-
-            # Labels and legend
-            plt.xlabel("Elevation")
-            plt.ylabel("Frequency")
-            plt.title(f"Elevation Histogram for Pond {pond_id}")
-            plt.legend()
-            plt.grid(True, linestyle="--", alpha=0.6)
-
-            # Save plot
-            plt.savefig(f"{ind_pond_dir}/{file_name}_Pond_{pond_id}")
-            plt.close()
-
-        if not edge_elevs:
+        # Check if there is anything to plot
+        if not edge_elevs_by_pond:
             print(
                 f"No pond edge elevations found for {file_name}. "
-                f"Skipping combined histogram."
+                f"Skipping all histograms."
             )
-            return  # Exit the function early
+            return
 
-        all_edge_elevs = np.concatenate(edge_elevs)
+        # Call helper to plot all individual ponds
+        self._plot_individual_histograms(
+            edge_elevs_by_pond, bins, ind_pond_dir, file_name
+        )
 
-        # Plot histogram for all ponds combined
+        # Call helper to plot the single combined histogram
+        all_edge_elevs = np.concatenate(list(edge_elevs_by_pond.values()))
+        self._plot_combined_histogram(
+            all_edge_elevs, bins, all_pond_dir, file_name
+        )
+
+        return None
+
+    def _plot_individual_histograms(
+        self, edge_elevs_by_pond, bins, output_dir, file_name_base
+    ):
+        """
+        Plots and saves one histogram for each pond.
+
+        Parameters
+        ----------
+        edge_elevs_by_pond : dict[int, np.ndarray]
+            A dictionary mapping pond IDs to their edge elevation arrays.
+        bins : np.ndarray
+            The bins to use for the histogram.
+        output_dir : str
+            The directory path to save the plots.
+        file_name_base : str
+            The base name for the output plot files.
+        """
+        # Loop through each pond and call the generic plotting helper
+        for pond_id, elevs_np in edge_elevs_by_pond.items():
+            title = f"Elevation Histogram for Pond {pond_id}"
+            save_path = f"{output_dir}/{file_name_base}_Pond_{pond_id}"
+
+            self._plot_histogram_helper(
+                elevs_np, bins, title, save_path, color="lightblue"
+            )
+
+    def _plot_combined_histogram(
+        self, all_edge_elevs, bins, output_dir, file_name_base
+    ):
+        """
+        Plots and saves a single combined histogram for all ponds.
+
+        Parameters
+        ----------
+        all_edge_elevs : np.ndarray
+            A 1D array of all edge elevations from all ponds.
+        bins : np.ndarray
+            The bins to use for the histogram.
+        output_dir : str
+            The directory path to save the plot.
+        file_name_base : str
+            The base name for the output plot file.
+        """
+        # Create the title and save path for the combined plot
+        title = "Elevation Histogram - All Ponds Combined"
+        save_path = f"{output_dir}/{file_name_base}_All_Ponds_Histogram"
+
+        # Call the generic plotting helper with the combined data
+        self._plot_histogram_helper(
+            all_edge_elevs, bins, title, save_path, color="lightcoral"
+        )
+
+    def _plot_histogram_helper(self, data, bins, title, save_path, color):
+        """
+        Generic helper to create and save one histogram plot.
+
+        This method calculates statistics (mean, median, 95th percentile)
+        and plots the data with statistic lines.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            The 1D array of data to plot.
+        bins : np.ndarray
+            The bins to use for the histogram.
+        title : str
+            The title for the plot.
+        save_path : str
+            The full file path to save the resulting plot.
+        color : str
+            The color for the histogram bars.
+        """
+        # Ensure there is data to prevent errors with empty arrays
+        if data.size == 0:
+            print(f"Warning: No data to plot for '{title}'. Skipping.")
+            return
+
+        # Compute all required statistics
+        mean_val = np.mean(data)
+        median_val = np.median(data)
+        percentile_95 = np.percentile(data, 95)
+
+        # Initialize the plot figure
         plt.figure(figsize=(8, 6))
+
+        # Plot the main histogram
         plt.hist(
-            all_edge_elevs,
+            data,
             bins=bins,
-            color="lightcoral",
+            color=color,
             edgecolor="black",
             alpha=0.7,
         )
 
-        # Compute global statistics
-        mean_all = np.mean(all_edge_elevs)
-        median_all = np.median(all_edge_elevs)
-        percentile_95_all = np.percentile(all_edge_elevs, 95)
-
-        # Overlay vertical lines for statistics
+        # Overlay vertical lines for each statistic
         plt.axvline(
-            mean_all,
+            mean_val,
             color="red",
             linestyle="dashed",
             linewidth=2,
-            label=f"Mean: {mean_all:.2f}",
+            label=f"Mean: {mean_val:.2f}",
         )
         plt.axvline(
-            median_all,
+            median_val,
             color="green",
             linestyle="solid",
             linewidth=2,
-            label=f"Median: {median_all:.2f}",
+            label=f"Median: {median_val:.2f}",
         )
         plt.axvline(
-            percentile_95_all,
+            percentile_95,
             color="purple",
             linestyle="dashdot",
             linewidth=2,
-            label=f"95th %ile: {percentile_95_all:.2f}",
+            label=f"95th %ile: {percentile_95:.2f}",
         )
 
+        # Set plot limits
         plt.xlim(0, 2)
 
-        # Labels and legend
+        # Add labels, title, and legend
         plt.xlabel("Elevation")
         plt.ylabel("Frequency")
-        plt.title("Elevation Histogram - All Ponds Combined")
+        plt.title(title)
         plt.legend()
         plt.grid(True, linestyle="--", alpha=0.6)
 
-        # Save the combined histogram
-        plt.savefig(f"{all_pond_dir}/{file_name}_All_Ponds_Histogram")
+        # Save the plot to the specified file path and close the figure
+        # to free up memory
+        plt.savefig(save_path)
         plt.close()
-
-        return None
