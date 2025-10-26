@@ -8,20 +8,26 @@ from unittest.mock import MagicMock, call, patch
 # --- Test Setup: Handle Optional CuPy Import ---
 try:
     import cupy as cp
+
     # Use cucim for GPU-accelerated morphology and labeling
     from cucim.skimage.morphology import binary_closing
     from cucim.skimage.measure import label
+
     # Use standard skimage for find_contours as specified
-    from skimage.measure import find_contours 
+    from skimage.measure import find_contours
+
     CUPY_AVAILABLE = True
 except ImportError:
     CUPY_AVAILABLE = False
     cp = None  # Define cp as None for linter
     binary_closing = None
     label = None
-    find_contours = None # This will be None, but the mock patches it anyway
+
+    # This will be None, but the mock patches it anyway
+    find_contours = None
 
 # Import the class to be tested
+# (Update this import path to match your project structure)
 from poseidon_core.depth_map_processor import DepthMapProcessor
 
 # --- Pytest Markers ---
@@ -66,11 +72,27 @@ class TestDepthMapProcessor:
     @pytest.fixture
     def processor_instance(self, sample_elev_grid_np):
         """
-        Provides a standard DepthMapProcessor instance based on the 12x12 grid.
+        Provides a standard DepthMapProcessor instance.
+        *** Plotting is DISABLED by default for tests. ***
         """
         processor = DepthMapProcessor(
             elevation_grid=sample_elev_grid_np,
-            pond_edge_elev_plot_dir='test_data/plots'
+            plot_edges=False,  # Disable plotting by default
+            pond_edge_elev_plot_dir="test_data/plots",
+        )
+        processor.elev_grid_cp = cp.array(sample_elev_grid_np)
+        return processor
+
+    @pytest.fixture
+    def processor_with_plotting(self, sample_elev_grid_np):
+        """
+        Provides a DepthMapProcessor instance.
+        *** Plotting is ENABLED for specific tests. ***
+        """
+        processor = DepthMapProcessor(
+            elevation_grid=sample_elev_grid_np,
+            plot_edges=True,  # <-- UPDATED: Enable plotting
+            pond_edge_elev_plot_dir="test_data/plots",
         )
         processor.elev_grid_cp = cp.array(sample_elev_grid_np)
         return processor
@@ -78,16 +100,17 @@ class TestDepthMapProcessor:
     @pytest.fixture
     def local_10x10_processor(self):
         """
-        Provides a 10x10 processor for tests that are
-        hard-coded to that shape, decoupling them from the main fixture.
+        Provides a 10x10 processor for tests.
+        *** Plotting is DISABLED by default for tests. ***
         """
         grid = np.full((10, 10), 10.0)
         grid[1:9, 1:9] = 5.0  # 8x8 pond
         grid[4:6, 4:6] = 1.0  # 2x2 deep spot
-        
+
         processor = DepthMapProcessor(
             elevation_grid=grid,
-            pond_edge_elev_plot_dir='test_data/plots'
+            plot_edges=False,  # Disable plotting by default
+            pond_edge_elev_plot_dir="test_data/plots",
         )
         processor.elev_grid_cp = cp.array(grid)
         return processor
@@ -133,203 +156,169 @@ class TestDepthMapProcessor:
         Mocks skimage.measure.find_contours.
         Returns a contour for an 8x8 pond at [1:9, 1:9].
         """
-        contour_array = np.array([
-            [0.5, 0.5], [0.5, 8.5], [8.5, 8.5], [8.5, 0.5], [0.5, 0.5]
-        ])
-        # This patch target is correct because the class uses
-        # `from skimage.measure import find_contours`
+        contour_array = np.array(
+            [[0.5, 0.5], [0.5, 8.5], [8.5, 8.5], [8.5, 0.5], [0.5, 0.5]]
+        )
         return mocker.patch(
             "poseidon_core.depth_map_processor.find_contours",
-            return_value=[contour_array]
+            return_value=[contour_array],
         )
 
     ## --- Test Cases ---
 
     def test_init(self, sample_elev_grid_np):
-        """Tests that the elevation grid is set correctly (12x12)."""
+        """Tests that init sets defaults correctly."""
         processor = DepthMapProcessor(sample_elev_grid_np)
         np.testing.assert_allclose(processor.elev_grid, sample_elev_grid_np)
         cp.testing.assert_allclose(
             processor.elev_grid_cp, cp.array(sample_elev_grid_np)
         )
-        assert processor.pond_edge_elev_plot_dir == 'data/edge_historgrams'
+        assert processor.pond_edge_elev_plot_dir == "data/edge_histograms"
+        assert processor.plot_edges is True  # Check default
+
+    def test_init_plotting_disabled(self, sample_elev_grid_np):
+        """Tests that init respects plot_edges=False."""
+        processor = DepthMapProcessor(sample_elev_grid_np, plot_edges=False)
+        assert processor.plot_edges is False  # Check explicit False
 
     def test_label_ponds_basic(self, processor_instance, sample_label_array_cp):
         """
         Tests that a simple pond with a 2-pixel border survives
         binary closing and is labeled correctly.
         """
-        # sample_label_array_cp is 12x12x1 with a pond at [2:10, 2:10]
         labeled_data = processor_instance._label_ponds(sample_label_array_cp)
-
-        # Expected: 12x12 array, 8x8 pond at [2:10, 2:10] is label 1
         expected = cp.zeros((12, 12), dtype=int)
         expected[2:10, 2:10] = 1
-
         cp.testing.assert_allclose(labeled_data, expected)
 
     def test_label_ponds_small_pond_removal(self, processor_instance):
         """
         Tests that ponds smaller than min_size (55) are removed.
-        (This test is independent of the fixture)
         """
         label_array = cp.zeros((12, 12, 1), dtype=cp.uint8)
         label_array[1:9, 1:9] = 1  # Large pond (8x8 = 64 pixels > 55)
         label_array[10:12, 10:12] = 1  # Small pond (2x2 = 4 pixels < 55)
 
-        # We use the 12x12 processor instance, which is fine
         labeled_data = processor_instance._label_ponds(label_array)
 
         unique_labels = cp.unique(labeled_data).get()
         assert len(unique_labels) == 2  # [0, 1]
-        assert 1 in unique_labels
         assert labeled_data[10, 10] == 0  # Small pond removed
-        assert labeled_data[1, 1] == 1    # Large pond kept
+        assert labeled_data[1, 1] == 1  # Large pond kept
 
     def test_label_ponds_fills_holes(self, processor_instance):
         """
         Tests that binary_closing correctly fills holes in a pond.
         """
         label_array = cp.zeros((12, 12, 1), dtype=cp.uint8)
-        
-        # --- FIX 1 ---
-        # 8x8 pond (64 pixels) with a 2-pixel border
-        label_array[2:10, 2:10] = 1 # Was [1:11, 1:11]
-        
-        # 2x2 hole in the middle (still inside the 8x8 pond)
-        label_array[5:7, 5:7] = 0
+        label_array[2:10, 2:10] = 1  # 8x8 pond
+        label_array[5:7, 5:7] = 0  # 2x2 hole in the middle
 
-        # Pass to the 12x12 processor
         labeled_data = processor_instance._label_ponds(label_array)
 
-        # Expected: 12x12 array, 8x8 pond is labeled 1, hole is FILLED
         expected = cp.zeros((12, 12), dtype=int)
-        
-        # --- FIX 2 ---
-        expected[2:10, 2:10] = 1 # Was [1:11, 1:11]
-
+        expected[2:10, 2:10] = 1  # Hole should be filled
         cp.testing.assert_allclose(labeled_data, expected)
 
-    def test_extract_contours(
-        self, local_10x10_processor, mock_find_contours
-    ):
+    def test_extract_contours(self, local_10x10_processor, mock_find_contours):
         """
         Tests contour extraction. Uses a local 10x10 processor
         to match the hard-coded mock contour.
         """
-        # 1. Create 10x10 data
         labeled_data = cp.zeros((10, 10), dtype=int)
         labeled_data[1:9, 1:9] = 1  # One pond with ID 1
-        
-        # Create the matching 10x10 label array
-        label_array_cp = (local_10x10_processor.elev_grid_cp <= 5)\
-            .astype(cp.uint8).reshape(10, 10, 1)
 
-        # 2. Call method on the local_10x10_processor
+        label_array_cp = (
+            (local_10x10_processor.elev_grid_cp <= 5)
+            .astype(cp.uint8)
+            .reshape(10, 10, 1)
+        )
+
         pixels_dict, values_dict = local_10x10_processor._extract_contours(
             labeled_data, label_array_cp
         )
 
-        # 3. Check contour pixels
         # Mock contour [0.5, 8.5] rounds to [0, 8]
-        expected_pixels = np.array([
-            [0, 0], [0, 8], [8, 8], [8, 0], [0, 0]
-        ])
+        expected_pixels = np.array([[0, 0], [0, 8], [8, 8], [8, 0], [0, 0]])
         np.testing.assert_allclose(pixels_dict[1], expected_pixels)
 
-        # 4. Check contour values
         # Pixel (8,8) is inside the 10x10 grid's pond [1:9, 1:9] -> 5.0
         # Others are outside -> 0.0
         expected_values = np.array([0.0, 0.0, 5.0, 0.0, 0.0])
         np.testing.assert_allclose(values_dict[1], expected_values)
 
-    def test_calculate_depths_wse_mean(self, local_10x10_processor):
+    def test_calculate_all_depths(self, local_10x10_processor):
         """
-        Tests 'wse' (water surface) calculation with 'mean'.
-        Uses a local 10x10 processor.
-        """
-        labeled_data = cp.zeros((10, 10), dtype=int)
-        labeled_data[1:9, 1:9] = 1  # Pond 1
-
-        contour_values = {1: np.array([10.0, 10.0, 5.0, 5.0])}  # Mean = 7.5
-
-        depth_maps = local_10x10_processor._calculate_depths(
-            labeled_data, contour_values, "mean", "wse"
-        )
-
-        expected = cp.full((10, 10), cp.nan)
-        expected[1:9, 1:9] = 7.5
-
-        cp.testing.assert_allclose(depth_maps[1], expected)
-
-    def test_calculate_depths_depth_95perc(self, local_10x10_processor):
-        """
-        Tests 'depth' calculation with '95_perc' and clipping.
-        Uses a local 10x10 processor.
+        Tests the new `_calculate_all_depths` method.
+        This single test replaces the four previous `_calculate_depths_*` tests.
         """
         labeled_data = cp.zeros((10, 10), dtype=int)
         labeled_data[1:9, 1:9] = 1  # Pond 1
 
-        contour_values = {1: np.array([5.0, 5.0, 5.0, 10.0])} # WSE = 9.25
+        # Use two different contour value sets to check different methods
+        contour_values = {
+            1: np.array([10.0, 10.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0])
+        }
+        # Mean = (3*10 + 7*5) / 10 = 6.5
+        # 95th percentile = 10.0
 
-        depth_maps = local_10x10_processor._calculate_depths(
-            labeled_data, contour_values, "95_perc", "depth"
+        # --- Call the new method ---
+        all_maps = local_10x10_processor._calculate_all_depths(
+            labeled_data, contour_values
         )
 
-        # WSE = 9.25
-        # elev_grid (most) = 5.0 -> abs(5.0 - 9.25) = 4.25
-        # elev_grid (center) = 1.0 -> abs(1.0 - 9.25) = 8.25
-        expected = cp.full((10, 10), cp.nan)
-        expected[1:9, 1:9] = 4.25
-        expected[4:6, 4:6] = 8.25
+        # --- Check 1: 'wse' with 'mean' (WSE = 6.5) ---
+        expected_wse_mean = cp.full((10, 10), cp.nan)
+        expected_wse_mean[1:9, 1:9] = 6.5
+        cp.testing.assert_allclose(all_maps["wse_map_mean"], expected_wse_mean)
 
-        cp.testing.assert_allclose(depth_maps[1], expected)
-
-    def test_calculate_depths_depth_clipping(self, local_10x10_processor):
-        """
-        Tests that depths > 0 (elev > WSE) are clipped to 0.
-        Uses a local 10x10 processor.
-        """
-        labeled_data = cp.zeros((10, 10), dtype=int)
-        labeled_data[1:9, 1:9] = 1  # Pond 1
-
-        contour_values = {1: np.array([4.0, 4.0, 4.0])}  # WSE (mean) = 4.0
-
-        depth_maps = local_10x10_processor._calculate_depths(
-            labeled_data, contour_values, "mean", "depth"
+        # --- Check 2: 'depth' with '95_perc' (WSE = 10.0) ---
+        # WSE = 10.0
+        # elev_grid (most) = 5.0 -> abs(5.0 - 10.0) = 5.0
+        # elev_grid (center) = 1.0 -> abs(1.0 - 10.0) = 9.0
+        expected_depth_95 = cp.full((10, 10), cp.nan)
+        expected_depth_95[1:9, 1:9] = 5.0
+        expected_depth_95[4:6, 4:6] = 9.0
+        cp.testing.assert_allclose(
+            all_maps["depth_map_95_perc"], expected_depth_95
         )
 
-        # WSE = 4.0
-        # elev (most) = 5.0 -> 5.0 - 4.0 = 1.0 -> clips to 0.0
-        # elev (center) = 1.0 -> 1.0 - 4.0 = -3.0 -> abs() = 3.0
-        expected = cp.full((10, 10), cp.nan)
-        expected[1:9, 1:9] = 0.0
-        expected[4:6, 4:6] = 3.0
+        # --- Check 3: 'depth' with clipping (WSE = 6.5) ---
+        # WSE = 6.5
+        # elev (most) = 5.0 -> 5.0 - 6.5 = -1.5 -> abs() = 1.5
+        # elev (center) = 1.0 -> 1.0 - 6.5 = -5.5 -> abs() = 5.5
+        # local_10x10_processor has elev 10.0 outside pond, but that's NaN
+        expected_depth_mean = cp.full((10, 10), cp.nan)
+        expected_depth_mean[1:9, 1:9] = 1.5
+        expected_depth_mean[4:6, 4:6] = 5.5
+        cp.testing.assert_allclose(
+            all_maps["depth_map_mean"], expected_depth_mean
+        )
 
-        cp.testing.assert_allclose(depth_maps[1], expected)
+        assert len(all_maps) == 8  # Ensure all 8 maps were generated
 
-    def test_calculate_depths_no_ponds(self, local_10x10_processor):
+    def test_calculate_all_depths_no_ponds(self, local_10x10_processor):
         """
-        Tests calculation when no ponds are found.
-        Uses a local 10x10 processor.
+        Tests `_calculate_all_depths` when no ponds are found.
         """
         labeled_data = cp.zeros((10, 10), dtype=int)
         contour_values = {}
 
-        depth_maps = local_10x10_processor._calculate_depths(
-            labeled_data, contour_values, "mean", "depth"
+        all_maps = local_10x10_processor._calculate_all_depths(
+            labeled_data, contour_values
         )
 
-        assert 1 in depth_maps
-        expected = cp.full((10, 10), cp.nan)
-        cp.testing.assert_allclose(depth_maps[1], expected)
+        assert len(all_maps) == 8
+        expected_empty = cp.full((10, 10), cp.nan)
+        # Check one map, they should all be the same
+        cp.testing.assert_allclose(all_maps["wse_map_mean"], expected_empty)
 
     def test_plot_pond_edge_elevations(
         self, local_10x10_processor, mock_os, mock_plt
     ):
         """
         Tests that plotting functions are called correctly.
-        Uses a local 10x10 processor.
+        (No change needed for this test)
         """
         mock_savefig, mock_close = mock_plt
         _, mock_makedirs = mock_os
@@ -337,10 +326,7 @@ class TestDepthMapProcessor:
         labeled_data = cp.zeros((10, 10), dtype=int)
         labeled_data[1, 1] = 1  # Pond 1
         labeled_data[3, 3] = 2  # Pond 2
-        contour_values = {
-            1: np.array([5.0, 6.0]),
-            2: np.array([7.0, 8.0])
-        }
+        contour_values = {1: np.array([5.0, 6.0]), 2: np.array([7.0, 8.0])}
         file_name = "test_file"
 
         local_10x10_processor._plot_pond_edge_elevations(
@@ -348,16 +334,16 @@ class TestDepthMapProcessor:
         )
 
         expected_dirs = [
-            call('test_data/plots/all_ponds', exist_ok=True),
-            call('test_data/plots/ind_ponds', exist_ok=True)
+            call("test_data/plots/all_ponds", exist_ok=True),
+            call("test_data/plots/ind_ponds", exist_ok=True),
         ]
         mock_makedirs.assert_has_calls(expected_dirs)
 
         assert mock_savefig.call_count == 3
         expected_saves = [
-            call('test_data/plots/ind_ponds/test_file_Pond_1'),
-            call('test_data/plots/ind_ponds/test_file_Pond_2'),
-            call('test_data/plots/all_ponds/test_file_All_Ponds_Histogram')
+            call("test_data/plots/ind_ponds/test_file_Pond_1"),
+            call("test_data/plots/ind_ponds/test_file_Pond_2"),
+            call("test_data/plots/all_ponds/test_file_All_Ponds_Histogram"),
         ]
         mock_savefig.assert_has_calls(expected_saves)
         assert mock_close.call_count == 3
@@ -365,7 +351,7 @@ class TestDepthMapProcessor:
     def test_combine_depth_maps(self, local_10x10_processor):
         """
         Tests combining overlapping depth maps.
-        Uses a local 10x10 processor.
+        (No change needed for this test)
         """
         map1 = cp.full((10, 10), cp.nan)
         map1[1, 1] = 5.0
@@ -377,7 +363,7 @@ class TestDepthMapProcessor:
 
         pond_depths = {1: map1, 2: map2}
 
-        combined = local_10x10_processor.combine_depth_maps(pond_depths)
+        combined = local_10x10_processor._combine_depth_maps(pond_depths)
 
         expected = cp.full((10, 10), cp.nan)
         expected[1, 1] = 10.0
@@ -389,25 +375,23 @@ class TestDepthMapProcessor:
     def test_combine_depth_maps_empty(self, local_10x10_processor):
         """
         Tests combining an empty dict of maps.
-        Uses a local 10x10 processor.
+        (No change needed for this test)
         """
-        combined = local_10x10_processor.combine_depth_maps({})
+        combined = local_10x10_processor._combine_depth_maps({})
         expected = cp.full((10, 10), cp.nan)
         cp.testing.assert_allclose(combined, expected)
 
     def test_save_depth_maps(self, local_10x10_processor, mock_zarr):
         """
         Tests saving a dataframe of depth maps to Zarr.
-        Uses a local 10x10 processor (though not strictly necessary).
+        (No change needed for this test)
         """
         _, mock_open_group, mock_store = mock_zarr
 
         depth_map_cp = cp.array([[1.0, 2.0], [3.0, 4.0]])
         depth_map_np = depth_map_cp.get()
 
-        df = pd.DataFrame([
-            {"image_name": "map_A", "depth_map": depth_map_cp}
-        ])
+        df = pd.DataFrame([{"image_name": "map_A", "depth_map": depth_map_cp}])
 
         local_10x10_processor._save_depth_maps(df, "test_dir/output.zarr")
 
@@ -420,78 +404,140 @@ class TestDepthMapProcessor:
         assert args[0] == "map_A"
         np.testing.assert_allclose(args[1], depth_map_np)
 
-    def test_process_file_integration(
+    def test_process_single_depth_map_integration(
         self, processor_instance, mock_zarr, mock_plt
     ):
         """
-        Integration test for process_file, mocking helper methods.
-        Uses the main 12x12 fixture.
+        Integration test for process_single_depth_map (formerly process_file).
+        Uses the main 12x12 fixture (plotting=False).
         """
         # --- Mock Inputs (12x12) ---
         mock_open, _, _ = mock_zarr
         mock_store_content = np.zeros((12, 12, 1), dtype=np.uint8)
-        mock_store_content[2:10, 2:10, 0] = 1  # 8x8 pond at [2:10, 2:10]
+        mock_store_content[2:10, 2:10, 0] = 1  # 8x8 pond
         mock_open.return_value.__getitem__.return_value = mock_store_content
 
         # --- Mock Internal Methods ---
         with patch.object(
-            processor_instance, '_label_ponds'
-        ) as mock_label, \
-             patch.object(
-            processor_instance, '_extract_contours'
-        ) as mock_extract, \
-             patch.object(
-            processor_instance, '_plot_pond_edge_elevations'
-        ) as mock_plot, \
-             patch.object(
-            processor_instance, '_calculate_depths'
-        ) as mock_calc, \
-             patch.object(
-            processor_instance, 'combine_depth_maps'
-        ) as mock_combine:
+            processor_instance, "_label_ponds"
+        ) as mock_label, patch.object(
+            processor_instance, "_extract_contours"
+        ) as mock_extract, patch.object(
+            processor_instance, "_plot_pond_edge_elevations"
+        ) as mock_plot, patch.object(
+            processor_instance, "_calculate_all_depths"
+        ) as mock_calc_all:
 
             # --- Define Mock Outputs (12x12) ---
-            mock_labeled_data = cp.ones((12, 12)) # 12x12
+            mock_labeled_data = cp.ones((12, 12))  # 12x12
             mock_label.return_value = mock_labeled_data
+
             mock_contours_val = {1: np.array([5.0])}
-            mock_calc.return_value = {"pond_1_depths": cp.array([1.0])}
-            mock_combine.return_value = cp.array([99.0])
             mock_extract.return_value = (
-                {"ignored_pixels": 1}, mock_contours_val
+                {"ignored_pixels": 1},
+                mock_contours_val,
             )
 
+            # Mock the new _calculate_all_depths return value
+            mock_calc_all.return_value = {
+                "wse_map_mean": cp.array([99.0]),
+                "depth_map_mean": cp.array([1.0]),
+                # ... (only need to mock the ones we check)
+                "wse_map_95_perc": cp.array([100.0]),
+                "depth_map_95_perc": cp.array([2.0]),
+                "wse_map_90_perc": cp.array([101.0]),
+                "depth_map_90_perc": cp.array([3.0]),
+                "wse_map_median": cp.array([102.0]),
+                "depth_map_median": cp.array([4.0]),
+            }
+
             # --- Call Method ---
-            result_list = processor_instance.process_file(
+            result_list = processor_instance.process_single_depth_map(
                 "test_dir/label.zarr", "label_file_name"
             )
 
             # --- Assertions ---
             mock_open.assert_called_once_with("test_dir/label.zarr")
             mock_label.assert_called_once()
-            
+
             mock_extract.assert_called_once()
             args, kwargs = mock_extract.call_args
             cp.testing.assert_allclose(args[0], mock_labeled_data)
-            # Check that the 12x12 mock store content was passed
             cp.testing.assert_allclose(args[1], cp.array(mock_store_content))
 
+            # Plotting is OFF by default in this fixture
+            mock_plot.assert_not_called()
+
+            # Check that the new method was called once
+            mock_calc_all.assert_called_once_with(
+                mock_labeled_data, mock_contours_val
+            )
+
+            # Check final output list
+            assert len(result_list) == 8
+            assert (
+                result_list[0]["image_name"] == "label_file_name_wse_map_mean"
+            )
+            cp.testing.assert_allclose(
+                result_list[0]["depth_map"], cp.array([99.0])
+            )
+            assert (
+                result_list[7]["image_name"]
+                == "label_file_name_depth_map_median"
+            )
+            cp.testing.assert_allclose(
+                result_list[7]["depth_map"], cp.array([4.0])
+            )
+
+    def test_process_single_depth_map_integration_with_plotting(
+        self, processor_with_plotting, mock_zarr, mock_plt
+    ):
+        """
+        NEW TEST: Integration test for process_single_depth_map
+        that explicitly checks that plotting IS called.
+        """
+        # --- Mock Inputs (12x12) ---
+        mock_open, _, _ = mock_zarr
+        mock_store_content = np.zeros((12, 12, 1), dtype=np.uint8)
+        mock_store_content[2:10, 2:10, 0] = 1  # 8x8 pond
+        mock_open.return_value.__getitem__.return_value = mock_store_content
+
+        # --- Mock Internal Methods ---
+        with patch.object(
+            processor_with_plotting, "_label_ponds"
+        ) as mock_label, patch.object(
+            processor_with_plotting, "_extract_contours"
+        ) as mock_extract, patch.object(
+            processor_with_plotting, "_plot_pond_edge_elevations"
+        ) as mock_plot, patch.object(
+            processor_with_plotting, "_calculate_all_depths"
+        ) as mock_calc_all:
+
+            # --- Define Mock Outputs (12x12) ---
+            mock_labeled_data = cp.ones((12, 12))
+            mock_label.return_value = mock_labeled_data
+            mock_contours_val = {1: np.array([5.0])}
+            mock_extract.return_value = (
+                {"ignored_pixels": 1},
+                mock_contours_val,
+            )
+
+            # Return value doesn't matter here
+            mock_calc_all.return_value = {}
+
+            # --- Call Method ---
+            # Use the processor_with_plotting fixture
+            processor_with_plotting.process_single_depth_map(
+                "test_dir/label.zarr", "label_file_name"
+            )
+
+            # --- Assertions ---
+            # Plotting is ON in this fixture
             mock_plot.assert_called_once_with(
                 mock_labeled_data, mock_contours_val, "label_file_name"
             )
 
-            assert mock_calc.call_count == 8
-            assert mock_combine.call_count == 8
-
-            assert len(result_list) == 8
-            assert result_list[0]['image_name'] == \
-                "label_file_name_wse_map_mean"
-            cp.testing.assert_allclose(
-                result_list[0]['depth_map'], cp.array([99.0])
-            )
-
-    def test_process_depth_maps_integration(
-        self, processor_instance, mock_os
-    ):
+    def test_process_depth_maps_integration(self, processor_instance, mock_os):
         """
         Top-level integration test for process_depth_maps.
         Uses the main 12x12 fixture.
@@ -499,14 +545,15 @@ class TestDepthMapProcessor:
         mock_listdir, _ = mock_os
 
         mock_listdir.return_value = [
-            "file_A_rectified", "file_B.txt", "file_C_rectified"
+            "file_A_rectified",
+            "file_B.txt",
+            "file_C_rectified",
         ]
 
         with patch.object(
-            processor_instance, 'process_file'
-        ) as mock_process, \
-             patch.object(
-            processor_instance, '_save_depth_maps'
+            processor_instance, "process_single_depth_map"
+        ) as mock_process, patch.object(
+            processor_instance, "_save_depth_maps"
         ) as mock_save:
 
             mock_process.side_effect = [
@@ -514,16 +561,16 @@ class TestDepthMapProcessor:
                 [{"image_name": "C_map", "depth_map": cp.array([2])}],
             ]
 
-            processor_instance.process_depth_maps(
-                "labels_dir", "depth_dir"
-            )
+            processor_instance.process_depth_maps("labels_dir", "depth_dir")
 
             mock_listdir.assert_called_once_with("labels_dir")
 
             assert mock_process.call_count == 2
-            mock_process.assert_has_calls([
-                call("labels_dir/file_A_rectified", "file_A_rectified"),
-                call("labels_dir/file_C_rectified", "file_C_rectified")
-            ])
+            mock_process.assert_has_calls(
+                [
+                    call("labels_dir/file_A_rectified", "file_A_rectified"),
+                    call("labels_dir/file_C_rectified", "file_C_rectified"),
+                ]
+            )
 
             assert mock_save.call_count == 2

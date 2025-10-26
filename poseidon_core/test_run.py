@@ -1,366 +1,198 @@
-import os
-import timeit
 import cupy as cp
 import numpy as np
-import matplotlib.pyplot as plt
+import timeit
+import sys
 
-# --- Class Definition ---
-# Contains both the original and efficient methods for testing
-class PondPlotter:
-    def __init__(self, plot_dir):
-        # This path is just a placeholder; we've disabled directory creation
-        self.pond_edge_elev_plot_dir = plot_dir
 
-    def plot_pond_edge_elevations(
-        self,
-        labeled_data,
-        contour_values_per_pond,
-        file_name,
-    ):
-        """
-        [Original Inefficient Method]
-        Plots/saves histograms of edge elevations for individual ponds.
-        """
-        all_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "all_ponds")
-        ind_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "ind_ponds")
-        # MODIFIED: Commented out file I/O to isolate computation time
-        # os.makedirs(all_pond_dir, exist_ok=True)
-        # os.makedirs(ind_pond_dir, exist_ok=True)
+class PondProcessor:
+    """
+    A mock class to hold the methods and the base grid for testing.
+    """
 
-        edge_elevs = []  # initialize pond depth dictionary
+    def __init__(self, grid_shape):
+        # Create a base grid, full of NaNs
+        self.elev_grid_cp = cp.full(grid_shape, cp.nan, dtype=cp.float32)
+        print(f"Initialized mock processor with grid shape {grid_shape}.")
 
-        # array of unique pond labels
-        unique_pond_ids = cp.unique(labeled_data)
+    # --- Version 1: Original Method ---
+    def combine_depth_maps_original(self, pond_depths):
+        maps_to_combine = list(pond_depths.values())
 
-        bins = np.linspace(0, 2, 51)
+        if not maps_to_combine:
+            return cp.full_like(self.elev_grid_cp, cp.nan)
 
-        for pond_id in unique_pond_ids:
-            if pond_id == 0:  # Skip background
-                continue
+        combined_map = maps_to_combine[0]
 
-            if pond_id.item() not in contour_values_per_pond:
-                print(
-                    f"Warning: No contours found for pond_id {pond_id.item()}. "
-                    f"Skipping plotting for this pond."
-                )
-                continue
+        for i in range(1, len(maps_to_combine)):
+            current_map = maps_to_combine[i]
+            combined_map = cp.fmax(combined_map, current_map)
 
-            # INEFFICIENCY 1: CPU -> GPU
-            pond_edge_elevs = cp.array(contour_values_per_pond[pond_id.item()])
+        return combined_map
 
-            edge_elevs.append(pond_edge_elevs.get())
+    # --- Version 2: Efficient Method ---
+    def combine_depth_maps_efficient(self, pond_depths):
+        maps_to_combine = list(pond_depths.values())
 
-            # INEFFICIENCY 2: GPU -> CPU (implicit, 3 times)
-            mean_val = np.mean(pond_edge_elevs)
-            median_val = np.median(pond_edge_elevs)
-            percentile_95 = np.percentile(pond_edge_elevs, 95)
+        if not maps_to_combine:
+            return cp.full_like(self.elev_grid_cp, cp.nan)
 
-            # Plot histogram
-            plt.figure(figsize=(8, 6))
-            # INEFFICIENCY 3: GPU -> CPU (explicit)
-            plt.hist(
-                pond_edge_elevs.get(),
-                bins=bins,
-                color="lightblue",
-                edgecolor="black",
-                alpha=0.7,
-            )
+        # A small optimization: if there's only one map, no need to stack
+        if len(maps_to_combine) == 1:
+            return maps_to_combine[0]
 
-            # Overlay vertical lines
-            plt.axvline(
-                mean_val.get(), # Minor GPU -> CPU
-                color="red",
-                linestyle="dashed",
-                linewidth=2,
-                label=f"Mean: {mean_val:.2f}",
-            )
-            plt.axvline(
-                median_val.get(), # Minor GPU -> CPU
-                color="green",
-                linestyle="solid",
-                linewidth=2,
-                label=f"Median: {median_val:.2f}",
-            )
-            plt.axvline(
-                percentile_95.get(), # Minor GPU -> CPU
-                color="purple",
-                linestyle="dashdot",
-                linewidth=2,
-                label=f"95th %ile: {percentile_95:.2f}",
-            )
+        # Stack all maps into a single (N, H, W) array
+        try:
+            stacked_maps = cp.stack(maps_to_combine, axis=0)
+        except cp.cuda.memory.OutOfMemoryError:
+            print("\n--- ERROR: Out of GPU memory during cp.stack()! ---")
+            print("The 'efficient' method failed. This can happen if you have")
+            print("too many ponds or the grid is too large for your VRAM.")
+            print("Try reducing NUM_PONDS or GRID_SHAPE.")
+            sys.exit(1)
 
-            plt.xlim(0, 2)
-            plt.xlabel("Elevation")
-            plt.ylabel("Frequency")
-            plt.title(f"Elevation Histogram for Pond {pond_id}")
-            plt.legend()
-            plt.grid(True, linestyle="--", alpha=0.6)
+        # Perform a single, optimized reduction along the 'N' axis
+        combined_map = cp.nanmax(stacked_maps, axis=0)
 
-            # MODIFIED: Commented out file I/O
-            # plt.savefig(f"{ind_pond_dir}/{file_name}_Pond_{pond_id}")
-            plt.close() # Still close to prevent memory leak
+        return combined_map
 
-        if not edge_elevs:
-            return
 
-        all_edge_elevs = np.concatenate(edge_elevs)
-        plt.figure(figsize=(8, 6))
-        plt.hist(
-            all_edge_elevs,
-            bins=bins,
-            color="lightcoral",
-            edgecolor="black",
-            alpha=0.7,
+def generate_test_data(grid_shape, num_ponds):
+    """
+    Generates a dictionary of test pond maps.
+    Each map is a CuPy array full of NaNs, with a random
+    rectangular "pond" of float values inserted.
+    """
+    print(
+        f"Generating test data: {num_ponds} ponds, grid shape {grid_shape}..."
+    )
+    pond_depths = {}
+    H, W = grid_shape
+
+    # Use numpy for random setup on CPU first, then transfer
+    for i in range(num_ponds):
+        # Create a base map of NaNs
+        base_np = np.full(grid_shape, np.nan, dtype=np.float32)
+
+        # Define a random rectangle for the pond
+        x_start = np.random.randint(0, W // 2)
+        y_start = np.random.randint(0, H // 2)
+        x_size = np.random.randint(W // 4, W // 2)
+        y_size = np.random.randint(H // 4, H // 2)
+
+        # Ensure it doesn't go out of bounds
+        x_end = min(x_start + x_size, W)
+        y_end = min(y_start + y_size, H)
+
+        # Get the actual final shape
+        final_y_size = y_end - y_start
+        final_x_size = x_end - x_start
+
+        # Create random depth data for that rectangle
+        pond_data = (
+            np.random.rand(final_y_size, final_x_size).astype(np.float32) * 10.0
         )
-        mean_all = np.mean(all_edge_elevs)
-        median_all = np.median(all_edge_elevs)
-        percentile_95_all = np.percentile(all_edge_elevs, 95)
-        plt.axvline(
-            mean_all,
-            color="red",
-            linestyle="dashed",
-            linewidth=2,
-            label=f"Mean: {mean_all:.2f}",
-        )
-        plt.axvline(
-            median_all,
-            color="green",
-            linestyle="solid",
-            linewidth=2,
-            label=f"Median: {median_all:.2f}",
-        )
-        plt.axvline(
-            percentile_95_all,
-            color="purple",
-            linestyle="dashdot",
-            linewidth=2,
-            label=f"95th %ile: {percentile_95_all:.2f}",
-        )
-        plt.xlim(0, 2)
-        plt.xlabel("Elevation")
-        plt.ylabel("Frequency")
-        plt.title("Elevation Histogram - All Ponds Combined")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
 
-        # MODIFIED: Commented out file I/O
-        # plt.savefig(f"{all_pond_dir}/{file_name}_All_Ponds_Histogram")
-        plt.close() # Still close to prevent memory leak
+        # Place the pond data into the base NaN map
+        base_np[y_start:y_end, x_start:x_end] = pond_data
 
-        return None
+        # Transfer to GPU and store in the dictionary
+        pond_depths[i] = cp.asarray(base_np)
+
+    print("Test data generated and transferred to GPU.")
+    return pond_depths
 
 
-    def plot_pond_edge_elevations_efficient(
-        self,
-        labeled_data,
-        contour_values_per_pond,
-        file_name,
-    ):
-        """
-        [Optimized Efficient Method]
-        Plots/saves histograms of edge elevations for individual ponds.
-        """
-        all_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "all_ponds")
-        ind_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "ind_ponds")
-        # MODIFIED: Commented out file I/O to isolate computation time
-        # os.makedirs(all_pond_dir, exist_ok=True)
-        # os.makedirs(ind_pond_dir, exist_ok=True)
-
-        edge_elevs = []  # List will hold NumPy arrays
-
-        # EFFICIENT: Get unique IDs from GPU, transfer to CPU *once*.
-        unique_pond_ids = cp.unique(labeled_data).get()
-
-        bins = np.linspace(0, 2, 51)
-
-        for pond_id in unique_pond_ids:
-            if pond_id == 0:  # Skip background
-                continue
-
-            pond_id_key = pond_id.item()
-
-            if pond_id_key not in contour_values_per_pond:
-                print(
-                    f"Warning: No contours found for pond_id {pond_id_key}. "
-                    f"Skipping plotting for this pond."
-                )
-                continue
-
-            # EFFICIENT: Data stays on CPU (NumPy)
-            pond_edge_elevs_np = contour_values_per_pond[pond_id_key]
-
-            edge_elevs.append(pond_edge_elevs_np)
-
-            # EFFICIENT: All stats computed on CPU
-            mean_val = np.mean(pond_edge_elevs_np)
-            median_val = np.median(pond_edge_elevs_np)
-            percentile_95 = np.percentile(pond_edge_elevs_np, 95)
-
-            # Plot histogram
-            plt.figure(figsize=(8, 6))
-            # EFFICIENT: Plotting from CPU (no .get())
-            plt.hist(
-                pond_edge_elevs_np,
-                bins=bins,
-                color="lightblue",
-                edgecolor="black",
-                alpha=0.7,
-            )
-
-            # Overlay vertical lines
-            plt.axvline(
-                mean_val,  # No .get()
-                color="red",
-                linestyle="dashed",
-                linewidth=2,
-                label=f"Mean: {mean_val:.2f}",
-            )
-            plt.axvline(
-                median_val, # No .get()
-                color="green",
-                linestyle="solid",
-                linewidth=2,
-                label=f"Median: {median_val:.2f}",
-            )
-            plt.axvline(
-                percentile_95, # No .get()
-                color="purple",
-                linestyle="dashdot",
-                linewidth=2,
-                label=f"95th %ile: {percentile_95:.2f}",
-            )
-
-            plt.xlim(0, 2)
-            plt.xlabel("Elevation")
-            plt.ylabel("Frequency")
-            plt.title(f"Elevation Histogram for Pond {pond_id}")
-            plt.legend()
-            plt.grid(True, linestyle="--", alpha=0.6)
-
-            # MODIFIED: Commented out file I/O
-            # plt.savefig(f"{ind_pond_dir}/{file_name}_Pond_{pond_id}")
-            plt.close() # Still close to prevent memory leak
-
-        if not edge_elevs:
-            return
-
-        # This part was already efficient
-        all_edge_elevs = np.concatenate(edge_elevs)
-        plt.figure(figsize=(8, 6))
-        plt.hist(
-            all_edge_elevs,
-            bins=bins,
-            color="lightcoral",
-            edgecolor="black",
-            alpha=0.7,
-        )
-        mean_all = np.mean(all_edge_elevs)
-        median_all = np.median(all_edge_elevs)
-        percentile_95_all = np.percentile(all_edge_elevs, 95)
-        plt.axvline(
-            mean_all,
-            color="red",
-            linestyle="dashed",
-            linewidth=2,
-            label=f"Mean: {mean_all:.2f}",
-        )
-        plt.axvline(
-            median_all,
-            color="green",
-            linestyle="solid",
-            linewidth=2,
-            label=f"Median: {median_all:.2f}",
-        )
-        plt.axvline(
-            percentile_95_all,
-            color="purple",
-            linestyle="dashdot",
-            linewidth=2,
-            label=f"95th %ile: {percentile_95_all:.2f}",
-        )
-        plt.xlim(0, 2)
-        plt.xlabel("Elevation")
-        plt.ylabel("Frequency")
-        plt.title("Elevation Histogram - All Ponds Combined")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        # MODIFIED: Commented out file I/O
-        # plt.savefig(f"{all_pond_dir}/{file_name}_All_Ponds_Histogram")
-        plt.close() # Still close to prevent memory leak
-
-        return None
-
-
-# --- Main execution block for timing ---
+# --- Main script logic ---
 if __name__ == "__main__":
-    
-    # --- Test Parameters ---
-    NUM_PONDS = 100         # Number of ponds to simulate
-    IMG_SIZE = (2000, 2000) # Size of the labeled data array
-    N_RUNS = 5              # Number of times to run each function for timeit
-    
-    print(f"--- Preparing Mock Data ---")
-    print(f"Simulating {NUM_PONDS} ponds in a {IMG_SIZE} image...")
-    
-    # 1. Labeled data (on GPU)
-    #    Simulate an image with IDs from 0 (background) to NUM_PONDS
-    labeled_data_cp = cp.random.randint(0, NUM_PONDS + 1, size=IMG_SIZE, dtype=cp.int32)
-    
-    # 2. Contour values (on CPU)
-    #    This dict maps pond_id (int) -> elevation data (np.ndarray)
-    contour_values_per_pond_np = {}
-    for i in range(1, NUM_PONDS + 1):
-        # Simulate each pond having between 50 and 500 contour points
-        num_values = np.random.randint(50, 500)
-        # Simulate elevations between 0.0 and 2.0
-        contour_values_per_pond_np[i] = np.random.rand(num_values).astype(np.float32) * 2
-        
-    # 3. File name
-    file_name = "timing_test_run"
-    
-    # 4. Create class instance
-    plotter = PondPlotter(plot_dir="/tmp/dummy_plot_dir") # Dummy path
-    
-    print("Mock data generated. Starting benchmark...")
-    print(f"Each function will be run {N_RUNS} times.\n")
 
-    # --- Time the Original (Inefficient) Method ---
-    print("--- Timing Original Method ---")
-    
-    # We use a lambda function to pass arguments to timeit
-    t_original = timeit.timeit(
-        lambda: plotter.plot_pond_edge_elevations(
-            labeled_data_cp, contour_values_per_pond_np, file_name
-        ),
-        number=N_RUNS
+    # --- Parameters to Tweak ---
+    GRID_SHAPE = (2048, 2048)  # Height and Width of the maps
+    NUM_PONDS = 100  # Number of maps to combine.
+    # Higher numbers show a bigger difference.
+    TIMING_NUMBER = 10  # Runs per test loop (lower for slow functions)
+    TIMING_REPEAT = 10  # Number of times to repeat the test (to get min/avg)
+    # --- End Parameters ---
+
+    # --- 1. Setup ---
+    processor = PondProcessor(GRID_SHAPE)
+    test_data = generate_test_data(GRID_SHAPE, NUM_PONDS)
+
+    print("\n--- Verifying Correctness ---")
+
+    # Run both functions once to check output
+    try:
+        result_orig = processor.combine_depth_maps_original(test_data)
+        result_eff = processor.combine_depth_maps_efficient(test_data)
+
+        # Ensure the results are identical (handles NaNs correctly)
+        if cp.allclose(result_orig, result_eff, equal_nan=True):
+            print("Verification successful: Outputs match. 👍")
+        else:
+            print("VERIFICATION FAILED: Outputs do not match! 👎")
+            sys.exit(1)
+
+    except Exception as e:
+        print(f"An error occurred during verification: {e}")
+        sys.exit(1)
+
+    # --- 2. Benchmark ---
+    print(f"\n--- Starting Benchmark ---")
+    print(f"Grid: {GRID_SHAPE}, Ponds: {NUM_PONDS}")
+    print(f"Runs per test: {TIMING_NUMBER}, Repeats: {TIMING_REPEAT}")
+
+    # Setup code for timeit.
+    # CRITICAL: We define a sync() function to force Python
+    # to wait for the GPU to finish. Without this, you only time
+    # the kernel *launch*, not its *execution*.
+    setup_code = """
+import cupy as cp
+def sync():
+    cp.cuda.Stream.null.synchronize()
+    """
+
+    # --- Time Original Method ---
+    print("\nTiming original (fmax loop)...")
+    t_original = timeit.repeat(
+        stmt="processor.combine_depth_maps_original(test_data); sync()",
+        setup=setup_code,
+        globals={"processor": processor, "test_data": test_data},
+        number=TIMING_NUMBER,
+        repeat=TIMING_REPEAT,
     )
-    
-    avg_original = t_original / N_RUNS
-    print(f"Total time ({N_RUNS} runs): {t_original:.4f} seconds")
-    print(f"Average time per run: {avg_original:.4f} seconds\n")
 
-
-    # --- Time the New (Efficient) Method ---
-    print("--- Timing Efficient Method ---")
-    
-    t_efficient = timeit.timeit(
-        lambda: plotter.plot_pond_edge_elevations_efficient(
-            labeled_data_cp, contour_values_per_pond_np, file_name
-        ),
-        number=N_RUNS
+    # --- Time Efficient Method ---
+    print("Timing efficient (stack + nanmax)...")
+    t_efficient = timeit.repeat(
+        stmt="processor.combine_depth_maps_efficient(test_data); sync()",
+        setup=setup_code,
+        globals={"processor": processor, "test_data": test_data},
+        number=TIMING_NUMBER,
+        repeat=TIMING_REPEAT,
     )
-    
-    avg_efficient = t_efficient / N_RUNS
-    print(f"Total time ({N_RUNS} runs): {t_efficient:.4f} seconds")
-    print(f"Average time per run: {avg_efficient:.4f} seconds\n")
 
-    # --- Final Results ---
-    print("--- Results ---")
-    print(f"Average Original:   {avg_original:.4f} s")
-    print(f"Average Efficient:  {avg_efficient:.4f} s")
-    if avg_efficient > 0:
-        speedup = avg_original / avg_efficient
-        print(f"\n✅ Efficient version was {speedup:.2f} times faster.")
+    # --- 3. Report Results ---
+    print("\n--- 📊 Results ---")
+
+    def report_stats(name, times_list):
+        # Calculate time per single run
+        times_per_run = [t / TIMING_NUMBER for t in times_list]
+        best = min(times_per_run)
+        avg = sum(times_per_run) / len(times_per_run)
+
+        print(f"[{name}]")
+        print(f"  Best time per run: {best * 1000:.4f} ms")
+        print(f"  Avg. time per run: {avg * 1000:.4f} ms")
+        return best
+
+    best_orig = report_stats("Original (fmax loop)", t_original)
+    best_eff = report_stats("Efficient (stack + nanmax)", t_efficient)
+
+    print("\n--- 🚀 Summary ---")
+    if best_eff < best_orig:
+        speedup = best_orig / best_eff
+        print(f"The efficient method is {speedup:.2f}x faster.")
     else:
-        print("\nEfficient version was too fast to measure speedup.")
+        speedup = best_eff / best_orig
+        print(
+            f"The original method is {speedup:.2f}x faster (this is unexpected)."
+        )
