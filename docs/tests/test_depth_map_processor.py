@@ -226,7 +226,7 @@ class TestDepthMapProcessor:
             .astype(cp.uint8).reshape(10, 10, 1)
 
         # 2. Call method on the local_10x10_processor
-        pixels_dict, values_dict = local_10x10_processor.extract_contours(
+        pixels_dict, values_dict = local_10x10_processor._extract_contours(
             labeled_data, label_array_cp
         )
 
@@ -253,7 +253,7 @@ class TestDepthMapProcessor:
 
         contour_values = {1: np.array([10.0, 10.0, 5.0, 5.0])}  # Mean = 7.5
 
-        depth_maps = local_10x10_processor.calculate_depths(
+        depth_maps = local_10x10_processor._calculate_depths(
             labeled_data, contour_values, "mean", "wse"
         )
 
@@ -272,7 +272,7 @@ class TestDepthMapProcessor:
 
         contour_values = {1: np.array([5.0, 5.0, 5.0, 10.0])} # WSE = 9.25
 
-        depth_maps = local_10x10_processor.calculate_depths(
+        depth_maps = local_10x10_processor._calculate_depths(
             labeled_data, contour_values, "95_perc", "depth"
         )
 
@@ -295,7 +295,7 @@ class TestDepthMapProcessor:
 
         contour_values = {1: np.array([4.0, 4.0, 4.0])}  # WSE (mean) = 4.0
 
-        depth_maps = local_10x10_processor.calculate_depths(
+        depth_maps = local_10x10_processor._calculate_depths(
             labeled_data, contour_values, "mean", "depth"
         )
 
@@ -316,7 +316,7 @@ class TestDepthMapProcessor:
         labeled_data = cp.zeros((10, 10), dtype=int)
         contour_values = {}
 
-        depth_maps = local_10x10_processor.calculate_depths(
+        depth_maps = local_10x10_processor._calculate_depths(
             labeled_data, contour_values, "mean", "depth"
         )
 
@@ -409,7 +409,7 @@ class TestDepthMapProcessor:
             {"image_name": "map_A", "depth_map": depth_map_cp}
         ])
 
-        local_10x10_processor.save_depth_maps(df, "test_dir/output.zarr")
+        local_10x10_processor._save_depth_maps(df, "test_dir/output.zarr")
 
         mock_open_group.assert_called_once_with(
             "test_dir/output.zarr", mode="a"
@@ -438,13 +438,13 @@ class TestDepthMapProcessor:
             processor_instance, '_label_ponds'
         ) as mock_label, \
              patch.object(
-            processor_instance, 'extract_contours'
+            processor_instance, '_extract_contours'
         ) as mock_extract, \
              patch.object(
             processor_instance, 'plot_pond_edge_elevations'
         ) as mock_plot, \
              patch.object(
-            processor_instance, 'calculate_depths'
+            processor_instance, '_calculate_depths'
         ) as mock_calc, \
              patch.object(
             processor_instance, 'combine_depth_maps'
@@ -506,7 +506,7 @@ class TestDepthMapProcessor:
             processor_instance, 'process_file'
         ) as mock_process, \
              patch.object(
-            processor_instance, 'save_depth_maps'
+            processor_instance, '_save_depth_maps'
         ) as mock_save:
 
             mock_process.side_effect = [
