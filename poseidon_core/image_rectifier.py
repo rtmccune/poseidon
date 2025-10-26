@@ -3,10 +3,13 @@ import cv2
 import zarr
 import numpy as np
 import cupy as cp
-from tqdm import tqdm
+from datetime import datetime
 from cupyx.scipy.interpolate import RegularGridInterpolator as reg_interp_gpu
 from scipy.interpolate import RegularGridInterpolator as reg_interp
 
+def _log(message):
+    """Helper function for timestamped logging."""
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
 class ImageRectifier:
     """
@@ -93,7 +96,10 @@ class ImageRectifier:
             A flag indicating whether to use GPU for computations.
             Default is False.
         """
+        _log("--- Initializing ImageRectifier ---")
+
         self.use_gpu = use_gpu
+        _log(f"  Mode: {'GPU (CuPy)' if use_gpu else 'CPU (NumPy)'}")
 
         # Convert numpy arrays to cupy arrays for GPU acceleration
         if use_gpu:
@@ -108,16 +114,22 @@ class ImageRectifier:
             self.grid_x = grid_x
             self.grid_y = grid_y
             self.grid_z = grid_z
+        
+        _log(f"  Input grid shape: {grid_x.shape}")
 
         self.azimuth = self.extrinsics[3]  # Set azimuth from extrinsics
         self.tilt = self.extrinsics[4]  # Set tilt from extrinsics
         self.swing = self.extrinsics[5]  # Set swing from extrinsics
         self.grid_shape = grid_x.shape  # Set grid shape
+
+        _log("  Starting distortion map computation (Ud, Vd)...")
         self.Ud, self.Vd = (
             # Compute list of distorted U and V coord. corresponding to
             # world xyz coord.
             self._compute_Ud_Vd()
         )
+        _log("  ...Distortion map computation complete.")
+        _log("--- ImageRectifier Initialization Complete ---")
 
     def _load_image(self, image_path, labels):
         """Load an image from the specified path.
@@ -619,7 +631,7 @@ class ImageRectifier:
 
         return Ud, Vd
 
-    def merge_rectify(self, image_path, labels=False):
+    def merge_rectify(self, image_path, labels=False, verbose=False):
         """Merge and rectify an image based on the provided path.
 
         Parameters
@@ -629,6 +641,9 @@ class ImageRectifier:
         labels : bool, optional
             A flag indicating whether to load the image in grayscale
             (True) or in color (False). Default is False.
+        verbose : bool, optional
+            If True, print a log message when rectifying this image.
+            Default is False, to avoid spamming logs during batch jobs.
 
         Returns
         -------
@@ -645,6 +660,9 @@ class ImageRectifier:
         processing. The output is cast to an array of type uint8 to
         represent pixel values.
         """
+        if verbose:
+            _log(f"Rectifying single image: {image_path}")
+
         # Load image from path
         image = self._load_image(image_path, labels)
 
@@ -658,6 +676,7 @@ class ImageRectifier:
         else:  # Else, return as numpy array
             return np.array(rectified_image, dtype=np.uint8)
 
+        
     def merge_rectify_folder(self, folder_path, zarr_store_path, labels=False):
         """Merge and rectify all images in a specified folder and save
         them to a Zarr store.
@@ -689,31 +708,69 @@ class ImageRectifier:
         utilized for GPU processing if `self.use_gpu` is set to True;
         otherwise, standard arrays are used.
         """
+        _log("\n=== Starting Batch Rectification ===")
+        _log(f"  Source folder: {folder_path}")
+        _log(f"  Output Zarr store: {zarr_store_path}")
+
         # Open the Zarr store once before the loop
-        store = zarr.open_group(zarr_store_path, mode="a")
+        try:
+            store = zarr.open_group(zarr_store_path, mode="a")
+        except Exception as e:
+            _log(f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}")
+            _log("=== Batch Rectification Aborted ===")
+            return
 
         # Get a list of all images in the folder
-        image_names = os.listdir(folder_path)
+        try:
+            image_names = os.listdir(folder_path)
+        except FileNotFoundError:
+            _log(f"  ERROR: Source folder not found at {folder_path}.")
+            _log("=== Batch Rectification Aborted ===")
+            return
+            
+        total_images = len(image_names)
 
-        for image_name in tqdm(
-            image_names, desc="Processing images", unit="image"
-        ):  # For each image in the provided folder path
+        if total_images == 0:
+            _log("  WARNING: No images found in source folder. Nothing to do.")
+            _log("=== Batch Rectification Complete ===")
+            return
+
+        _log(f"  Found {total_images} images to process.")
+
+        # Determine report interval (print ~10 updates + first/last)
+        report_interval = max(1, total_images // 10)
+
+        for i, image_name in enumerate(image_names):
+            # Log progress periodically
+            if (i + 1) % report_interval == 0 or i == 0 or (i + 1) == total_images:
+                _log(f"  Processing image {i + 1}/{total_images}: {image_name}")
+
             image_path = os.path.join(folder_path, image_name)
-            rectified_image = self.merge_rectify(
-                image_path, labels
-            )  # Generate a rectified image
+            
+            try:
+                rectified_image = self.merge_rectify(
+                    image_path, labels, verbose=False  # Keep this quiet
+                )
+            except Exception as e:
+                _log(f"  ERROR: Failed to rectify image {image_name}. {e}")
+                continue # Skip to the next image
 
             # Create a dataset name by appending 'rectified' to the
             # original image name
             dataset_name = f"{os.path.splitext(image_name)[0]}_rectified"
 
             # Save the rectified image array to the Zarr store
-            if self.use_gpu:  # If GPU processing
-                store[dataset_name] = (
-                    rectified_image.get()
-                )  # Port GPU array to CPU and save
-            else:  # Else, save array
-                store[dataset_name] = rectified_image
+            try:
+                if self.use_gpu:  # If GPU processing
+                    store[dataset_name] = (
+                        rectified_image.get()
+                    )  # Port GPU array to CPU and save
+                else:  # Else, save array
+                    store[dataset_name] = rectified_image
+            except Exception as e:
+                _log(f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}")
+
 
         # Print success message after all images are processed
-        print("All images have been successfully saved to the Zarr store.")
+        _log(f"  Successfully processed {total_images} images.")
+        _log("=== Batch Rectification Complete ===")

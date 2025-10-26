@@ -57,10 +57,12 @@ class DepthMapProcessor:
             integer ID.
         """
         labels_squeezed = gpu_label_array.squeeze()
-        mask = labels_squeezed == 1  # Boolean mask
+        
+        water_mask = labels_squeezed == 1  # Boolean mask
+        
 
         # Create binary mask directly as uint8
-        masked_labels = mask.astype(cp.uint8)
+        masked_labels = water_mask.astype(cp.uint8)
 
         # Apply binary closing (morphological operation)
         closed_data = binary_closing(

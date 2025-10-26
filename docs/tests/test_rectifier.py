@@ -334,8 +334,6 @@ def test_merge_rectify_folder(
 ):
     """End-to-end test for batch processing a folder to a Zarr store."""
 
-    mocker.patch("poseidon_core.image_rectifier.tqdm", lambda x, **kwargs: x)
-
     folder_path, num_images = dummy_image_folder
     zarr_store_path = str(tmp_path / "output.zarr")
     grid_shape = rectifier_instance.grid_shape
