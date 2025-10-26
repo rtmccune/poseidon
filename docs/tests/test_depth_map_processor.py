@@ -343,7 +343,7 @@ class TestDepthMapProcessor:
         }
         file_name = "test_file"
 
-        local_10x10_processor.plot_pond_edge_elevations(
+        local_10x10_processor._plot_pond_edge_elevations(
             labeled_data, contour_values, file_name
         )
 
@@ -441,7 +441,7 @@ class TestDepthMapProcessor:
             processor_instance, '_extract_contours'
         ) as mock_extract, \
              patch.object(
-            processor_instance, 'plot_pond_edge_elevations'
+            processor_instance, '_plot_pond_edge_elevations'
         ) as mock_plot, \
              patch.object(
             processor_instance, '_calculate_depths'
