@@ -7,9 +7,11 @@ from datetime import datetime
 from cupyx.scipy.interpolate import RegularGridInterpolator as reg_interp_gpu
 from scipy.interpolate import RegularGridInterpolator as reg_interp
 
+
 def _log(message):
     """Helper function for timestamped logging."""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+
 
 class ImageRectifier:
     """
@@ -114,7 +116,7 @@ class ImageRectifier:
             self.grid_x = grid_x
             self.grid_y = grid_y
             self.grid_z = grid_z
-        
+
         _log(f"  Input grid shape: {grid_x.shape}")
 
         self.azimuth = self.extrinsics[3]  # Set azimuth from extrinsics
@@ -676,7 +678,6 @@ class ImageRectifier:
         else:  # Else, return as numpy array
             return np.array(rectified_image, dtype=np.uint8)
 
-        
     def merge_rectify_folder(self, folder_path, zarr_store_path, labels=False):
         """Merge and rectify all images in a specified folder and save
         them to a Zarr store.
@@ -716,7 +717,9 @@ class ImageRectifier:
         try:
             store = zarr.open_group(zarr_store_path, mode="a")
         except Exception as e:
-            _log(f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}")
+            _log(
+                f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}"
+            )
             _log("=== Batch Rectification Aborted ===")
             return
 
@@ -727,7 +730,7 @@ class ImageRectifier:
             _log(f"  ERROR: Source folder not found at {folder_path}.")
             _log("=== Batch Rectification Aborted ===")
             return
-            
+
         total_images = len(image_names)
 
         if total_images == 0:
@@ -742,18 +745,22 @@ class ImageRectifier:
 
         for i, image_name in enumerate(image_names):
             # Log progress periodically
-            if (i + 1) % report_interval == 0 or i == 0 or (i + 1) == total_images:
+            if (
+                (i + 1) % report_interval == 0
+                or i == 0
+                or (i + 1) == total_images
+            ):
                 _log(f"  Processing image {i + 1}/{total_images}: {image_name}")
 
             image_path = os.path.join(folder_path, image_name)
-            
+
             try:
                 rectified_image = self.merge_rectify(
                     image_path, labels, verbose=False  # Keep this quiet
                 )
             except Exception as e:
                 _log(f"  ERROR: Failed to rectify image {image_name}. {e}")
-                continue # Skip to the next image
+                continue  # Skip to the next image
 
             # Create a dataset name by appending 'rectified' to the
             # original image name
@@ -768,8 +775,9 @@ class ImageRectifier:
                 else:  # Else, save array
                     store[dataset_name] = rectified_image
             except Exception as e:
-                _log(f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}")
-
+                _log(
+                    f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}"
+                )
 
         # Print success message after all images are processed
         _log(f"  Successfully processed {total_images} images.")

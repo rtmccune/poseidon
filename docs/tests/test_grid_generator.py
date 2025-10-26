@@ -4,6 +4,7 @@ import laspy
 import zarr
 import os
 from unittest.mock import MagicMock, call
+
 from poseidon_core import GridGenerator
 
 # --- Fixtures: Reusable Mock Objects ---
@@ -58,6 +59,25 @@ def mock_zarr_open(mocker):
     return mock
 
 
+@pytest.fixture
+def gen_instance():
+    """
+    Provides a standard GridGenerator instance for testing private methods.
+    Uses meter units and standard 0-100 extents.
+    Relies on class-level mock_laspy_read fixture.
+    """
+    gen = GridGenerator(
+        "fake.las",
+        min_x_extent=0,
+        max_x_extent=100,
+        min_y_extent=0,
+        max_y_extent=100,
+        extent_units="meters",
+        lidar_units="meters",
+    )
+    return gen
+
+
 # --- Test Suite ---
 
 
@@ -66,6 +86,8 @@ def mock_zarr_open(mocker):
     "mock_laspy_read", "mock_os_makedirs", "mock_zarr_open"
 )
 class TestGridGenerator:
+
+    # --- Tests for __init__ ---
 
     def test_init_lidar_units_feet(self, mock_laspy_read, mock_lidar_data):
         """
@@ -113,6 +135,8 @@ class TestGridGenerator:
         assert gen.min_y_extent == 20.0
         assert gen.max_y_extent == 60.0
         assert gen.lidar_units == "meters"
+
+    # --- Tests for create_point_array ---
 
     def test_create_point_array_feet_conversion(self):
         """
@@ -173,7 +197,7 @@ class TestGridGenerator:
         """
         Tests that the point array is correctly filtered by the extents.
         """
-        # Use feet, so extents are calculated (min_x=30.48, max_x=121.92)
+        # Use feet, extents are calculated (min_x=30.48, max_x=121.92)
         gen = GridGenerator("fake.las", lidar_units="feet", extent_units="feet")
 
         # NOW, manually override the extents to filter points
@@ -189,6 +213,55 @@ class TestGridGenerator:
         # Expected X: [300.0] * 0.3048 = 91.44
         expected_x = np.array([300.0]) * 0.3048
         np.testing.assert_allclose(points[0], expected_x)
+
+    def test_create_point_array_no_points_match_mask(self):
+        """
+        Tests create_point_array when the classification mask finds 0
+        points.
+        """
+        # Use meters, extents 0-500 so no extent filtering
+        gen = GridGenerator(
+            "fake.las",
+            min_x_extent=0,
+            max_x_extent=500,
+            min_y_extent=0,
+            max_y_extent=500,
+            extent_units="meters",
+            lidar_units="meters",
+        )
+
+        # Classifications are [2, 5, 2, 5].
+        # Mask value 99 will find nothing.
+        points = gen.create_point_array(point_mask_value=99)
+
+        # Should return an empty array with the correct shape
+        assert points.shape == (3, 0)
+
+    def test_create_point_array_no_points_in_extent(self):
+        """
+        Tests create_point_array when points are found but are all
+        outside the extents.
+        """
+        # Use meters. Points are at x=[100, 200, 300, 400]
+        # Set extents to be far away
+        gen = GridGenerator(
+            "fake.las",
+            min_x_extent=1000,
+            max_x_extent=2000,
+            min_y_extent=1000,
+            max_y_extent=2000,
+            extent_units="meters",
+            lidar_units="meters",
+        )
+
+        # This will find 2 points (class 2), but both will be
+        # filtered out by the extents.
+        points = gen.create_point_array(point_mask_value=2)
+
+        # Should return an empty array
+        assert points.shape == (3, 0)
+
+    # --- Tests for gen_grid (Public Method) ---
 
     def test_gen_grid_flat_z(self, mock_os_makedirs, mock_zarr_open):
         """Tests gen_grid when z is a flat integer (e.g., z=5)."""
@@ -270,13 +343,15 @@ class TestGridGenerator:
         # (10,20) -> z=3
         # (20,20) -> z=4
         z_points = np.array(
-            [[10, 20, 10, 20], [10, 10, 20, 20], [1, 2, 3, 4]]  # x  # y  # z
+            [[10, 20, 10, 20], [10, 10, 20, 20], [1, 2, 3, 4]]
+            # x  # y  # z
         )
 
         # Use resolution of 5. Grid will be (10, 15) in x and y
         grid_x, grid_y, grid_z = gen.gen_grid(resolution=5, z=z_points)
 
-        # Shape should be (2, 2) after transpose, as mgrid[10:20:5] -> [10, 15]
+        # Shape should be (2, 2) after transpose,
+        # as mgrid[10:20:5] -> [10, 15]
         assert grid_z.shape == (2, 2)
 
         # Check interpolated values for the (2, 2) grid
@@ -353,3 +428,157 @@ class TestGridGenerator:
         assert first_call_args[0] == os.path.join(
             "test/out", "ground_grid_x_5m.zarr"
         )
+
+    # --- New Tests for Private Methods ---
+
+    def test_prepare_output_dir_creates_new(
+        self, gen_instance, mock_os_makedirs, mocker
+    ):
+        """
+        Tests that _prepare_output_dir calls os.makedirs if the dir
+        does not exist.
+        """
+        # Mock os.path.exists to return False
+        mock_exists = mocker.patch("os.path.exists", return_value=False)
+
+        gen_instance._prepare_output_dir("new/dir")
+
+        # Check that we first checked existence
+        mock_exists.assert_called_once_with("new/dir")
+        # Check that we then created the dir
+        mock_os_makedirs.assert_called_once_with("new/dir")
+
+    def test_prepare_output_dir_uses_existing(
+        self, gen_instance, mock_os_makedirs, mocker
+    ):
+        """
+        Tests that _prepare_output_dir does NOT call os.makedirs if
+        the dir already exists.
+        """
+        # Mock os.path.exists to return True
+        mock_exists = mocker.patch("os.path.exists", return_value=True)
+
+        gen_instance._prepare_output_dir("existing/dir")
+
+        # Check that we first checked existence
+        mock_exists.assert_called_once_with("existing/dir")
+        # Check that we did NOT create the dir
+        mock_os_makedirs.assert_not_called()
+
+    def test_generate_grid_coordinates(self, gen_instance):
+        """
+        Tests the _generate_grid_coordinates method for correct shape
+        and values.
+        """
+        # gen_instance extents are 0-100. Resolution 25.
+        # mgrid[0:100:25] -> [0, 25, 50, 75] (4 steps)
+        # Shape should be (4, 4)
+        grid_x, grid_y = gen_instance._generate_grid_coordinates(resolution=25)
+
+        assert grid_x.shape == (4, 4)
+        assert grid_y.shape == (4, 4)
+
+        # Check the values (before transposition)
+        # grid_x should be constant along columns (Y-axis)
+        expected_x = np.array(
+            [[0, 0, 0, 0], [25, 25, 25, 25], [50, 50, 50, 50], [75, 75, 75, 75]]
+        )
+        # grid_y should be constant along rows (X-axis)
+        expected_y = np.array(
+            [[0, 25, 50, 75], [0, 25, 50, 75], [0, 25, 50, 75], [0, 25, 50, 75]]
+        )
+
+        np.testing.assert_allclose(grid_x, expected_x)
+        np.testing.assert_allclose(grid_y, expected_y)
+
+    def test_transpose_grids(self, gen_instance):
+        """
+        Tests that _transpose_grids correctly transposes X, Y, and Z
+        grids.
+        """
+        # Create non-square grids (e.g., 3 X-steps, 2 Y-steps)
+        x = np.array([[10, 10], [20, 20], [30, 30]])
+        y = np.array([[100, 200], [100, 200], [100, 200]])
+        z = np.array([[1, 2], [3, 4], [5, 6]])
+
+        assert x.shape == (3, 2)  # (X, Y)
+
+        t_x, t_y, t_z = gen_instance._transpose_grids(x, y, z)
+
+        # Shape should be (2, 3) (Y, X)
+        assert t_x.shape == (2, 3)
+        assert t_y.shape == (2, 3)
+        assert t_z.shape == (2, 3)
+
+        # Check values
+        assert t_x[0, 1] == x[1, 0]  # (y=0, x=1) -> (x=1, y=0)
+        assert t_y[1, 0] == y[0, 1]  # (y=1, x=0) -> (x=0, y=1)
+        assert t_z[1, 2] == z[2, 1]  # (y=1, x=2) -> (x=2, y=1)
+
+        expected_t_z = np.array([[1, 3, 5], [2, 4, 6]])
+        np.testing.assert_allclose(t_z, expected_t_z)
+
+    def test_generate_z_grid_scalar(self, gen_instance):
+        """
+        Tests _generate_z_grid with int and float scalar values.
+        """
+        # Dummy grid_x to define the shape
+        grid_x = np.ones((5, 5))
+        # grid_y is only used for interpolation, so can be None here
+
+        # Test with int
+        grid_z_int = gen_instance._generate_z_grid(
+            z=10, grid_x=grid_x, grid_y=None
+        )
+        assert grid_z_int.shape == (5, 5)
+        np.testing.assert_allclose(grid_z_int, np.full((5, 5), 10))
+
+        # Test with float
+        grid_z_float = gen_instance._generate_z_grid(
+            z=-1.5, grid_x=grid_x, grid_y=None
+        )
+        assert grid_z_float.shape == (5, 5)
+        np.testing.assert_allclose(grid_z_float, np.full((5, 5), -1.5))
+
+    def test_generate_z_grid_interpolation_nan(self, gen_instance):
+        """
+        Tests _generate_z_grid interpolation, ensuring points outside
+        the convex hull of input data become NaN.
+        """
+        # Input points form a triangle: (0,0), (10,0), (0,10)
+        z_points = np.array(
+            [[0, 10, 0], [0, 0, 10], [100, 200, 300]]  # x  # y  # z
+        )
+
+        # Target grid: (0,0), (10,0), (0,10), and (10,10)
+        # (10,10) is outside the triangle
+        grid_x, grid_y = np.mgrid[0:11:10, 0:11:10]  # (0, 10) x (0, 10)
+
+        assert grid_x.shape == (2, 2)
+
+        grid_z = gen_instance._generate_z_grid(z_points, grid_x, grid_y)
+
+        # Check the values
+        # (0, 0) -> 100
+        assert grid_z[0, 0] == pytest.approx(100)
+        # (10, 0) -> 200
+        assert grid_z[1, 0] == pytest.approx(200)
+        # (0, 10) -> 300
+        assert grid_z[0, 1] == pytest.approx(300)
+        # (10, 10) -> Should be NaN
+        assert np.isnan(grid_z[1, 1])
+
+    def test_generate_z_grid_bad_type_explicit(self, gen_instance):
+        """
+        Explicitly tests that _generate_z_grid raises TypeError
+        for invalid z.
+        """
+        grid_x = np.ones((2, 2))
+        grid_y = np.ones((2, 2))
+
+        with pytest.raises(
+            TypeError, match="must be int, float, or np.ndarray"
+        ):
+            gen_instance._generate_z_grid(
+                z={"this": "is bad"}, grid_x=grid_x, grid_y=grid_y
+            )

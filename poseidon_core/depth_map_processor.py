@@ -57,9 +57,8 @@ class DepthMapProcessor:
             integer ID.
         """
         labels_squeezed = gpu_label_array.squeeze()
-        
+
         water_mask = labels_squeezed == 1  # Boolean mask
-        
 
         # Create binary mask directly as uint8
         masked_labels = water_mask.astype(cp.uint8)

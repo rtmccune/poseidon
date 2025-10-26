@@ -107,7 +107,7 @@ class GridGenerator:
         self.filename = os.path.basename(file_path)
         self.extent_units = extent_units
         self.lidar_units = lidar_units
-        self.lidar = self.load_lidar()
+        self.lidar = self._load_lidar()
 
         # Determine extents, converting from feet to meters if provided
         # extent units are in feet. Otherwise, they are assumed to be in
@@ -126,18 +126,6 @@ class GridGenerator:
             self.max_x_extent = max_x_extent
             self.min_y_extent = min_y_extent
             self.max_y_extent = max_y_extent
-
-    def load_lidar(self):
-        """Load LiDAR data from the `self.filepath`.
-
-        Returns
-        -------
-        laspy.LasData
-            The LiDAR data loaded from the file.
-        """
-        lidar = laspy.read(self.filepath)
-
-        return lidar
 
     def create_point_array(self, point_mask_value=2):
         """Create a filtered array of LiDAR points.
@@ -254,6 +242,44 @@ class GridGenerator:
         )
         start_time = time.time()
 
+        self._prepare_output_dir(dir)
+        grid_x, grid_y = self._generate_grid_coordinates(resolution)
+        grid_z = self._generate_z_grid(z, grid_x, grid_y)
+        grid_x, grid_y, grid_z = self._transpose_grids(grid_x, grid_y, grid_z)
+
+        self._save_grids_to_zarr(
+            grid_x, grid_y, grid_z, resolution, dir, grid_descriptor
+        )
+
+        # --- Finish Logging ---
+        end_time = time.time()
+        print(
+            f"--- Grid generation successful in {end_time - start_time:.2f} "
+            f"seconds. ---"
+        )
+
+        return grid_x, grid_y, grid_z
+
+    def _load_lidar(self):
+        """Load LiDAR data from the `self.filepath` using laspy.
+
+        Returns
+        -------
+        laspy.LasData
+            The LiDAR data loaded from the file.
+        """
+        lidar = laspy.read(self.filepath)
+        return lidar
+
+    def _prepare_output_dir(self, dir):
+        """
+        Ensure the output directory exists, creating it if necessary.
+
+        Parameters
+        ----------
+        dir : str
+            The directory path to check and/or create.
+        """
         # Check that the path exists
         if not os.path.exists(dir):
             os.makedirs(dir)  # Create the directory if not
@@ -261,6 +287,29 @@ class GridGenerator:
         else:
             print(f"  [IO] Using existing directory: {dir}")
 
+    def _generate_grid_coordinates(self, resolution):
+        """
+        Generate 2D X and Y coordinate grids based on class extents.
+
+        Parameters
+        ----------
+        resolution : float
+            The spacing (in meters) for the grid.
+
+        Returns
+        -------
+        grid_x : np.ndarray
+            2D array of x-coordinates, with shape (X_steps, Y_steps).
+        grid_y : np.ndarray
+            2D array of y-coordinates, with shape (X_steps, Y_steps).
+
+        Notes
+        -----
+        Uses `np.mgrid`, which generates coordinates from `start` up to
+        (but not including) `stop`, with `step` = `resolution`.
+        The initial shape is (X, Y) and must be transposed later to
+        match a (Row, Col) or (Y, X) convention.
+        """
         # Generate structured grid for extents and resolution
         print("  [GRID] Generating grid coordinates...")
         # Using :.2f to format floats to 2 decimal places for clean logs
@@ -276,7 +325,40 @@ class GridGenerator:
         ]
         print(f"    Initial grid shape (before transpose): {grid_x.shape}")
 
-        # --- Z-Grid Generation Logic ---
+        return grid_x, grid_y
+
+    def _generate_z_grid(self, z, grid_x, grid_y):
+        """
+        Generate the 2D Z grid, either as a flat plane or interpolated.
+
+        If `z` is a scalar, a flat grid is created.
+        If `z` is a (3, N) array, `scipy.interpolate.griddata` is used
+        to interpolate Z values onto the grid.
+
+        Parameters
+        ----------
+        z : int, float, or np.ndarray
+            Source elevation data.
+            - If int or float: Creates a flat grid at that constant Z
+              value.
+            - If np.ndarray (shape 3,N): Interpolates Z values from
+              these [X, Y, Z] points.
+        grid_x : np.ndarray
+            The 2D target x-coordinate grid (X, Y shape).
+        grid_y : np.ndarray
+            The 2D target y-coordinate grid (X, Y shape).
+
+        Returns
+        -------
+        grid_z : np.ndarray
+            The 2D array of z-coordinates (or NaNs where interpolation
+            failed), with the same shape as `grid_x` and `grid_y`.
+
+        Raises
+        ------
+        TypeError
+            If `z` is not an int, float, or np.ndarray.
+        """
 
         # If int or float provided for z, create set elevation grid
         if isinstance(z, int) or isinstance(z, float):
@@ -291,18 +373,23 @@ class GridGenerator:
             )
             x = z[0]
             y = z[1]
-            # Use a different variable name to avoid confusion
+            # Use a different variable name to avoid confusion with
+            # param 'z'
             z_vals = z[2]
+
+            # Interpolate Z values onto the X, Y grid
             grid_z = griddata((x, y), z_vals, (grid_x, grid_y), method="linear")
 
             # Check for NaNs, which can happen if interpolation fails
+            # (e.g., grid points are outside the convex hull of input
+            # points)
             nan_count = np.count_nonzero(np.isnan(grid_z))
             if nan_count > 0:
                 print(
                     f"    [WARN] {nan_count} grid points were outside the "
                     f"interpolation area (set to NaN)."
                 )
-                # You might want to fill these NaNs, e.g.:
+                # Optionally, fill NaNs with a specific value
                 # grid_z = np.nan_to_num(grid_z, nan=-9999.0)
                 # print("    [INFO] NaN values filled with -9999.0")
 
@@ -313,6 +400,36 @@ class GridGenerator:
                 f"Z parameter must be int, float, or np.ndarray, not {type(z)}"
             )
 
+        return grid_z
+
+    def _transpose_grids(self, grid_x, grid_y, grid_z):
+        """
+        Transpose X, Y, and Z grids from (X, Y) to (Y, X) shape.
+
+        Parameters
+        ----------
+        grid_x : np.ndarray
+            Original (X_steps, Y_steps) shaped x-grid.
+        grid_y : np.ndarray
+            Original (X_steps, Y_steps) shaped y-grid.
+        grid_z : np.ndarray
+            Original (X_steps, Y_steps) shaped z-grid.
+
+        Returns
+        -------
+        grid_x : np.ndarray
+            Transposed (Y_steps, X_steps) shaped x-grid.
+        grid_y : np.ndarray
+            Transposed (Y_steps, X_steps) shaped y-grid.
+        grid_z : np.ndarray
+            Transposed (Y_steps, X_steps) shaped z-grid.
+
+        Notes
+        -----
+        This aligns the grid shape with a (Row, Col) or (Y, X)
+        convention, which is standard for image and raster processing.
+        `np.mgrid` produces (X, Y) shaped arrays, so this step is necessary.
+        """
         # --- Transpose ---
         print("  [GRID] Transposing grids to (Y, X) convention.")
         grid_x = grid_x.T
@@ -320,8 +437,34 @@ class GridGenerator:
         grid_z = grid_z.T
         print(f"    Final grid shape: {grid_x.shape}")
 
-        # --- Save to Zarr ---
+        return grid_x, grid_y, grid_z
 
+    def _save_grids_to_zarr(
+        self, grid_x, grid_y, grid_z, resolution, dir, grid_descriptor
+    ):
+        """
+        Save the final X, Y, and Z grids as compressed Zarr arrays.
+
+        Parameters
+        ----------
+        grid_x : np.ndarray
+            The final 2D x-coordinate grid (Y, X shape).
+        grid_y : np.ndarray
+            The final 2D y-coordinate grid (Y, X shape).
+        grid_z : np.ndarray
+            The final 2D z-coordinate grid (Y, X shape).
+        resolution : float
+            Grid resolution (in meters), used in the filename.
+        dir : str
+            The directory to save the files.
+        grid_descriptor : str
+            A prefix for the output filenames (e.g., 'ground_points').
+
+        Notes
+        -----
+        Uses `zarr.open()` with mode='w' to create or overwrite arrays.
+        Enables chunking for efficient compressed storage.
+        """
         # Handle the descriptor string to make sure filename is clean
         if grid_descriptor and not grid_descriptor.endswith("_"):
             grid_descriptor_str = f"{grid_descriptor}_"
@@ -344,15 +487,17 @@ class GridGenerator:
 
         print("  [IO] Saving compressed Zarr arrays (mode='w', overwriting)...")
 
+        # Save X grid
         print(f"    X -> {path_x}")
         zarr.open(
             path_x,
             mode="w",
             shape=grid_x.shape,
             dtype=grid_x.dtype,
-            chunks=True,
+            chunks=True,  # Use default chunking
         )[:] = grid_x
 
+        # Save Y grid
         print(f"    Y -> {path_y}")
         zarr.open(
             path_y,
@@ -362,6 +507,7 @@ class GridGenerator:
             chunks=True,
         )[:] = grid_y
 
+        # Save Z grid
         print(f"    Z -> {path_z}")
         zarr.open(
             path_z,
@@ -370,12 +516,3 @@ class GridGenerator:
             dtype=grid_z.dtype,
             chunks=True,
         )[:] = grid_z
-
-        # --- Finish Logging ---
-        end_time = time.time()
-        print(
-            f"--- Grid generation successful in {end_time - start_time:.2f} "
-            f"seconds. ---"
-        )
-
-        return grid_x, grid_y, grid_z
