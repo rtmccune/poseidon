@@ -251,7 +251,6 @@ class TestDepthMapProcessor:
     def test_calculate_all_depths(self, local_10x10_processor):
         """
         Tests the new `_calculate_all_depths` method.
-        This single test replaces the four previous `_calculate_depths_*` tests.
         """
         labeled_data = cp.zeros((10, 10), dtype=int)
         labeled_data[1:9, 1:9] = 1  # Pond 1
@@ -317,7 +316,7 @@ class TestDepthMapProcessor:
     def test_plot_histogram_helper_logic(self, local_10x10_processor, mock_plt):
         """
         Tests the core logic of the generic _plot_histogram_helper.
-        Ensures it calculates stats and calls matplotlib functions 
+        Ensures it calculates stats and calls matplotlib functions
         correctly.
         """
         mock_savefig, mock_close = mock_plt

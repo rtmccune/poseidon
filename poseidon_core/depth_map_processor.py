@@ -9,6 +9,7 @@ from cucim.skimage.measure import label
 from cucim.skimage.morphology import binary_closing
 from skimage.measure import find_contours
 
+
 def _log(message):
     """Helper function for timestamped logging."""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
@@ -159,13 +160,14 @@ class DepthMapProcessor:
             return
 
         # Filter for the files we actually need to process
-        files_to_process = [
-            f for f in all_files if f.endswith("_rectified")
-        ]
+        files_to_process = [f for f in all_files if f.endswith("_rectified")]
         total_files = len(files_to_process)
 
         if total_files == 0:
-            _log(f"  WARNING: No '_rectified' files found in {labels_zarr_dir}. Nothing to do.")
+            _log(
+                f"  WARNING: No '_rectified' files found in {labels_zarr_dir}. "
+                f"Nothing to do."
+            )
             _log("=== Depth Map Generation Complete ===")
             return
 
@@ -184,9 +186,7 @@ class DepthMapProcessor:
             ):
                 _log(f"  Processing file {i + 1}/{total_files}: {file_name}")
 
-            rectified_label_path = os.path.join(
-                labels_zarr_dir, file_name
-            )
+            rectified_label_path = os.path.join(labels_zarr_dir, file_name)
 
             # Generate depth map
             try:
@@ -194,26 +194,36 @@ class DepthMapProcessor:
                     rectified_label_path, file_name
                 )
             except Exception as e:
-                _log(f"  ERROR: Failed to process depth map for {file_name}. {e}")
+                _log(
+                    f"  ERROR: Failed to process depth map for {file_name}. {e}"
+                )
                 continue  # Skip to the next file
 
-            # Create DataFrame 
+            # Create DataFrame
             try:
                 depth_maps = pd.DataFrame(depth_data)
                 if depth_maps.empty:
-                    _log(f"  WARNING: No depth data generated for {file_name}. Skipping save.")
+                    _log(
+                        f"  WARNING: No depth data generated for {file_name}. "
+                        f"Skipping save."
+                    )
                     continue
             except Exception as e:
-                _log(f"  ERROR: Failed to create DataFrame for {file_name}. {e}")
+                _log(
+                    f"  ERROR: Failed to create DataFrame for {file_name}. {e}"
+                )
                 continue  # Skip to the next file
 
             # Save to Zarr
             try:
                 self._save_depth_maps(depth_maps, depth_map_zarr_dir)
             except Exception as e:
-                _log(f"  ERROR: Failed to save depth maps for {file_name} to {depth_map_zarr_dir}. {e}")
+                _log(
+                    f"  ERROR: Failed to save depth maps for {file_name} to "
+                    f"{depth_map_zarr_dir}. {e}"
+                )
                 continue  # Skip to the next file
-            
+
             processed_count += 1
 
         # Print success message after all images are processed
