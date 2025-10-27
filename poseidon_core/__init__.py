@@ -9,5 +9,5 @@ __all__ = [
     "ImageRectifier",
     "DepthMapProcessor",
     "DepthMapPlotter",
-    "RoadwayAnalyzer"
+    "RoadwayAnalyzer",
 ]
