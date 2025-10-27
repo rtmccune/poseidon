@@ -67,29 +67,28 @@ class DepthMapPlotter:
         self.max_y_extent = max_y_extent
         self.bbox_crs = bbox_crs
 
-        # --- Re-added sensor attributes as requested ---
+        # Sensor attributes
         self.virtual_sensor_loc = virtual_sensor_locations
         self.plot_sensors = plot_sensors
-
-        # Sensor color schemes
         self.sensor_1_color = cmocean.cm.phase(0.1)
         self.sensor_2_color = cmocean.cm.phase(0.3)
         self.sensor_3_color = cmocean.cm.phase(0.5)
-        
-        self.water_level_color = cmocean.cm.balance(0.2)
-        self.max_depth_color = cmocean.cm.balance(0.9)
-        self.avg_depth_color = cmocean.cm.balance(0.6)
 
-    def process_flood_events_HPC(self):
+    def process_flood_events_HPC(self, stats_to_plot=None):
         """
         Processes and generates plots for flood events in parallel using MPI.
+
+        Parameters
+        ----------
+        stats_to_plot : list of str, optional
+            A list of statistic suffixes to plot (e.g., ['mean', '95_perc']).
+            If None, all found maps are plotted.
         """
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
 
         if rank == 0:
-            # These methods are assumed to exist
             flood_event_folders = self.list_flood_event_folders()
             self.preprocess_flood_events()
         else:
@@ -112,11 +111,22 @@ class DepthMapPlotter:
             desc=f"Rank {rank} plotting events",
             unit="event",
         ):
-            self.process_single_flood_event(flood_event)
+            # Pass the filter list down
+            self.process_single_flood_event(
+                flood_event, stats_to_plot=stats_to_plot
+            )
 
-    def process_single_flood_event(self, flood_event):
+    def process_single_flood_event(self, flood_event, stats_to_plot=None):
         """
-        Processes a single flood event folder, plotting all Zarr depth maps.
+        Processes a single flood event folder, plotting specified Zarr maps.
+
+        Parameters
+        ----------
+        flood_event : str
+            The name of the flood event directory.
+        stats_to_plot : list of str, optional
+            A list of statistic suffixes to plot (e.g., ['mean', '95_perc']).
+            If None, all found maps are plotted.
         """
         flood_event_path = self.main_dir / flood_event
         depth_maps_zarr_dir = flood_event_path / "zarr" / "depth_maps"
@@ -129,7 +139,7 @@ class DepthMapPlotter:
             return
 
         try:
-            contents = os.listdir(depth_maps_zarr_dir)
+            contents = sorted(os.listdir(depth_maps_zarr_dir))
         except OSError as e:
             print(
                 f"ERROR: Could not list contents of '{depth_maps_zarr_dir}': {e}",
@@ -142,6 +152,12 @@ class DepthMapPlotter:
 
             if not full_zarr_path.is_dir():
                 continue
+
+            # --- NEW: Filtering Logic ---
+            if stats_to_plot is not None:
+                # Check if the zarr_name ends with any of the specified stats
+                if not any(zarr_name.endswith(stat) for stat in stats_to_plot):
+                    continue  # Skip this file if it doesn't match the filter
 
             try:
                 output_png_filename = f"{zarr_name}.png"
@@ -159,17 +175,15 @@ class DepthMapPlotter:
                     plotting_folder = flood_event_path / "plots" / "depth_maps"
 
                 if plot_type and plotting_folder:
+                    # --- MODIFIED: Removed max_x and min_y from call ---
                     self._plot_georeferenced_map(
                         depth_array_path=full_zarr_path,
                         min_x=self.min_x_extent,
-                        max_x=self.max_x_extent,
-                        min_y=self.min_y_extent,
                         max_y=self.max_y_extent,
                         output_filename=output_png_filename,
                         bbox_crs=self.bbox_crs,
                         output_folder=plotting_folder,
                         plot_type=plot_type,
-                        # --- Coarsening factor removed from this call ---
                     )
 
             except Exception as e:
@@ -182,8 +196,6 @@ class DepthMapPlotter:
         self,
         depth_array_path,
         min_x,
-        max_x,
-        min_y,
         max_y,
         output_filename,
         plot_type,
@@ -194,8 +206,24 @@ class DepthMapPlotter:
         """
         Generates and saves a georeferenced plot for a flood map (WSE or depth).
 
-        This consolidated method loads a 2D array from a Zarr store,
-        georeferences it, reprojects it, and plots it over a basemap.
+        Parameters
+        ----------
+        depth_array_path : str or pathlib.Path
+            Path to the input Zarr store.
+        min_x : float
+            Minimum x-coordinate (easting) of the spatial extent (top-left).
+        max_y : float
+            Maximum y-coordinate (northing) of the spatial extent (top-left).
+        output_filename : str
+            The base name for the output PNG file.
+        plot_type : str
+            Type of plot to generate, either 'depth' or 'wse'.
+        resolution_m : float, optional
+            The resolution (pixel size) in meters, by default 0.05.
+        bbox_crs : str, optional
+            The CRS string for the input bounding box, by default "EPSG:32119".
+        output_folder : str or pathlib.Path, optional
+            The directory where the final PNG plot will be saved.
         """
         array_store = zarr.open(str(depth_array_path), mode="r")
         depth_array = array_store[:]
@@ -206,6 +234,7 @@ class DepthMapPlotter:
 
         data_for_xarray = np.flipud(depth_array).astype(float)
 
+        # --- MODIFIED: Affine transform uses min_x and max_y (top-left) ---
         transform = Affine(resolution_m, 0.0, min_x, 0.0, -resolution_m, max_y)
         da_hmax = xr.DataArray(
             data=data_for_xarray, dims=["y", "x"], name="flood_data"
@@ -214,10 +243,7 @@ class DepthMapPlotter:
         da_hmax.rio.write_transform(transform, inplace=True)
         da_hmax.rio.write_nodata(np.nan, inplace=True)
 
-        # --- EFFICIENCY CHANGE ---
-        # Coarsening step has been removed as requested.
-        # Reprojecting the *full-resolution* array.
-        # This will be more accurate but significantly slower.
+        # Reproject the full-resolution array
         da_hmax_mercator = da_hmax.rio.reproject(3857)
 
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -255,10 +281,8 @@ class DepthMapPlotter:
             zorder=10,
         )
 
-        # --- TODO: Add sensor plotting logic here ---
         # if self.plot_sensors and self.virtual_sensor_loc is not None:
         #    ... logic to reproject and plot sensor locations ...
-        #    (This part is not yet implemented per your request)
 
         ax.text(
             0.05,
