@@ -2,8 +2,89 @@ import os
 import time
 import zarr
 import laspy
+import cmocean
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
+from matplotlib.colors import LinearSegmentedColormap
+
+
+def plot_elev_grid(grid_z, save_fig=False, fig_name="pixel_DEM.png"):
+    """Plots a DEM grid using a truncated 'topo' colormap.
+
+    This function visualizes a 2D elevation grid, typically a Digital
+    Elevation Model (DEM). It uses a modified version of the cmocean
+    'topo' colormap, truncating it to only show the upper half
+    (values 0.5 to 1.0), which typically corresponds to above-sea-level
+    (land) elevations.
+
+    Parameters
+    ----------
+    grid_z : array_like
+        A 2D array representing elevation values. Must be a format
+        plottable by `matplotlib.pyplot.imshow`.
+    save_fig : bool, optional
+        If True, saves the figure to disk instead of displaying it.
+        Default is False.
+    fig_name : str, optional
+        Filename to use when saving the figure. Only used if `save_fig`
+        is True. Default is 'pixel_DEM.png'.
+
+    Returns
+    -------
+    None
+        This function does not return any value. It displays a
+        matplotlib plot and/or saves it to a file.
+
+    Notes
+    -----
+    The colormap truncation `cmap(np.linspace(0.5, 1, 256))` assumes
+    that the 'topo' colormap's midpoint (0.5) represents sea level,
+    and values above it represent land.
+
+    """
+
+    # Define colormap
+
+    # Get the full 'topo' colormap from the cmocean library
+    cmap = cmocean.cm.topo
+
+    # Create a new, truncated colormap.
+    # We sample the *upper half* (from 0.5 to 1.0) of the original 'topo'
+    # colormap. This is done to emphasize land features, assuming 0.5
+    # is the "sea level" transition point in this colormap.
+    above_land_cmap = LinearSegmentedColormap.from_list(
+        "above_land_cmap", cmap(np.linspace(0.5, 1, 256))
+    )
+
+    # Create plot
+
+    # Display the grid data as an image.
+    # 'origin="lower"' places the (0,0) index at the bottom-left corner,
+    # which is standard for cartesian (Easting, Northing) coordinates.
+    plt.imshow(grid_z, origin="lower", cmap=above_land_cmap)
+
+    # Add labels and colorbar
+
+    # Add a colorbar to show the mapping of elevation values to colors.
+    plt.colorbar(label="Elevation (meters)")
+
+    # Add descriptive labels and a title.
+    plt.title("Pixel DEM")
+    plt.xlabel("Easting")
+    plt.ylabel("Northing")
+
+    # Save or show figure
+
+    if save_fig:
+        # If save_fig is True, save the figure to the specified file.
+        # 'bbox_inches="tight"' crops excess whitespace from the edges.
+        # 'pad_inches=0.1' adds a small margin.
+        # 'dpi=300' sets a high resolution for good quality.
+        plt.savefig(fig_name, bbox_inches="tight", pad_inches=0.1, dpi=300)
+
+    # Display the plot on the screen.
+    plt.show()
 
 
 class GridGenerator:
