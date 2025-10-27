@@ -1,7 +1,9 @@
 import os
+import re
+import pytz
 from pathlib import Path
 from svgpath2mpl import parse_path
-
+import pandas as pd
 from datetime import datetime
 import cmocean
 import matplotlib.pyplot as plt
@@ -15,12 +17,25 @@ from pyproj import Transformer
 import rioxarray
 import contextily as ctx
 import dask.array as da
+from datetime import timedelta
 
 
 def _log(message):
     """Helper function for timestamped logging."""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
+def _extract_camera_name(filename):
+    """Extracts sensor ID from filenames."""
+    pattern = r"CAM_[A-Z]{2}_[0-9]{2}"
+    match = re.search(pattern, filename)
+    return match.group(0) if match else None
+
+
+def _extract_timestamp(filename):
+    """Extracts UTC timestamp from filenames."""
+    pattern = r"\d{14}"
+    match = re.search(pattern, filename)
+    return match.group(0) if match else None
 
 class DepthMapPlotter:
     """
@@ -77,6 +92,8 @@ class DepthMapPlotter:
         self.max_y_extent = max_y_extent
         self.resolution_m = resolution_m
         self.bbox_crs = bbox_crs
+        
+        self.water_level_color = cmocean.cm.balance(0.2)
 
         # Store sensor attributes
         self.virtual_sensor_loc = virtual_sensor_locations
@@ -85,6 +102,36 @@ class DepthMapPlotter:
             # Pre-create the custom marker if sensors will be plotted
             self.sensor_marker_path = self._create_sensor_marker()
 
+    def preprocess_flood_events(self):
+        """
+        Preprocesses flood events by matching measurements to images and generating virtual sensor depths.
+
+        This method iterates through all flood event folders, processes each flood event by matching
+        water level measurements to corresponding images, and generates depth measurements for virtual
+        sensors based on the depth maps. The results are stored for further analysis and plotting.
+
+        The following methods are called for each flood event:
+        - `match_measurements_to_images`: Matches water level measurements to images based on timestamps.
+        - `gen_virtual_sensor_depths`: Generates depth measurements for virtual sensor locations based on depth maps.
+
+        Returns:
+        --------
+        None
+            This method modifies the state of the object by generating files, but does not return any values.
+        """
+
+        flood_event_folders = self._list_flood_event_folders()
+
+        for flood_event in tqdm(
+            flood_event_folders,
+            desc="Preprocessing flood events for plotting...",
+            unit="event",
+        ):
+
+            flood_event_path = os.path.join(self.main_dir, flood_event)
+            self._match_measurements_to_images(flood_event, flood_event_path)
+            self._gen_virtual_sensor_depths(flood_event_path)
+    
     def process_single_flood_event(self, flood_event, stats_to_plot=None):
         """
         Processes a single flood event folder, plotting specified Zarr
@@ -280,6 +327,299 @@ class DepthMapPlotter:
             self.process_single_flood_event(
                 flood_event, stats_to_plot=stats_to_plot
             )
+            
+    def plot_water_level_time_series(
+        self,
+        file_name,
+        flood_event_path,
+        plotting_folder,
+    ):
+        datetimes, max_depths, avg_depths, vs_depths = (
+                    self._load_virtual_sensor_depths(flood_event_path)
+                )
+        datetimes = pd.to_datetime(datetimes)
+        
+        obs_to_img_matches = pd.read_csv(
+                    os.path.join(flood_event_path, "wtr_lvl_obs_to_image_matches.csv"))
+        obs_to_img_matches["closest_utc_time"] = pd.to_datetime(obs_to_img_matches["closest_utc_time"])
+        
+        timestamp = _extract_timestamp(
+                            file_name
+                        )
+        current_timestamp = pd.to_datetime(timestamp, utc=True)
+        
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        # ax.axhline(y=0.92964, linestyle="-", c='r', zorder=1, label="Roadway Elevation at Sensor")
+        
+        # Plot observed water levels from the matches dataframe
+        ax.plot(
+            obs_to_img_matches["closest_utc_time"],
+            obs_to_img_matches["water_level"],
+            label="Observed Water Level",
+            color=self.water_level_color,
+        )
+        
+        # Plot virtual sensor depths if the flag is enabled
+        if self.plot_sensors:
+            # Define plotting properties to preserve original order and style
+            # (Column 2 is "Sensor 1", Column 0 is "Sensor 2", Column 1 is "Sensor 3")
+            
+            # Get colors dynamically from a colormap
+            num_sensors = len(self.virtual_sensor_loc)
+
+            # Generate distinct colors for each sensor
+            colors = plt.cm.viridis(np.linspace(0, 1, num_sensors))
+
+            for i in range(num_sensors):
+                
+                ax.scatter(
+                    datetimes,
+                    vs_depths[:, i],
+                    label=f"Sensor {i+1} Depth",
+                    marker=self.sensor_marker_path,
+                    color=colors[i], # Use color from the colormap
+                    s=15,
+                    zorder=5,
+                )
+
+        # Add a vertical line to indicate the time of the current depth map image
+        ax.axvline(x=current_timestamp, color="k", linestyle="--", zorder=1)
+        
+        # Formatting and labels
+        # ax.set_ylim(0.92, 1.1)
+        
+        # 1. Define a padding duration
+        padding = timedelta(hours=1)
+
+        # 2. Calculate the new limits based on the data's min and max dates
+        limit_min = datetimes.min() - padding
+        limit_max = datetimes.max() + padding
+        ax.set_xlim(limit_min, limit_max)
+        ax.tick_params(axis="x", rotation=45)
+        # ax.set_title("Water Level From Virtual Sensor Locations Over Time")
+        ax.set_ylabel("Water Surface Elevation (m NAVD88)")
+        ax.set_xlabel("Date and Time (UTC)")
+        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.legend(loc="upper right")
+
+        plt.tight_layout()
+
+        # Save the figure
+        os.makedirs(plotting_folder, exist_ok=True)
+        
+        base_filename = os.path.splitext(file_name)[0]
+        output_filename = f"{base_filename}_time_series.png"
+        
+        save_path = os.path.join(plotting_folder, output_filename)
+        plt.savefig(
+            save_path,
+            bbox_inches="tight",
+            pad_inches=0.1,
+            dpi=300,
+        )
+
+        plt.close(fig)  # Close the figure to free up memory
+        print(f"Time series plot saved to: {save_path}")
+    
+    def _gen_virtual_sensor_depths(self, flood_event_path):
+        """
+        Generates depth measurements for virtual sensors based on depth maps and stores them in a Zarr format.
+
+        This method processes depth maps located in the "zarr/depth_maps_95th_ponding" directory for a specific
+        flood event, extracts depth information for predefined virtual sensor locations, and computes the
+        maximum and average depths for each map. It then stores the results in a Zarr store for later use.
+
+        Parameters:
+        -----------
+        flood_event_path : str
+            The path to the flood event directory containing the Zarr depth maps.
+
+        Returns:
+        --------
+        None
+            Writes the generated virtual sensor depth data, maximum depth, and average depth to a Zarr store.
+        """
+
+        depth_maps_zarr_dir = os.path.join(
+            flood_event_path, "zarr", "depth_maps"
+        )
+        output_zarr_store = os.path.join(
+            flood_event_path, "zarr", "virtual_sensor_wses"
+        )
+
+        timestamp_list = []
+
+        if os.path.exists(depth_maps_zarr_dir):
+            file_names = [
+                f
+                for f in os.listdir(depth_maps_zarr_dir)
+                # if f.endswith("wse_map_95_perc")
+                if f.endswith("depth_map_95_perc")
+            ]
+            num_files = len(file_names)
+
+            # Preallocate NumPy arrays for better performance
+            max_depth_array = np.empty(num_files, dtype=np.float32)
+            avg_depth_array = np.empty(num_files, dtype=np.float32)
+            vs_depth_array = np.empty(
+                (num_files, len(self.virtual_sensor_loc)), dtype=np.float32
+            )
+
+            for idx, file_name in enumerate(file_names):
+                timestamp = _extract_timestamp(
+                    file_name
+                )
+                timestamp_list.append(timestamp)
+
+                file_zarr_store = os.path.join(depth_maps_zarr_dir, file_name)
+                img_store = zarr.open(file_zarr_store, mode="r")
+                depth_map = img_store[:]
+
+                max_depth_array[idx] = np.nanmax(depth_map)
+                avg_depth_array[idx] = np.nanmean(depth_map)
+
+                for i, (x, y) in enumerate(self.virtual_sensor_loc):
+                    vs_depth_array[idx, i] = depth_map[y, x]
+
+            # 1. Create the NumPy array with a specific, hardcoded string dtype.
+            #    A length like 'U30' is safe for standard ISO format datetimes.
+            datetimes_np = np.array(
+                pd.to_datetime(timestamp_list, utc=True).astype(str),
+                dtype="U30",
+            )
+
+            # 2. Open the Zarr store for writing.
+            root = zarr.open_group(output_zarr_store, mode="w")
+
+            # 3. Create the Zarr arrays using the 'data' argument.
+            #    This is the simplest and safest way. Zarr will correctly infer
+            #    the shape and dtype from your NumPy arrays.
+            root.create_array("timestamps", data=datetimes_np)
+            root.create_array("max_depths", data=max_depth_array)
+            root.create_array("avg_depths", data=avg_depth_array)
+            root.create_array("vs_depths", data=vs_depth_array)
+            
+    def _load_virtual_sensor_depths(self, flood_event_path):
+        """
+        Loads virtual sensor depth data from a Zarr store for a given flood event.
+
+        This method attempts to load depth-related data from the Zarr store located at the specified
+        flood event path. It retrieves the timestamps, maximum depths, average depths, and depths for
+        each virtual sensor location, and returns them for further processing or analysis.
+
+        Parameters:
+        -----------
+        flood_event_path : str
+            The path to the folder containing the flood event data, including the "zarr" subdirectory
+            where the virtual sensor depths are stored.
+
+        Returns:
+        --------
+        tuple
+            A tuple containing four elements:
+            - `datetimes` (pd.DatetimeIndex): A pandas datetime object representing the timestamps for the depth data.
+            - `max_depths` (np.ndarray): An array of maximum depth values.
+            - `avg_depths` (np.ndarray): An array of average depth values.
+            - `vs_depths` (np.ndarray): A 2D array of depth values for each virtual sensor location.
+
+        Raises:
+        -------
+        FileNotFoundError
+            If the Zarr store at the specified path does not exist, a FileNotFoundError is raised.
+
+        Notes:
+        ------
+        The data is expected to be stored in a Zarr format, and this method assumes that the depth maps
+        have been previously generated and stored using `gen_virtual_sensor_depths`.
+        """
+        zarr_store_path = os.path.join(
+            flood_event_path, "zarr", "virtual_sensor_wses"
+        )
+
+        if os.path.exists(zarr_store_path):
+            root = zarr.open(zarr_store_path, mode="r")
+
+            timestamps = root["timestamps"][:]  # Load as an array of strings
+            max_depths = root["max_depths"][:]
+            avg_depths = root["avg_depths"][:]
+            vs_depths = root["vs_depths"][:]
+
+            # Convert timestamps back to pandas datetime
+            datetimes = pd.to_datetime(timestamps, utc=True)
+
+            return datetimes, max_depths, avg_depths, vs_depths
+        else:
+            raise FileNotFoundError(f"Zarr store not found: {zarr_store_path}")
+    
+    def _match_measurements_to_images(self, flood_event, flood_event_path):
+        """
+        Matches water level measurements to the closest image timestamps for a given flood event.
+
+        For each image in the "orig_images" folder, this method extracts the timestamp and sensor ID
+        from the filename, finds the closest water level observation for that sensor in the CSV file,
+        and stores the matched data (image filename, matched timestamp, and converted water level)
+        in a new CSV file named "wtr_lvl_obs_to_image_matches.csv".
+
+        Parameters:
+        -----------
+        flood_event : str
+            The name of the flood event (used to find the CSV file with measurements).
+        flood_event_path : str
+            The path to the flood event directory containing the CSV file and image folder.
+
+        Returns:
+        --------
+        None
+            Writes the matched data to a CSV file in the flood event directory.
+        """
+
+        sunnyd_data = pd.read_csv(
+            os.path.join(flood_event_path, flood_event + ".csv")
+        )
+        sunnyd_data["time_UTC"] = pd.to_datetime(sunnyd_data["time_UTC"])
+
+        orig_images_path = os.path.join(flood_event_path, "orig_images")
+        image_list = sorted(os.listdir(orig_images_path))
+        match = []
+
+        # Iterate over image filenames
+        for filename in image_list:
+            # Extract the sensor id and timestamp
+            sensor_id = _extract_camera_name(
+                filename
+            )[4:]
+            timestamp = _extract_timestamp(filename)
+
+            timestamp = pytz.utc.localize(
+                datetime.strptime(timestamp, "%Y%m%d%H%M%S")
+            )
+
+            # Filter the dataframe by sensor id
+            filtered_df = sunnyd_data[sunnyd_data["sensor_ID"] == sensor_id]
+
+            # Find the closest timestamp
+            closest_row = filtered_df.iloc[
+                (filtered_df["time_UTC"] - timestamp).abs().argsort()[:1]
+            ]
+
+            # Append the result
+            if not closest_row.empty:
+                result = {
+                    "image_filename": filename,
+                    "closest_utc_time": closest_row["time_UTC"].values[0],
+                    "water_level": closest_row["water_level"].values[0]
+                    * 0.3048 #+ 0.9105,
+                    # 'sensor_water_level': (closest_row['sensor_water_level_adj'].values[0] - 3.05) * 0.3048
+                }
+                match.append(result)
+
+        # Convert the results to a dataframe
+        obs_to_image_matches = pd.DataFrame(match)
+        obs_to_image_matches.to_csv(
+            os.path.join(flood_event_path, "wtr_lvl_obs_to_image_matches.csv")
+        )
 
     def _list_flood_event_folders(self):
         """
