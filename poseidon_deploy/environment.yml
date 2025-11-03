@@ -1,5 +1,6 @@
 name: poseidon
 channels:
+  - rapidsai
   - conda-forge
   - defaults
 dependencies:
