@@ -42,25 +42,31 @@ To install opencv:
 
 After the working 'poseidon' environment and OpenCV have been installed on your system, compile the executables using cmake:
 
-1. Create a build directory in the desired location:
+1. Activate poseidon conda environment.
   ```bash
+  conda activate poseidon
+  ```
+
+2. Create a build directory.
+  ```bash
+  cd poseidon_utils/src
   mkdir build
   cd build
   ```
-2. Configure the build for your system.
+3. Configure the build for your system.
   ```bash
-  cmake /path/to/poseidon/poseidon_utils/c_helpers
+  cmake ..
   ```
-3. Build the exectuables.
+4. Build the exectuables.
   ```bash
   make
   ```
-The compiled executables will now exist in the 'build' directory for use. You can test that these compiled executables are working by running the test_compiled_funcs.sh script from the docs/tests directory. To run these tests from the 'build' directory simply:
+The compiled executables will now exist in the 'bin' directory for use. You can test that these compiled executables are working by running the test_compiled_funcs.sh script from the docs/tests directory. To run these tests from the 'bin' directory simply:
 ```bash
-/home/directory/poseidon/docs/tests/test_compiled_funcs.sh
+../../docs/tests/test_compiled_funcs.sh
 ```
 ## Tests
-To test the core poseidon functions, run the following command from the 'poseidon' directory. Be sure to change the included path to your local poseidon path.
+To test the posedion library, run the following command from the 'poseidon' directory.
   ```bash
-  PYTHONPATH=/path/to/poseidon pytest -v
+  python -m pytest -v
   ```
