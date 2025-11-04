@@ -21,6 +21,11 @@ To create a conda environment for this workflow navigate to your local copy of t
 conda env create --file poseidon_deploy/environment.yml
 ```
 
+To create a conda environment on a linux-64 based system (such as an HPC system) for this workflow navigate to the 'poseidon' repository and run the following command:
+```bash
+conda env create --prefix /path/to/conda/env --file poseidon_deploy/poseidon-linux-64-lock.yml
+```
+
 ## C++ Executables
 These executables rely on the opencv library for processing. First, ensure that you have opencv installed on your system.
 
