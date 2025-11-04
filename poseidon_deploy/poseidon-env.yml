@@ -1,4 +1,4 @@
-name: poseidon2
+name: poseidon
 channels:
   - rapidsai
   - nvidia
@@ -6,7 +6,7 @@ channels:
   - defaults
 dependencies:
   - python=3.11
-  - cudatoolkit=12.4
+  - cudatoolkit=11.2
   - pdal
   - rioxarray
   - zarr
@@ -34,5 +34,3 @@ dependencies:
   - cucim
   - svgpath2mpl
   - dask
-  - pip:
-      - pdal-plugins==1.6.2
