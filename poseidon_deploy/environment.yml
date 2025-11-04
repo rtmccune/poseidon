@@ -1,10 +1,12 @@
-name: poseidon
+name: poseidon2
 channels:
   - rapidsai
+  - nvidia
   - conda-forge
   - defaults
 dependencies:
   - python=3.12
+  - cudatoolkit=12.4
   - pdal
   - rioxarray
   - zarr
