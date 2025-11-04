@@ -2,6 +2,7 @@
 data/
 poseidon_utils/bin/*
 poseidon_utils/src/build/
+mysecrets.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

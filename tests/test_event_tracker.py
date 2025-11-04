@@ -328,12 +328,24 @@ class TestFetchData:
         )
         mock_response.raise_for_status.assert_called_once()
 
-    def test_fetch_data_http_error(self, tracker, mock_session):
-        """Tests _fetch_data handling HTTPError."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = (
-            requests.exceptions.HTTPError("404 Not Found")
-        )
+    def test_fetch_data_http_error(self, tracker, mock_session, mocker):
+        """
+        Tests _fetch_data handling a 404 HTTPError (a client error).
+        It should NOT retry and should return None immediately.
+        """
+        # 1. Mock time.sleep just in case (though it shouldn't be called)
+        mock_sleep = mocker.patch("time.sleep")
+
+        # 2. Create the mock response and error
+        mock_response = MagicMock(spec=requests.Response)
+        mock_error = requests.exceptions.HTTPError("404 Not Found")
+
+        # 3. This is the key: create the nested .response.status_code
+        mock_error.response = mock_response
+        mock_error.response.status_code = 404
+
+        # 4. Assign the fully-formed error object
+        mock_response.raise_for_status.side_effect = mock_error
         mock_session.get.return_value = mock_response
 
         result = tracker._fetch_data(
@@ -342,10 +354,16 @@ class TestFetchData:
             datetime.date(2023, 1, 2),
             "DE_01",
         )
-        assert result is None
 
-    def test_fetch_data_request_exception(self, tracker, mock_session):
+        # 5. Assert the function returned None and DID NOT retry
+        assert result is None
+        assert mock_session.get.call_count == 1  # Should fail once and give up
+        assert mock_sleep.call_count == 0  # Should not have slept
+
+    def test_fetch_data_request_exception(self, tracker, mock_session, mocker):
         """Tests _fetch_data handling RequestException (e.g., timeout)."""
+        mocker.patch("time.sleep")
+
         mock_session.get.side_effect = requests.exceptions.RequestException(
             "Connection failed"
         )
@@ -468,7 +486,9 @@ class TestGetDataOrchestration:
     @patch("poseidon_utils.event_tracker.requests.Session")
     @patch("poseidon_utils.event_tracker.ThreadPoolExecutor")
     @patch("poseidon_utils.event_tracker.as_completed")
-    @patch("poseidon_utils.event_tracker.EventTracker._process_and_combine_data")
+    @patch(
+        "poseidon_utils.event_tracker.EventTracker._process_and_combine_data"
+    )
     @patch("poseidon_utils.event_tracker.EventTracker._create_date_chunks")
     @patch("poseidon_utils.event_tracker.EventTracker._resolve_sensor_ids")
     def test_get_data_happy_path(
@@ -526,7 +546,9 @@ class TestGetDataOrchestration:
     @patch("poseidon_utils.event_tracker.requests.Session")
     @patch("poseidon_utils.event_tracker.ThreadPoolExecutor")
     @patch("poseidon_utils.event_tracker.as_completed")
-    @patch("poseidon_utils.event_tracker.EventTracker._process_and_combine_data")
+    @patch(
+        "poseidon_utils.event_tracker.EventTracker._process_and_combine_data"
+    )
     @patch("poseidon_utils.event_tracker.EventTracker._create_date_chunks")
     @patch("poseidon_utils.event_tracker.EventTracker._resolve_sensor_ids")
     def test_get_data_fallback_logic(
@@ -1112,7 +1134,8 @@ class TestErrorHandling:
             raise e
 
         mocker.patch(
-            "poseidon_utils.event_tracker.pd.read_csv", side_effect=mock_read_csv
+            "poseidon_utils.event_tracker.pd.read_csv",
+            side_effect=mock_read_csv,
         )
 
         # Call the function (outage_csv="missing.csv", abbr_flood_csv="also_missing.csv")
@@ -1244,7 +1267,8 @@ class TestStaticErrorHandling:
         """Tests the error handling for an invalid timezone."""
         # Need a valid read_csv mock so it doesn't fail on that first
         mocker.patch(
-            "poseidon_utils.event_tracker.pd.read_csv", return_value=pd.DataFrame()
+            "poseidon_utils.event_tracker.pd.read_csv",
+            return_value=pd.DataFrame(),
         )
 
         result = EventTracker.num_of_flood_days(
@@ -1289,6 +1313,8 @@ class TestGetDataEdgeCases:
         Covers: 431
         Tests the except block for requests.exceptions.RequestException.
         """
+        mocker.patch("time.sleep")
+
         mock_session.get.side_effect = requests.exceptions.RequestException(
             "Timeout"
         )
@@ -1300,7 +1326,7 @@ class TestGetDataEdgeCases:
         )
         assert result is None
         print.assert_any_call(
-            "Request error for sensor DE_01 (2023-01-01 to 2023-01-02): Timeout"
+            "Request error for sensor DE_01 (2023-01-01 to 2023-01-02): Timeout. Attempt 1 of 3."
         )
 
     def test_fetch_chunk_empty_json(self, tracker, mock_session, mocker):
@@ -1565,7 +1591,8 @@ class TestPipelineEdgeCases:
         """
         empty_flood_df = pd.DataFrame()
         mocker.patch(
-            "poseidon_utils.event_tracker.pd.read_csv", return_value=empty_flood_df
+            "poseidon_utils.event_tracker.pd.read_csv",
+            return_value=empty_flood_df,
         )
         mocker.patch(
             "poseidon_utils.event_tracker.os.path.exists", return_value=True
@@ -1597,7 +1624,8 @@ class TestPipelineEdgeCases:
             }
         )
         mocker.patch(
-            "poseidon_utils.event_tracker.pd.read_csv", return_value=future_flood_df
+            "poseidon_utils.event_tracker.pd.read_csv",
+            return_value=future_flood_df,
         )
         mocker.patch(
             "poseidon_utils.event_tracker.os.path.exists", return_value=False
@@ -1873,6 +1901,8 @@ class TestFinalCoverage:
         """
         Covers: 431
         """
+        mocker.patch("time.sleep")
+
         mock_session.get.side_effect = requests.exceptions.RequestException(
             "Timeout"
         )
@@ -1884,7 +1914,7 @@ class TestFinalCoverage:
         )
         assert result is None
         print.assert_any_call(
-            "Request error for sensor DE_01 (2023-01-01 to 2023-01-02): Timeout"
+            "Request error for sensor DE_01 (2023-01-01 to 2023-01-02): Timeout. Attempt 1 of 3."
         )
 
     def test_fetch_chunk_empty_json(self, tracker, mock_session, mocker):

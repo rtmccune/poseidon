@@ -1,6 +1,8 @@
 import datetime
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
+from http.client import IncompleteRead
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import matplotlib.pyplot as plt
@@ -41,7 +43,7 @@ class EventTracker:
         authorization: Tuple[str, str],
         min_date: datetime.date | datetime.datetime,
         max_date: datetime.date | datetime.datetime,
-        max_workers: int = 16,
+        max_workers: int = 4,
         timeout: int = 60,
     ):
         """
@@ -342,26 +344,33 @@ class EventTracker:
         start_date: datetime.date | datetime.datetime,
         end_date: datetime.date | datetime.datetime,
         sensor_id: str,
+        max_retries: int = 3,
+        backoff_factor: float = 2.0,
     ) -> Optional[Dict[str, Any] | List[Any]]:
         """
-        Performs a single, raw API request to the water level endpoint.
+        Performs a single, raw API request with robust retries.
 
         Parameters
         ----------
         session : requests.Session
-            The authenticated requests session to use for the API call.
+            The authenticated requests session.
         start_date : datetime.date | datetime.datetime
             The start date for the API query (inclusive).
         end_date : datetime.date | datetime.datetime
             The end date for the API query (exclusive).
         sensor_id : str
             The specific sensor ID to query.
+        max_retries : int, optional
+            The maximum number of retry attempts, by default 3.
+        backoff_factor : float, optional
+            The factor to determine sleep time (sleep = backoff * (attempt + 1)),
+            by default 2.0.
 
         Returns
         -------
         Optional[Dict[str, Any] | List[Any]]
             The raw JSON response from the API or None if the request
-            fails.
+            fails after all retries.
         """
 
         query_params = {
@@ -370,26 +379,55 @@ class EventTracker:
             "sensor_ID": sensor_id,
         }
 
-        try:
-            response = session.get(
-                self.BASE_URL, params=query_params, timeout=self.timeout
-            )
-            response.raise_for_status()
-            return response.json()
+        task_id = f"sensor {sensor_id} ({query_params['min_date']} to {query_params['max_date']})"
 
-        except requests.exceptions.HTTPError as http_err:
-            print(
-                f"HTTP error for sensor {sensor_id} ({start_date} to {end_date}): {http_err}"
-            )
-        except requests.exceptions.JSONDecodeError:
-            print(
-                f"Error: Server returned OK but failed to decode JSON for {sensor_id}."
-            )
-        except requests.exceptions.RequestException as req_err:
-            print(
-                f"Request error for sensor {sensor_id} ({start_date} to {end_date}): {req_err}"
-            )
+        for attempt in range(max_retries):
+            try:
+                response = session.get(
+                    self.BASE_URL, params=query_params, timeout=self.timeout
+                )
+                response.raise_for_status()
+                return response.json()
 
+            except requests.exceptions.HTTPError as http_err:
+                # Only retry on 5xx server errors
+                if 500 <= http_err.response.status_code <= 599:
+                    print(
+                        f"HTTP error for {task_id}: {http_err}. "
+                        f"Attempt {attempt + 1} of {max_retries}."
+                    )
+                else:
+                    # Don't retry on 4xx client errors (e.g., 404, 401)
+                    print(
+                        f"HTTP client error for {task_id}: {http_err}. Not retrying."
+                    )
+                    return None  # Failed permanently
+
+            except (
+                requests.exceptions.RequestException,  # Catches all connection/timeout errors
+                IncompleteRead,  # Catches the specific connection drop
+            ) as req_err:
+                # These cover IncompleteRead and other connection drops
+                print(
+                    f"Request error for {task_id}: {req_err}. "
+                    f"Attempt {attempt + 1} of {max_retries}."
+                )
+
+            except requests.exceptions.JSONDecodeError:
+                print(
+                    f"Error: Server returned OK but failed to decode JSON for {task_id}."
+                )
+                # This is a server error, but retrying may not help
+                # if it's consistently sending bad JSON.
+                return None
+
+            # If we are not on the last attempt, sleep before retrying
+            if attempt < max_retries - 1:
+                sleep_time = backoff_factor * (attempt + 1)
+                print(f"Waiting {sleep_time}s before next retry...")
+                time.sleep(sleep_time)
+
+        print(f"All {max_retries} retries failed for {task_id}.")
         return None
 
     def _fetch_chunk(
