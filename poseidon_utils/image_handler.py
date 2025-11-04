@@ -118,7 +118,7 @@ class ImageHandler:
             f"Starting flood event image pull. Destination: {destination_folder}",
             level="info",
         )
-        
+
         if time_buffer_hours > 0:
             _log(
                 f"Applying {time_buffer_hours}-hour buffer to all event times.",
