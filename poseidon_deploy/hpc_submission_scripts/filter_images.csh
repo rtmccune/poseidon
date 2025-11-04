@@ -1,11 +1,11 @@
 #! /bin/bash
 
-#BSUB -J image_pull
-#BSUB -W 10
+#BSUB -J image_filter
+#BSUB -W 5
 #BSUB -n 1
 #BSUB -q ccee
-#BSUB -o image_pull.%J.out
-#BSUB -e image_pull.%J.err
+#BSUB -o image_filter.%J.out
+#BSUB -e image_filter.%J.err
 
 echo "Activating conda environment..."
 source ~/.bashrc
@@ -16,7 +16,7 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_image_filter.py"
 
 IMAGE_DRIVE='/rsstu/users/k/kanarde/Sunnyverse-Images'
-IMAGE_DIR='$REPO_ROOT/data/carolina_beach/all_events_during_FOV'
+IMAGE_DIR="$REPO_ROOT/data/carolina_beach/images/all_events_during_FOV"
 OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
 
 echo "Starting photo filter Python script..."
