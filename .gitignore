@@ -3,6 +3,7 @@ data/
 poseidon_utils/bin/*
 poseidon_utils/src/build/
 mysecrets.py
+poseidon_deploy/hpc_submission_scipts/job_outputs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,0 +1,113 @@
+Activating conda environment...
+Starting photo pull Python script...
+[2025-11-04 17:07:55] INFO: Image Handler initialized. Image Drive: /rsstu/users/k/kanarde/Sunnyverse-Images
+[2025-11-04 17:07:55] INFO: Starting flood event image pull. Destination: /share/jcdietri/rmccune/poseidon/data/carolina_beach/images/all_events_during_FOV
+[2025-11-04 17:07:55] INFO: Applying 1.5-hour buffer to all event times.
+[2025-11-04 17:07:55] INFO: Ensured destination folder exists: /share/jcdietri/rmccune/poseidon/data/carolina_beach/images/all_events_during_FOV
+[2025-11-04 17:07:55] INFO: Loaded 48 flood events from /share/jcdietri/rmccune/poseidon/data/carolina_beach/abbr_flood_events.csv
+[2025-11-04 17:07:55] INFO: Gathering file list for all events... (This may take a moment)
+[2025-11-04 17:07:55] INFO:   Processing event 1/48: Camera CAM_CB_03 @ 2022-06-15
+[2025-11-04 17:07:56] INFO:   Processing event 4/48: Camera CAM_CB_03 @ 2022-06-18
+[2025-11-04 17:07:58] INFO:   Processing event 8/48: Camera CAM_CB_03 @ 2022-08-19
+[2025-11-04 17:07:58] INFO:   Processing event 12/48: Camera CAM_CB_03 @ 2022-09-29
+[2025-11-04 17:07:59] INFO:   Processing event 16/48: Camera CAM_CB_03 @ 2022-11-25
+[2025-11-04 17:08:00] INFO:   Processing event 20/48: Camera CAM_CB_03 @ 2023-01-22
+[2025-11-04 17:08:03] INFO:   Processing event 24/48: Camera CAM_CB_03 @ 2023-08-27
+[2025-11-04 17:08:06] INFO:   Processing event 28/48: Camera CAM_CB_03 @ 2023-09-02
+[2025-11-04 17:08:06] INFO:   Processing event 32/48: Camera CAM_CB_03 @ 2023-09-29
+[2025-11-04 17:08:07] INFO:   Processing event 36/48: Camera CAM_CB_03 @ 2023-10-02
+[2025-11-04 17:08:08] INFO:   Processing event 40/48: Camera CAM_CB_03 @ 2023-12-18
+[2025-11-04 17:08:09] INFO:   Processing event 44/48: Camera CAM_CB_03 @ 2024-01-09
+[2025-11-04 17:08:11] INFO:   Processing event 48/48: Camera CAM_CB_03 @ 2024-08-12
+[2025-11-04 17:08:12] INFO: Finished event processing. Found 2258 files (pre-deduplication).
+[2025-11-04 17:08:12] INFO: Starting parallel copy of 2060 files (max_workers=default)...
+[2025-11-04 17:08:12] INFO:   Copy progress: 1/2060 files processed.
+[2025-11-04 17:08:16] INFO:   Copy progress: 206/2060 files processed.
+[2025-11-04 17:08:16] INFO:   Copy progress: 412/2060 files processed.
+[2025-11-04 17:08:16] INFO:   Copy progress: 618/2060 files processed.
+[2025-11-04 17:08:17] INFO:   Copy progress: 824/2060 files processed.
+[2025-11-04 17:08:22] INFO:   Copy progress: 1030/2060 files processed.
+[2025-11-04 17:08:22] INFO:   Copy progress: 1236/2060 files processed.
+[2025-11-04 17:08:22] INFO:   Copy progress: 1442/2060 files processed.
+[2025-11-04 17:08:22] INFO:   Copy progress: 1648/2060 files processed.
+[2025-11-04 17:08:22] INFO:   Copy progress: 1854/2060 files processed.
+[2025-11-04 17:08:22] INFO:   Copy progress: 2060/2060 files processed.
+[2025-11-04 17:08:22] INFO: Image pull complete. Copied: 2060, Failed: 0
+Image pull complete.
+Deactivating conda environment...
+Job finished.
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@c043n04>
+Subject: Job 377587: <image_pull> in cluster <Hazel> Done
+
+Job <image_pull> was submitted from host <login04> by user <rmccune> in cluster <Hazel> at Tue Nov  4 17:07:31 2025
+Job was executed on host(s) <c043n04>, in queue <ccee>, as user <rmccune> in cluster <Hazel> at Tue Nov  4 17:07:32 2025
+</home/rmccune> was used as the home directory.
+</share/jcdietri/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts> was used as the working directory.
+Started at Tue Nov  4 17:07:32 2025
+Terminated at Tue Nov  4 17:08:25 2025
+Results reported at Tue Nov  4 17:08:25 2025
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#! /bin/bash
+
+#BSUB -J image_pull
+#BSUB -W 120
+#BSUB -n 1
+#BSUB -q ccee
+#BSUB -o image_pull.%J.out
+#BSUB -e image_pull.%J.err
+
+echo "Activating conda environment..."
+source ~/.bashrc
+conda activate /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon
+
+REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
+
+RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_image_pull.py"
+EVENT_CSV="$REPO_ROOT/data/carolina_beach/abbr_flood_events.csv"
+
+IMAGE_DRIVE='/rsstu/users/k/kanarde/Sunnyverse-Images'
+OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/all_events_during_FOV"
+
+echo "Starting photo pull Python script..."
+python $RUNNER_SCRIPT \
+    --drive $IMAGE_DRIVE \
+    --dest $OUTPUT_DIR \
+    --csv $EVENT_CSV \
+    --buffer 1.5
+
+echo "Deactivating conda environment..."
+conda deactivate
+
+echo "Job finished."
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   8.51 sec.
+    Max Memory :                                 -
+    Average Memory :                             -
+    Total Requested Memory :                     2.00 GB
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              5
+    Max Threads :                                6
+    Run time :                                   64 sec.
+    Turnaround time :                            54 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <image_pull.377587.err> for stderr output of this job.
+
