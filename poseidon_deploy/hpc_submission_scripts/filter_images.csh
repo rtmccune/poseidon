@@ -16,8 +16,8 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_image_filter.py"
 
 IMAGE_DRIVE='/rsstu/users/k/kanarde/Sunnyverse-Images'
-IMAGE_DIR="$REPO_ROOT/data/carolina_beach/images/all_events_during_FOV"
-OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
+IMAGE_DIR="$REPO_ROOT/data/down_east/images/all_events_during_FOV"
+OUTPUT_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
 
 echo "Starting photo filter Python script..."
 python $RUNNER_SCRIPT \
