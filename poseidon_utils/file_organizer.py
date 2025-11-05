@@ -95,7 +95,7 @@ def filter_abbr_flood_csv_by_eastern_time(
 
         # Convert the 'start_time_UTC' column to datetime objects
         df["start_time_UTC"] = pd.to_datetime(
-            df["start_time_UTC"], errors="coerce"
+            df["start_time_UTC"], errors="coerce", utc=True
         )
 
         # Drop rows where the date conversion failed
@@ -104,7 +104,6 @@ def filter_abbr_flood_csv_by_eastern_time(
         # Localize the UTC times and convert to US/Eastern.
         df["start_time_ET"] = (
             df["start_time_UTC"]
-            .dt.tz_localize("UTC")
             .dt.tz_convert("America/New_York")
         )
 
