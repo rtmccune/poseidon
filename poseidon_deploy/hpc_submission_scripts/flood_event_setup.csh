@@ -8,11 +8,19 @@
 #BSUB -e gen_flood_folders.%J.err
 
 source ~/.bashrc
-ENV_FILE="${LS_SUBCWD:-$PWD}/hpc_paths.env"
+
+# Resolve the directory where the job was submitted from (LSF variable or fallback)
+SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
+
+# Point one directory up from that
+ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
+
+# Load the env file if it exists
 if [ -f "$ENV_FILE" ]; then
     source "$ENV_FILE"
+    echo "Loaded environment variables from $ENV_FILE"
 else
-    echo "Warning: No .env file found at $ENV_FILE"
+    echo "Warning: No hpc_paths.env file found at $ENV_FILE"
 fi
 
 echo "Activating conda environment..."
