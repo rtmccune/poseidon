@@ -1,7 +1,7 @@
 #! /bin/bash
 
 #BSUB -J image_filter
-#BSUB -W 5
+#BSUB -W 15
 #BSUB -n 1
 #BSUB -q ccee
 #BSUB -o image_filter.%J.out
