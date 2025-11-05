@@ -23,6 +23,9 @@ else
     echo "Warning: No hpc_paths.env file found at $ENV_FILE"
 fi
 
+echo "Activating conda environment..."
+conda activate $POSEIDON_ENV
+
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_image_pull.py"
