@@ -2,7 +2,7 @@ import argparse
 import sys
 from datetime import datetime
 
-import poseidon_utils
+import poseidon_utils.file_organizer as file_organizer
 
 
 def main():
