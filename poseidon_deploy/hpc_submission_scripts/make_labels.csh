@@ -47,9 +47,8 @@ echo "Executing overlay generator..."
 
 "${EXEC_PATH}" \
     "${PREDS_DIR}" \
-    "${OUTPUT_DIR}" \
     "${FILE_LIST}" \
-    0.6 # Optional alpha value
+    "${OUTPUT_DIR}" \
 
 echo "------------------------------------------------"
 echo "Execution finished for Job Index ${LSB_JOBINDEX}."
