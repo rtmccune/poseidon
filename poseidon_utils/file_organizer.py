@@ -102,9 +102,8 @@ def filter_abbr_flood_csv_by_eastern_time(
         df.dropna(subset=["start_time_UTC"], inplace=True)
 
         # Localize the UTC times and convert to US/Eastern.
-        df["start_time_ET"] = (
-            df["start_time_UTC"]
-            .dt.tz_convert("America/New_York")
+        df["start_time_ET"] = df["start_time_UTC"].dt.tz_convert(
+            "America/New_York"
         )
 
         # Get the hour of the day
@@ -186,21 +185,31 @@ def create_flood_csvs_and_subfolders(
     # --- Timezone Processing ---
     padding = pd.Timedelta(hours=padding_hours)
 
-    # 'Etc/GMT+5' is the IANA string for a fixed UTC-5 offset.
-    fixed_est_tz = "Etc/GMT+5"
-
     # Convert naive EST strings to aware datetime objects
     try:
-        abbr_df["start_time_EST_aware"] = pd.to_datetime(
-            abbr_df["start_time_EST"]
-        ).dt.tz_localize(fixed_est_tz)
+        # Parse the EST/EDT strings. pd.to_datetime() will automatically
+        # make them "aware" because the strings likely contain offsets.
+        start_time_aware = pd.to_datetime(
+            abbr_df["start_time_EST"], errors="coerce"
+        )
+        end_time_aware = pd.to_datetime(
+            abbr_df["end_time_EST"], errors="coerce"
+        )
 
-        abbr_df["end_time_EST_aware"] = pd.to_datetime(
-            abbr_df["end_time_EST"]
-        ).dt.tz_localize(fixed_est_tz)
+        # Convert to UTC (from whatever offset they had) and apply
+        # padding. This replaces the .tz_localize()...tz_convert() chain.
+        abbr_df["start_time_UTC_padded"] = (
+            start_time_aware.dt.tz_convert("UTC") - padding
+        )
+        abbr_df["end_time_UTC_padded"] = (
+            end_time_aware.dt.tz_convert("UTC") + padding
+        )
 
     except Exception as e:
-        _log(f"Error localizing time columns: {e}", level="error")
+        _log(
+            f"Error processing time columns ('start_time_EST'): {e}",
+            level="error",
+        )
         _log(
             "Please ensure 'start_time_EST' and 'end_time_EST' are valid timestamps.",
             level="error",
