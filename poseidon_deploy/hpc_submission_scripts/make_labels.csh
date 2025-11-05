@@ -1,9 +1,10 @@
 #!/bin/bash
 
 #BSUB -J "make_labels[1-16]"  # <-- EDIT to the exact number of file lists you created.
-#BSUB -W 60
+#BSUB -W 10
 #BSUB -n 16
 #BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=4]"
 #BSUB -q ccee
 #BSUB -o job_outputs/make_labels.%J.%I.out
 #BSUB -e job_outputs/make_labels.%J.%I.err
@@ -22,7 +23,7 @@ echo "------------------------------------------------"
 
 # Path to your compiled C++ executable
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
-EXEC_PATH="$REPO_ROOT/poseidon_utils/bin/overlay_generator"
+EXEC_PATH="$REPO_ROOT/poseidon_utils/bin/pred_label_generator"
 
 # Base directories for your data
 PREDS_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_preds"

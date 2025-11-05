@@ -1,9 +1,10 @@
 #!/bin/bash
 
 #BSUB -J "make_overlay[1-16]"  # <-- EDIT to the exact number of file lists you created.
-#BSUB -W 60
+#BSUB -W 10
 #BSUB -n 16
 #BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=8]"
 #BSUB -q ccee
 #BSUB -o job_outputs/make_overlay.%J.%I.out
 #BSUB -e job_outputs/make_overlay.%J.%I.err
