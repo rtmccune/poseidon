@@ -26,7 +26,7 @@ EXEC_PATH="$REPO_ROOT/poseidon_utils/bin/overlay_generator"
 
 # Base directories for your data
 PREDS_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_preds"
-LISTS_DIR="$IMAGE_DIR/job_file_lists"
+LISTS_DIR="$PREDS_DIR/job_file_lists"
 
 OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_labels"
 
