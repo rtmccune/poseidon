@@ -216,14 +216,6 @@ def create_flood_csvs_and_subfolders(
         )
         return
 
-    # Convert to UTC and apply padding
-    abbr_df["start_time_UTC_padded"] = (
-        abbr_df["start_time_EST_aware"].dt.tz_convert("UTC") - padding
-    )
-    abbr_df["end_time_UTC_padded"] = (
-        abbr_df["end_time_EST_aware"].dt.tz_convert("UTC") + padding
-    )
-
     # Create string representations for file naming
     abbr_df["start_str"] = abbr_df["start_time_UTC_padded"].dt.strftime(
         "%Y%m%d%H%M%S"
