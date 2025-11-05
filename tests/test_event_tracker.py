@@ -1987,3 +1987,378 @@ class TestFinalCoverage:
 
         assert result.iloc[0]["flood_event"] == 1
         assert result.iloc[1]["flood_event"] == 2  # This is the second event
+
+
+@pytest.fixture
+def sample_raw_data():
+    """Provides a simple raw data DataFrame for regeneration tests."""
+    return pd.DataFrame(
+        {
+            "date": [
+                pd.to_datetime("2023-01-01 12:00", utc=True),
+                pd.to_datetime("2023-01-01 12:05", utc=True),
+                pd.to_datetime("2023-01-01 12:10", utc=True),
+            ],
+            "sensor_ID": ["DE_01", "DE_01", "DE_01"],
+            "road_water_level_adj": [0.1, 0.5, -0.1],
+            "sensor_water_level_adj": [1.0, 1.5, 0.9],
+        }
+    )
+
+
+@pytest.fixture
+def sample_abbr_event():
+    """Provides a simple abbreviated event DataFrame for regeneration tests."""
+    eastern = pytz.timezone("EST")
+    start_utc = pd.to_datetime("2023-01-01 12:00", utc=True)
+    end_utc = pd.to_datetime("2023-01-01 12:10", utc=True)
+    return pd.DataFrame(
+        {
+            "flood_event": [1],
+            "sensor_ID": ["DE_01"],
+            "start_time_UTC": [start_utc],
+            "end_time_UTC": [end_utc],
+            "start_time_EST": [start_utc.astimezone(eastern)],
+            "end_time_EST": [end_utc.astimezone(eastern)],
+            "duration_(hours)": [0.167],  # Will be recalculated
+            "max_road_water_level_(ft)": [99.0],  # Will be recalculated
+            "max_road_water_level_(m)": [30.0],  # Will be recalculated
+        }
+    )
+
+
+class TestRegenerationAndCaching:
+
+    def test_pull_data_caches_to_parquet(
+        self, tracker, sample_flood_data, mocker
+    ):
+        """Tests that the pipeline caches the raw data to parquet."""
+        mocker.patch.object(tracker, "get_data", return_value=sample_flood_data)
+        # Mock all subsequent steps so we only test the cache
+        mocker.patch.object(tracker, "_gen_flood_tracker")
+        mocker.patch.object(tracker, "_gen_abbr_flood_event_csv")
+        mocker.patch.object(tracker, "_find_outages")
+        mocker.patch.object(tracker, "_check_for_outage_during_flood")
+        mocker.patch.object(tracker, "_plot_and_save_flood_plots")
+
+        mock_to_parquet = mocker.patch("pandas.DataFrame.to_parquet")
+        mock_to_csv = mocker.patch("pandas.DataFrame.to_csv")
+
+        tracker.pull_data_gen_csvs_and_plots(
+            location="DE_01",
+            output_dir="test_data",
+            raw_data_cache_name="raw.parquet",
+        )
+
+        mock_to_parquet.assert_called_once_with(
+            "test_data/raw.parquet", index=False
+        )
+        mock_to_csv.assert_not_called()
+
+    def test_pull_data_cache_parquet_import_error_fallback(
+        self, tracker, sample_flood_data, mocker
+    ):
+        """Tests that caching falls back to CSV if pyarrow is not installed."""
+        mocker.patch.object(tracker, "get_data", return_value=sample_flood_data)
+        mocker.patch.object(tracker, "_gen_flood_tracker")
+        mocker.patch.object(tracker, "_gen_abbr_flood_event_csv")
+        mocker.patch.object(tracker, "_find_outages")
+        mocker.patch.object(tracker, "_check_for_outage_during_flood")
+        mocker.patch.object(tracker, "_plot_and_save_flood_plots")
+
+        mock_to_parquet = mocker.patch(
+            "pandas.DataFrame.to_parquet", side_effect=ImportError
+        )
+        mock_to_csv = mocker.patch("pandas.DataFrame.to_csv")
+
+        tracker.pull_data_gen_csvs_and_plots(
+            location="DE_01",
+            output_dir="test_data",
+            raw_data_cache_name="raw.parquet",
+        )
+
+        mock_to_parquet.assert_called_once()
+        # Should fall back to CSV with a default name
+        mock_to_csv.assert_called_once_with(
+            "test_data/raw_sensor_data.csv", index=False
+        )
+        print.assert_any_call(
+            "Warning: 'pyarrow' not installed. Falling back to CSV for cache."
+        )
+
+    def test_pull_data_cache_generic_error(
+        self, tracker, sample_flood_data, mocker
+    ):
+        """Tests that caching handles a generic exception and continues."""
+        mocker.patch.object(tracker, "get_data", return_value=sample_flood_data)
+        mock_gen_flood = mocker.patch.object(tracker, "_gen_flood_tracker")
+        mocker.patch.object(tracker, "_gen_abbr_flood_event_csv")
+        mocker.patch.object(tracker, "_find_outages")
+        mocker.patch.object(tracker, "_check_for_outage_during_flood")
+        mocker.patch.object(tracker, "_plot_and_save_flood_plots")
+
+        mock_to_parquet = mocker.patch(
+            "pandas.DataFrame.to_parquet", side_effect=Exception("Disk full")
+        )
+
+        tracker.pull_data_gen_csvs_and_plots(
+            location="DE_01",
+            output_dir="test_data",
+            raw_data_cache_name="raw.parquet",
+        )
+
+        mock_to_parquet.assert_called_once()
+        print.assert_any_call("Failed to cache raw data: Disk full")
+        # Ensure the pipeline continued
+        mock_gen_flood.assert_called_once()
+
+    def test_recalculate_event_summaries(
+        self, tracker, sample_abbr_event, sample_raw_data
+    ):
+        """Tests the recalculation of event summaries."""
+        # Check values before
+        assert sample_abbr_event.iloc[0]["max_road_water_level_(ft)"] == 99.0
+        assert sample_abbr_event.iloc[0]["duration_(hours)"] == 0.167
+
+        recalculated_df = tracker._recalculate_event_summaries(
+            sample_abbr_event, sample_raw_data
+        )
+
+        # Check values after
+        assert len(recalculated_df) == 1
+        event = recalculated_df.iloc[0]
+        assert event["max_road_water_level_(ft)"] == 0.5  # Max from raw data
+        assert event["max_road_water_level_(m)"] == round(0.5 / 3.28, 3)
+        assert event["duration_(hours)"] == round(10 / 60, 3)  # 10 minutes
+
+    def test_recalculate_event_summaries_no_raw_data(
+        self, tracker, sample_abbr_event, sample_raw_data
+    ):
+        """Tests recalculation when raw data is empty for that event."""
+        # Mutate raw data to not match the event
+        sample_raw_data["sensor_ID"] = "DE_02"
+
+        recalculated_df = tracker._recalculate_event_summaries(
+            sample_abbr_event, sample_raw_data
+        )
+
+        event = recalculated_df.iloc[0]
+        # Max levels should be reset to 0
+        assert event["max_road_water_level_(ft)"] == 0.0
+        assert event["max_road_water_level_(m)"] == 0.0
+        # Duration should still be calculated
+        assert event["duration_(hours)"] == round(10 / 60, 3)
+
+    def test_gen_flood_tracker_from_abbr(
+        self, tracker, sample_abbr_event, sample_raw_data, tmp_path, mocker
+    ):
+        """Tests the regeneration of the detailed CSV from the abbreviated one."""
+        csv_path = str(tmp_path / "detail.csv")
+        mock_to_csv = mocker.patch("pandas.DataFrame.to_csv", autospec=True)
+
+        tracker._gen_flood_tracker_from_abbr(
+            sample_raw_data, sample_abbr_event, csv_path
+        )
+
+        mock_to_csv.assert_called_once()
+        # Get the DataFrame passed to to_csv
+        saved_df = mock_to_csv.call_args.args[0]
+
+        assert len(saved_df) == 3  # Matches the 3 rows in raw data
+        assert (saved_df["flood_event"] == 1).all()
+        assert saved_df["road_water_level"].iloc[1] == 0.5
+
+        # Check that summary data is ONLY on the last row
+        assert pd.isna(saved_df["duration_(hours)"].iloc[0])
+        assert pd.isna(saved_df["duration_(hours)"].iloc[1])
+        assert not pd.isna(saved_df["duration_(hours)"].iloc[2])
+
+        assert saved_df["max_road_water_level_(ft)"].iloc[2] == 99.0
+
+    def test_gen_flood_tracker_from_abbr_no_raw_data(
+        self, tracker, sample_abbr_event, sample_raw_data, tmp_path, mocker
+    ):
+        """Tests regeneration when raw data doesn't match the event."""
+        csv_path = str(tmp_path / "detail.csv")
+        mock_to_csv = mocker.patch("pandas.DataFrame.to_csv", autospec=True)
+        sample_raw_data["sensor_ID"] = "DE_02"  # No match
+
+        tracker._gen_flood_tracker_from_abbr(
+            sample_raw_data, sample_abbr_event, csv_path
+        )
+
+        print.assert_any_call(
+            "Warning: No raw data found for event 1 (DE_01). Skipping."
+        )
+        # Should save an empty DataFrame
+        saved_df = mock_to_csv.call_args.args[0]
+        assert saved_df.empty
+
+    def test_regenerate_outputs_from_csv_happy_path(
+        self, tracker, sample_abbr_event, sample_raw_data, tmp_path, mocker
+    ):
+        """Tests the full regeneration pipeline happy path."""
+        # Mock file I/O
+        mocker.patch("pandas.read_csv", return_value=sample_abbr_event)
+        mocker.patch("pandas.read_parquet", return_value=sample_raw_data)
+        mock_to_csv = mocker.patch("pandas.DataFrame.to_csv")
+
+        # Mock internal helpers
+        mock_recalc = mocker.patch.object(
+            tracker,
+            "_recalculate_event_summaries",
+            return_value=sample_abbr_event,
+        )
+        mock_renum = mocker.patch.object(
+            tracker,
+            "_reassign_abbr_flood_numbers",
+            return_value=sample_abbr_event,
+        )
+        mock_gen_detail = mocker.patch.object(
+            tracker, "_gen_flood_tracker_from_abbr"
+        )
+        mock_check_outage = mocker.patch.object(
+            tracker, "_check_for_outage_during_flood"
+        )
+        mock_plot = mocker.patch.object(tracker, "_plot_and_save_flood_plots")
+
+        tracker.regenerate_outputs_from_csv(output_dir=str(tmp_path))
+
+        # Check that all helpers were called in order
+        mock_recalc.assert_called_once()
+        mock_renum.assert_called_once()
+        mock_gen_detail.assert_called_once()
+        mock_check_outage.assert_called_once()
+        mock_plot.assert_called_once()
+
+        # Check that the updated abbr_df was saved
+        mock_to_csv.assert_called_once()
+
+        # Check that plotting was called with force_overwrite=True
+        mock_plot.assert_called_with(
+            sample_raw_data,
+            os.path.join(tmp_path, "abbr_flood_events.csv"),
+            os.path.join(tmp_path, "flood_plots"),
+            force_overwrite=True,
+        )
+
+    def test_regenerate_raw_data_fallback_to_csv(
+        self, tracker, sample_abbr_event, sample_raw_data, tmp_path, mocker
+    ):
+        """Tests that regeneration falls back to reading a raw CSV cache."""
+        mocker.patch(
+            "pandas.read_csv",
+            side_effect=[
+                sample_abbr_event,  # First call (abbr_df)
+                sample_raw_data,  # Second call (raw_data_df fallback)
+            ],
+        )
+        # Make parquet read fail
+        mocker.patch(
+            "pandas.read_parquet", side_effect=FileNotFoundError("no parquet")
+        )
+
+        # Mock subsequent steps to prevent other errors
+        mocker.patch.object(
+            tracker,
+            "_recalculate_event_summaries",
+            return_value=sample_abbr_event,
+        )
+        mocker.patch.object(
+            tracker,
+            "_reassign_abbr_flood_numbers",
+            return_value=sample_abbr_event,
+        )
+        mocker.patch("pandas.DataFrame.to_csv")
+        mocker.patch.object(tracker, "_gen_flood_tracker_from_abbr")
+        mocker.patch.object(tracker, "_check_for_outage_during_flood")
+        mocker.patch.object(tracker, "_plot_and_save_flood_plots")
+
+        tracker.regenerate_outputs_from_csv(
+            output_dir=str(tmp_path),
+            raw_data_cache_name="raw.parquet",  # This will fail
+        )
+
+        # Check that the fallback path was printed
+        print.assert_any_call(
+            "Parquet not found. Trying CSV fallback: "
+            + os.path.join(tmp_path, "raw_sensor_data.csv")
+        )
+
+    def test_regenerate_file_not_found_all(self, tracker, tmp_path, mocker):
+        """Tests regeneration when all raw data files are missing."""
+        mocker.patch("pandas.read_csv", side_effect=FileNotFoundError)
+        mocker.patch("pandas.read_parquet", side_effect=FileNotFoundError)
+
+        tracker.regenerate_outputs_from_csv(output_dir=str(tmp_path))
+
+        # Should fail on the first read (abbreviated CSV)
+        print.assert_any_call(
+            f"Error: Abbreviated events file not found at {tmp_path}/abbr_flood_events.csv"
+        )
+
+        # Now test failure on raw data (if abbr_df was found)
+        mocker.patch(
+            "pandas.read_csv",
+            side_effect=[
+                pd.DataFrame(),  # Good abbr_df
+                FileNotFoundError,  # Fail on raw_csv
+            ],
+        )
+        mocker.patch("pandas.read_parquet", side_effect=FileNotFoundError)
+
+        tracker.regenerate_outputs_from_csv(output_dir=str(tmp_path))
+        print.assert_any_call(
+            f"Error: Raw data cache not found at {tmp_path}/raw_sensor_data.parquet or {tmp_path}/raw_sensor_data.csv"
+        )
+
+    def test_regenerate_date_conversion_error(self, tracker, tmp_path, mocker):
+        """Tests that regeneration stops if date conversion fails."""
+        bad_date_df = pd.DataFrame({"start_time_UTC": ["not a real date"]})
+        raw_df = pd.DataFrame({"date": ["2023-01-01"]})
+
+        mocker.patch("pandas.read_csv", return_value=bad_date_df)
+        mocker.patch("pandas.read_parquet", return_value=raw_df)
+
+        tracker.regenerate_outputs_from_csv(output_dir=str(tmp_path))
+
+        # Get the actual error message from pandas
+        actual_error = "Unknown datetime string format, unable to parse: not a real date, at position 0"
+        
+        # Assert against the correct formatted error string
+        print.assert_any_call(
+            f"Error converting date columns: {actual_error}. Aborting."
+        )
+
+    def test_plot_force_overwrite(
+        self, tracker, sample_flood_data, tmp_path, mocker
+    ):
+        """Tests that force_overwrite=True re-plots an existing file."""
+        flood_df = pd.DataFrame(
+            {
+                "flood_event": [1],
+                "sensor_ID": ["DE_01"],
+                "start_time_UTC": ["2023-01-01 12:00"],
+                "end_time_UTC": ["2023-01-01 12:10"],
+            }
+        )
+        plot_dir = tmp_path / "plots"
+        csv_path = tmp_path / "floods.csv"
+
+        mocker.patch("pandas.read_csv", return_value=flood_df)
+        # Mock os.path.exists to return True (file exists)
+        mocker.patch("os.path.exists", return_value=True)
+        mocker.patch("os.makedirs")
+
+        tracker._plot_and_save_flood_plots(
+            sample_flood_data,
+            str(csv_path),
+            str(plot_dir),
+            force_overwrite=True,  # Set the flag
+        )
+
+        # savefig SHOULD be called
+        plt.savefig.assert_called_once()
+        print.assert_any_call(
+            f"Plot already exists (overwriting): {plot_dir}/flood_event_1_DE_01.png"
+        )
