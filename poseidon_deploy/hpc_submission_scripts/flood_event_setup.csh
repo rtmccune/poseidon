@@ -1,11 +1,11 @@
 #! /bin/bash
 
-#BSUB -J file_org
-#BSUB -W 30
+#BSUB -J gen_flood_folders
+#BSUB -W 60
 #BSUB -n 1
 #BSUB -q ccee
-#BSUB -o file_org.%J.out
-#BSUB -e file_org.%J.err
+#BSUB -o gen_flood_folders.%J.out
+#BSUB -e gen_flood_folders.%J.err
 
 echo "Activating conda environment..."
 source ~/.bashrc
@@ -15,12 +15,12 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_flood_event_setup.py"
 
-ABBR_EVENTS="$REPO_ROOT/data/down_east/abbr_flood_events.csv"
-FILT_ABBR_CSV="$REPO_ROOT/data/down_east/filt_abbr_flood_events.csv"
-FLOOD_EVENTS_CSV="$REPO_ROOT/data/down_east/flood_events.csv"
+ABBR_EVENTS="$REPO_ROOT/data/carolina_beach/abbr_flood_events.csv"
+FILT_ABBR_CSV="$REPO_ROOT/data/carolina_beach/filt_abbr_flood_events.csv"
+FLOOD_EVENTS_CSV="$REPO_ROOT/data/carolina_beach/flood_events.csv"
 
-IMAGE_DIR="$REPO_ROOT/data/down_east/images/all_events_during_FOV"
-OUTPUT_DIR="$REPO_ROOT/data/down_east/flood_events"
+IMAGE_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
+OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
 
 echo "Starting image organizer Python script..."
 python $RUNNER_SCRIPT \
