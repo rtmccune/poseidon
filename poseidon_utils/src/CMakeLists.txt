@@ -38,7 +38,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 # pred_label_generator executable
 # ------------------------------
 add_executable(pred_label_generator pred_label_generator.cpp)
-target_link_libraries(pred_label_generator ${OpenCV_LIBS})
+target_link_libraries(pred_label_generator ${OpenCV_LIBS} Threads::Threads)
 
 # ------------------------------
 # overlay_generator executable

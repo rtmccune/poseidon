@@ -47,7 +47,7 @@ fi
 echo "Executing overlay generator..."
 
 "${EXEC_PATH}" \
-    "${IMAGES_DIR}" \
+    "${IMAGE_DIR}" \
     "${PREDS_DIR}" \
     "${OUTPUT_DIR}" \
     "${FILE_LIST}" \
