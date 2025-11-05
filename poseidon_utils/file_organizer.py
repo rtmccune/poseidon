@@ -407,16 +407,36 @@ def organize_images_into_flood_events(
         _log(f"Image folder not found at '{image_folder}'", level="error")
         return
 
+    total_files = len(all_files)  # <-- Total for progress
     if not all_files:
         _log("No image files found in the source directory.")
         return
+
+    # --- Progress Reporting Setup ---
+    # Only set a step if there are enough files to warrant updates
+    progress_step = 0
+    if total_files > 10:
+        progress_step = total_files // 10  # 10% increment
+    # --- End Progress Setup ---
 
     copy_count = 0
     skip_count = 0
     copied_files = set()  # Keep track of files already copied
 
-    _log(f"Organizing {len(all_files)} images...")
-    for filename in all_files:
+    _log(f"Organizing {total_files} images...")
+
+    # Use enumerate to get the index 'i'
+    for i, filename in enumerate(all_files):
+
+        # --- Progress Reporting Logic ---
+        # Report at 10%, 20%, ... 90%
+        # Check i > 0 to avoid reporting at 0%
+        if progress_step > 0 and i % progress_step == 0 and i > 0:
+            percent_complete = int((i / total_files) * 100)
+            _log(
+                f"  ...progress: {percent_complete}% complete ({i} of {total_files} images processed)"
+            )
+        # --- End Progress Reporting ---
 
         # Extract info from the image filename
         camera_name = extract_camera_name(filename)
