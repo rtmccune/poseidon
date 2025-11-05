@@ -34,7 +34,9 @@ def _log(message, level="info"):
         print(formatted_message, file=sys.stdout)
 
 
-def filter_abbr_flood_csv_by_eastern_time(input_path, output_path, min_hour=6, max_hour=20):
+def filter_abbr_flood_csv_by_eastern_time(
+    input_path, output_path, min_hour=6, max_hour=19
+):
     """
     Filter a CSV by hour of day in US/Eastern Time.
 
@@ -79,27 +81,40 @@ def filter_abbr_flood_csv_by_eastern_time(input_path, output_path, min_hour=6, m
         df = pd.read_csv(input_path)
 
         # Ensure the required UTC column exists
-        required_column = 'start_time_UTC'
+        required_column = "start_time_UTC"
         if required_column not in df.columns:
-            _log(f"Input CSV must contain the column '{required_column}'", level="error")
+            _log(
+                f"Input CSV must contain the column '{required_column}'",
+                level="error",
+            )
             return
 
-        _log(f"Converting UTC to Eastern Time and filtering for hours {min_hour}:00 to {max_hour}:00")
+        _log(
+            f"Converting UTC to Eastern Time and filtering for hours {min_hour}:00 to {max_hour}:00"
+        )
 
         # Convert the 'start_time_UTC' column to datetime objects
-        df['start_time_UTC'] = pd.to_datetime(df['start_time_UTC'], errors='coerce')
+        df["start_time_UTC"] = pd.to_datetime(
+            df["start_time_UTC"], errors="coerce"
+        )
 
         # Drop rows where the date conversion failed
-        df.dropna(subset=['start_time_UTC'], inplace=True)
+        df.dropna(subset=["start_time_UTC"], inplace=True)
 
         # Localize the UTC times and convert to US/Eastern.
-        df['start_time_ET'] = df['start_time_UTC'].dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+        df["start_time_ET"] = (
+            df["start_time_UTC"]
+            .dt.tz_localize("UTC")
+            .dt.tz_convert("America/New_York")
+        )
 
         # Get the hour of the day
-        hour_of_day = df['start_time_ET'].dt.hour
+        hour_of_day = df["start_time_ET"].dt.hour
 
         # Filter the DataFrame
-        filtered_df = df[(hour_of_day >= min_hour) & (hour_of_day < max_hour)].copy()
+        filtered_df = df[
+            (hour_of_day >= min_hour) & (hour_of_day < max_hour)
+        ].copy()
 
         _log(f"Saving filtered data to '{output_path}'")
         filtered_df.to_csv(output_path, index=False)
@@ -112,7 +127,9 @@ def filter_abbr_flood_csv_by_eastern_time(input_path, output_path, min_hour=6, m
         _log(f"An unexpected error occurred: {e}", level="error")
 
 
-def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path, output_parent_dir, padding_hours=3):
+def create_flood_csvs_and_subfolders(
+    abbr_events_path, full_events_path, output_parent_dir, padding_hours=3
+):
     """
     Filters full event data based on abbreviated event windows and saves
     each event into its own subfolder.
@@ -166,57 +183,68 @@ def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path, output_
         return
 
     _log(f"Processing event time windows with {padding_hours}-hour padding...")
-    
+
     # --- Timezone Processing ---
     padding = pd.Timedelta(hours=padding_hours)
-    
+
     # 'Etc/GMT+5' is the IANA string for a fixed UTC-5 offset.
-    fixed_est_tz = 'Etc/GMT+5'
+    fixed_est_tz = "Etc/GMT+5"
 
     # Convert naive EST strings to aware datetime objects
     try:
-        abbr_df['start_time_EST_aware'] = pd.to_datetime(
-            abbr_df['start_time_EST']
+        abbr_df["start_time_EST_aware"] = pd.to_datetime(
+            abbr_df["start_time_EST"]
         ).dt.tz_localize(fixed_est_tz)
-        
-        abbr_df['end_time_EST_aware'] = pd.to_datetime(
-            abbr_df['end_time_EST']
+
+        abbr_df["end_time_EST_aware"] = pd.to_datetime(
+            abbr_df["end_time_EST"]
         ).dt.tz_localize(fixed_est_tz)
-        
+
     except Exception as e:
         _log(f"Error localizing time columns: {e}", level="error")
-        _log("Please ensure 'start_time_EST' and 'end_time_EST' are valid timestamps.", level="error")
+        _log(
+            "Please ensure 'start_time_EST' and 'end_time_EST' are valid timestamps.",
+            level="error",
+        )
         return
 
     # Convert to UTC and apply padding
-    abbr_df['start_time_UTC_padded'] = abbr_df['start_time_EST_aware'].dt.tz_convert('UTC') - padding
-    abbr_df['end_time_UTC_padded'] = abbr_df['end_time_EST_aware'].dt.tz_convert('UTC') + padding
+    abbr_df["start_time_UTC_padded"] = (
+        abbr_df["start_time_EST_aware"].dt.tz_convert("UTC") - padding
+    )
+    abbr_df["end_time_UTC_padded"] = (
+        abbr_df["end_time_EST_aware"].dt.tz_convert("UTC") + padding
+    )
 
     # Create string representations for file naming
-    abbr_df['start_str'] = abbr_df['start_time_UTC_padded'].dt.strftime('%Y%m%d%H%M%S')
-    abbr_df['end_str'] = abbr_df['end_time_UTC_padded'].dt.strftime('%Y%m%d%H%M%S')
+    abbr_df["start_str"] = abbr_df["start_time_UTC_padded"].dt.strftime(
+        "%Y%m%d%H%M%S"
+    )
+    abbr_df["end_str"] = abbr_df["end_time_UTC_padded"].dt.strftime(
+        "%Y%m%d%H%M%S"
+    )
 
     # Ensure the full data's time column is timezone-aware UTC
-    full_df['time_UTC'] = pd.to_datetime(full_df['time_UTC'], utc=True)
+    full_df["time_UTC"] = pd.to_datetime(full_df["time_UTC"], utc=True)
 
     _log(f"Generating filtered CSVs in '{output_parent_dir}'...")
     os.makedirs(output_parent_dir, exist_ok=True)
-    
+
     created_count = 0
     total_events = len(abbr_df)
     _log(f"Starting to process {total_events} events...")
 
     # --- Main Loop: Filter and Save ---
     for index, row in abbr_df.iterrows():
-        sensor_id = row['sensor_ID']
-        start_time = row['start_time_UTC_padded']
-        end_time = row['end_time_UTC_padded']
-        
+        sensor_id = row["sensor_ID"]
+        start_time = row["start_time_UTC_padded"]
+        end_time = row["end_time_UTC_padded"]
+
         # Filter the full DataFrame
         filtered_df = full_df[
-            (full_df['sensor_ID'] == sensor_id) &
-            (full_df['time_UTC'] >= start_time) &
-            (full_df['time_UTC'] <= end_time)
+            (full_df["sensor_ID"] == sensor_id)
+            & (full_df["time_UTC"] >= start_time)
+            & (full_df["time_UTC"] <= end_time)
         ]
 
         if filtered_df.empty:
@@ -226,15 +254,17 @@ def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path, output_
         folder_name = f"{sensor_id}_{row['start_str']}_{row['end_str']}"
         subfolder_path = os.path.join(output_parent_dir, folder_name)
         os.makedirs(subfolder_path, exist_ok=True)
-        
+
         csv_filename = f"{folder_name}.csv"
         output_path = os.path.join(subfolder_path, csv_filename)
-        
+
         filtered_df.to_csv(output_path, index=False)
         created_count += 1
 
-    _log(f"Script complete. Successfully created {created_count} CSV files in subfolders.")
-    
+    _log(
+        f"Script complete. Successfully created {created_count} CSV files in subfolders."
+    )
+
 
 def extract_camera_name(filename):
     """
@@ -282,12 +312,13 @@ def organize_images_into_flood_events(
     image_folder, csv_file, destination_folder, subfolder_name, padding_hours=3
 ):
     """
-    Efficiently organizes images into folders based on flood event time ranges.
+    Efficiently organizes images into folders based on flood event time
+    ranges.
 
     This "single-pass" method builds a lookup of events first, then
     iterates through all images once, placing them in the correct
     event folder.
-    
+
     Parameters
     ----------
     image_folder : str
@@ -314,7 +345,7 @@ def organize_images_into_flood_events(
     FileNotFoundError
         If `csv_file` or `image_folder` is not found.
     """
-    
+
     # --- 1. Build Event Lookup Dictionary ---
     _log(f"Reading event data from '{csv_file}'")
     try:
@@ -322,20 +353,24 @@ def organize_images_into_flood_events(
     except FileNotFoundError:
         _log(f"CSV file not found at '{csv_file}'", level="error")
         return
-        
+
     _log(f"Applying {padding_hours}-hour padding to event windows...")
 
     padding = pd.Timedelta(hours=padding_hours)
 
     # Apply padding and create folder names
-    df["start_time_UTC"] = pd.to_datetime(df["start_time_UTC"], utc=True) - padding
+    df["start_time_UTC"] = (
+        pd.to_datetime(df["start_time_UTC"], utc=True) - padding
+    )
     df["end_time_UTC"] = pd.to_datetime(df["end_time_UTC"], utc=True) + padding
-    
+
     df["start_time_str"] = df["start_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
     df["end_time_str"] = df["end_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
-    
+
     df["camera_ID"] = "CAM_" + df["sensor_ID"]
-    df["folder_name"] = df["sensor_ID"] + "_" + df["start_time_str"] + "_" + df["end_time_str"]
+    df["folder_name"] = (
+        df["sensor_ID"] + "_" + df["start_time_str"] + "_" + df["end_time_str"]
+    )
 
     # Create the lookup: { camera_ID: [ (start, end, folder_name), ... ] }
     event_lookup = defaultdict(list)
@@ -343,18 +378,21 @@ def organize_images_into_flood_events(
         event_details = (
             row["start_time_UTC"],
             row["end_time_UTC"],
-            row["folder_name"]
+            row["folder_name"],
         )
         event_lookup[row["camera_ID"]].append(event_details)
 
-    _log(f"Built lookup for {len(df)} events across {len(event_lookup)} cameras.")
+    _log(
+        f"Built lookup for {len(df)} events across {len(event_lookup)} cameras."
+    )
 
     # --- 2. Process All Images in a Single Pass ---
     _log(f"Scanning image folder: '{image_folder}'...")
-    
+
     try:
         all_files = [
-            f for f in os.listdir(image_folder) 
+            f
+            for f in os.listdir(image_folder)
             if f.lower().endswith((".png", ".jpg", ".jpeg"))
         ]
     except FileNotFoundError:
@@ -367,11 +405,11 @@ def organize_images_into_flood_events(
 
     copy_count = 0
     skip_count = 0
-    copied_files = set() # Keep track of files already copied
+    copied_files = set()  # Keep track of files already copied
 
     _log(f"Organizing {len(all_files)} images...")
     for filename in all_files:
-        
+
         # Extract info from the image filename
         camera_name = extract_camera_name(filename)
         timestamp_str = extract_timestamp(filename)
@@ -381,36 +419,42 @@ def organize_images_into_flood_events(
             continue
 
         try:
-            img_time = pd.to_datetime(timestamp_str, format="%Y%m%d%H%M%S", utc=True)
+            img_time = pd.to_datetime(
+                timestamp_str, format="%Y%m%d%H%M%S", utc=True
+            )
         except ValueError:
-            skip_count += 1 # Skip files with bad timestamps
-            continue 
+            skip_count += 1  # Skip files with bad timestamps
+            continue
 
         # Find a matching event for this image
         if camera_name in event_lookup:
             for start_time, end_time, folder_name in event_lookup[camera_name]:
-                
+
                 # Check if the image time is within the event window
                 if start_time <= img_time <= end_time:
-                    
+
                     # --- 3. Create Folder and Copy File ---
                     dest_path = os.path.join(
                         destination_folder, folder_name, subfolder_name
                     )
                     os.makedirs(dest_path, exist_ok=True)
-                    
+
                     src_file = os.path.join(image_folder, filename)
                     dest_file = os.path.join(dest_path, filename)
-                    
+
                     # Only copy if it doesn't already exist
-                    if dest_file not in copied_files and not os.path.exists(dest_file):
-                        shutil.copy2(src_file, dest_file) # copy2 preserves metadata
+                    if dest_file not in copied_files and not os.path.exists(
+                        dest_file
+                    ):
+                        shutil.copy2(
+                            src_file, dest_file
+                        )  # copy2 preserves metadata
                         copy_count += 1
                         copied_files.add(dest_file)
-                    
+
                     # An image might belong to multiple overlapping events
                     # So we continue checking, not 'break'
-    
+
     _log("--- Image Organization Complete ---")
     _log(f"Successfully copied: {copy_count} files")
     _log(f"Skipped (no match):  {skip_count} files")
