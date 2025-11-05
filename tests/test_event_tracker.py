@@ -2324,7 +2324,7 @@ class TestRegenerationAndCaching:
 
         # Get the actual error message from pandas
         actual_error = "Unknown datetime string format, unable to parse: not a real date, at position 0"
-        
+
         # Assert against the correct formatted error string
         print.assert_any_call(
             f"Error converting date columns: {actual_error}. Aborting."

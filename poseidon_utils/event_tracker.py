@@ -1515,10 +1515,14 @@ class EventTracker:
             )
             if not event_df.empty:
                 event_df["start_time_EST"] = (
-                    event_df["start_time_EST"].dt.tz_localize("UTC").dt.tz_convert(eastern)
+                    event_df["start_time_EST"]
+                    .dt.tz_localize("UTC")
+                    .dt.tz_convert(eastern)
                 )
                 event_df["end_time_EST"] = (
-                    event_df["end_time_EST"].dt.tz_localize("UTC").dt.tz_convert(eastern)
+                    event_df["end_time_EST"]
+                    .dt.tz_localize("UTC")
+                    .dt.tz_convert(eastern)
                 )
 
             event_df["duration_(hours)"] = pd.NA
