@@ -4,6 +4,7 @@ poseidon_utils/bin/*
 poseidon_utils/src/build/
 mysecrets.py
 poseidon_deploy/hpc_submission_scripts/job_outputs/*
+poseidon_deploy/hpc_paths.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

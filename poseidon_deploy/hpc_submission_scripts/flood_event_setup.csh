@@ -7,9 +7,16 @@
 #BSUB -o gen_flood_folders.%J.out
 #BSUB -e gen_flood_folders.%J.err
 
-echo "Activating conda environment..."
 source ~/.bashrc
-conda activate /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon
+ENV_FILE="${LS_SUBCWD:-$PWD}/hpc_paths.env"
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+else
+    echo "Warning: No .env file found at $ENV_FILE"
+fi
+
+echo "Activating conda environment..."
+conda activate $POSEIDON_ENV
 
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
