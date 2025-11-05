@@ -35,7 +35,7 @@ IMAGE_DIR="$REPO_ROOT/data/down_east/images/all_events_during_FOV"
 OUTPUT_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
 
 echo "Starting photo filter Python script..."
-python $RUNNER_SCRIPT \
+python -u $RUNNER_SCRIPT \
     --drive $IMAGE_DRIVE \
     --image_dir $IMAGE_DIR \
     --dest $OUTPUT_DIR \

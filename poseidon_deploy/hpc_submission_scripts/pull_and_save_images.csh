@@ -34,7 +34,7 @@ EVENT_CSV="$REPO_ROOT/data/carolina_beach/abbr_flood_events.csv"
 OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/all_events_during_FOV"
 
 echo "Starting photo pull Python script..."
-python $RUNNER_SCRIPT \
+python -u $RUNNER_SCRIPT \
     --drive $IMAGE_DRIVE \
     --dest $OUTPUT_DIR \
     --csv $EVENT_CSV \

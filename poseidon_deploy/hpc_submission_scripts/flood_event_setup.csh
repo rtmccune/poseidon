@@ -38,7 +38,7 @@ IMAGE_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
 OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
 
 echo "Starting image organizer Python script..."
-python $RUNNER_SCRIPT \
+python -u $RUNNER_SCRIPT \
     --abbr_events_csv $ABBR_EVENTS \
     --filtered_abbr_csv $FILT_ABBR_CSV \
     --full_sensor_csv $FLOOD_EVENTS_CSV \
