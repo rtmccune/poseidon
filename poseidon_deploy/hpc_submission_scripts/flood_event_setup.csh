@@ -43,7 +43,7 @@ python -u $RUNNER_SCRIPT \
     --filtered_abbr_csv $FILT_ABBR_CSV \
     --full_sensor_csv $FLOOD_EVENTS_CSV \
     --image_dir $IMAGE_DIR \
-    --dest $OUTPUT_DIR \
+    --output_dir $OUTPUT_DIR \
     --image_subfolder 'orig_images' \
     --start_hour 6 \
     --end_hour 19 \
