@@ -1,12 +1,12 @@
-# Standard library imports
 import os
 import re
 import shutil
 import sys
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
-# Third-party imports
+import numpy as np
 import pandas as pd
 
 
@@ -478,3 +478,88 @@ def organize_images_into_flood_events(
     _log("--- Image Organization Complete ---")
     _log(f"Successfully copied: {copy_count} files")
     _log(f"Skipped (no match):  {skip_count} files")
+
+
+def prepare_job_lists(image_folder: str, num_jobs: int, output_dir: str = None):
+    """
+    Prepare file lists for an HPC job array.
+
+    Scans a source directory for files, filters hidden files (starting with '.'),
+    and splits the sorted file list into a specified number of new text files.
+    These output files are designed to be used as inputs for an HPC job array,
+    where each job processes one text file listing its assigned images.
+
+    Parameters
+    ----------
+    image_folder : str
+        The absolute or relative path to the directory containing the files
+        to be processed.
+    num_jobs : int
+        The total number of job array tasks, which determines the number
+        of output file lists to create.
+    output_dir : str, optional
+        The directory where the 'file_list_*.txt' files will be saved.
+        If None (default), a new directory 'job_file_lists' will be
+        created in the parent directory of `image_folder`.
+
+    Returns
+    -------
+    None
+        This function does not return a value. It creates files on disk as
+        a side effect and prints status messages to the console.
+
+    """
+    # Resolve the input path immediately to get a full, absolute path.
+    image_path = Path(image_folder).resolve()
+
+    # Check if the source directory exists early on
+    if not image_path.is_dir():
+        print(
+            f"Error: The specified image folder does not exist: '{image_path}'"
+        )
+        return
+
+    if output_dir is None:
+        # Create 'job_file_lists' in the parent directory of the source images.
+        final_output_path = image_path.parent / "job_file_lists"
+        print(
+            f"Output directory not specified. Defaulting to: {final_output_path}"
+        )
+    else:
+        # If an output directory is specified, resolve it to an absolute path too.
+        final_output_path = Path(output_dir).resolve()
+        print(f"Using specified output directory: {final_output_path}")
+
+    # Create the final output directory if it doesn't exist.
+    final_output_path.mkdir(parents=True, exist_ok=True)
+
+    # Get sorted list of files using modern pathlib
+    files = sorted(
+        [
+            f.name
+            for f in image_path.iterdir()
+            if f.is_file() and not f.name.startswith(".")
+        ]
+    )
+
+    if not files:
+        print(
+            f"Warning: No valid files found in '{image_path}'. No lists created."
+        )
+        return
+
+    total_files = len(files)
+
+    # Split into chunks for number of jobs
+    file_chunks = np.array_split(files, num_jobs)
+
+    for i, chunk in enumerate(file_chunks):
+        list_filename = final_output_path / f"file_list_{i+1}.txt"
+
+        with open(list_filename, "w") as f:
+            for filename in chunk:
+                f.write(filename + "\n")
+
+    print(
+        f"\nSuccess! Created {len(file_chunks)} file lists in '{final_output_path}' for a total of {total_files} files."
+    )
