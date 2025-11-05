@@ -158,6 +158,7 @@ class EventTracker:
         # Combine and Return Data
         return self._process_and_combine_data(all_dataframes)
 
+    # === MODIFIED: Added raw_data_cache_name parameter and caching step ===
     def pull_data_gen_csvs_and_plots(
         self,
         location: str | List[str],
@@ -167,6 +168,7 @@ class EventTracker:
         abbr_csv_name: str = "abbr_flood_events.csv",
         outage_csv_name: str = "sensor_outages.csv",
         plot_folder: str = "flood_plots",
+        raw_data_cache_name: str = "raw_sensor_data.parquet",
     ) -> Optional[pd.DataFrame]:
         """
         Runs the full data pipeline: fetch, process, and output.
@@ -189,6 +191,9 @@ class EventTracker:
             Filename for the sensor outage log CSV.
         plot_folder : str, optional
             Name of the directory to save flood plots to.
+        raw_data_cache_name : str, optional
+            Filename for caching the raw downloaded data (e.g.,
+            'raw_data.parquet'). Default is 'raw_sensor_data.parquet'.
 
         Returns
         -------
@@ -197,10 +202,11 @@ class EventTracker:
             data pull fails.
         """
         os.makedirs(output_dir, exist_ok=True)
-        full_csv_name = os.path.join(output_dir, full_csv_name)
-        abbr_csv_name = os.path.join(output_dir, abbr_csv_name)
-        outage_csv_name = os.path.join(output_dir, outage_csv_name)
-        plot_folder = os.path.join(output_dir, plot_folder)
+        full_csv_path = os.path.join(output_dir, full_csv_name)
+        abbr_csv_path = os.path.join(output_dir, abbr_csv_name)
+        outage_csv_path = os.path.join(output_dir, outage_csv_name)
+        plot_folder_path = os.path.join(output_dir, plot_folder)
+        raw_data_path = os.path.join(output_dir, raw_data_cache_name)
 
         print(f"Starting data pull for location: '{location}'")
         download_data = self.get_data(location, chunk_days)
@@ -213,26 +219,49 @@ class EventTracker:
 
         print(f"Data pull successful. Shape: {download_data.shape}")
 
+        # === NEW: Cache the raw data ===
+        print(f"Caching raw data to {raw_data_path}...")
+        try:
+            # Use parquet for efficiency and type preservation
+            download_data.to_parquet(raw_data_path, index=False)
+            print("Raw data cached successfully.")
+        except ImportError:
+            # Fallback to CSV if pyarrow isn't installed
+            print(
+                "Warning: 'pyarrow' not installed. Falling back to CSV for cache."
+            )
+            raw_data_path = os.path.join(
+                output_dir, "raw_sensor_data.csv"
+            )
+            download_data.to_csv(raw_data_path, index=False)
+        except Exception as e:
+            print(f"Failed to cache raw data: {e}")
+            # Don't stop the whole process, just warn
+        # === END NEW ===
+
         print("Generating CSVs...")
         try:
-            self._gen_flood_tracker(download_data, full_csv_name)
-            self._gen_abbr_flood_event_csv(download_data, abbr_csv_name)
+            self._gen_flood_tracker(download_data, full_csv_path)
+            self._gen_abbr_flood_event_csv(download_data, abbr_csv_path)
             print("CSV files created successfully.")
         except Exception as e:
             print(f"An error occurred during CSV generation: {e}")
 
         print("Checking for sensor outages...")
         try:
-            self._find_outages(download_data, outage_csv_name)
-            self._check_for_outage_during_flood(outage_csv_name, abbr_csv_name)
+            self._find_outages(download_data, outage_csv_path)
+            self._check_for_outage_during_flood(
+                outage_csv_path, abbr_csv_path
+            )
             print("Sensor outage logs generated and CSVs appended.")
         except Exception as e:
             print(f"An error occurred during outage check: {e}")
 
         print("Plotting flood events...")
         try:
+            # === MODIFIED: Pass the plot_folder_path ===
             self._plot_and_save_flood_plots(
-                download_data, abbr_csv_name, plot_folder
+                download_data, abbr_csv_path, plot_folder_path
             )
             print("Plotting completed.")
         except Exception as e:
@@ -240,6 +269,159 @@ class EventTracker:
 
         return download_data
 
+    # === NEW: Public method for regeneration ===
+    def regenerate_outputs_from_csv(
+        self,
+        output_dir: str = "data",
+        raw_data_cache_name: str = "raw_sensor_data.parquet",
+        abbr_csv_name: str = "abbr_flood_events.csv",
+        full_csv_name: str = "flood_events.csv",
+        outage_csv_name: str = "sensor_outages.csv",
+        plot_folder: str = "flood_plots",
+    ):
+        """
+        Regenerates all outputs from a manually edited abbreviated
+        flood event CSV.
+
+        This method reads the specified `abbr_csv_name`,
+        recalculates all summaries (duration, max levels),
+        cleans/re-numbers it, and then uses it along with the
+        `raw_data_cache_name` to regenerate the detailed
+        `full_csv_name` and all `plot_folder` plots. It also
+        re-runs the outage check.
+
+        Parameters
+        ----------
+        output_dir : str, optional
+            Directory where all input/output files are located.
+        raw_data_cache_name : str, optional
+            Filename of the cached raw data (e.g.,
+            'raw_sensor_data.parquet').
+        abbr_csv_name : str, optional
+            Filename of the *manually edited* abbreviated flood event
+            CSV.
+        full_csv_name : str, optional
+            Filename for the detailed, row-by-row flood event CSV
+            (this file will be overwritten).
+        outage_csv_name : str, optional
+            Filename for the sensor outage log CSV (will be read and
+            updated).
+        plot_folder : str, optional
+            Name of the directory to save new plots to (will
+            overwrite existing plots).
+        """
+        print("--- Starting Regeneration Process ---")
+        # Define all full paths
+        full_csv_path = os.path.join(output_dir, full_csv_name)
+        abbr_csv_path = os.path.join(output_dir, abbr_csv_name)
+        outage_csv_path = os.path.join(output_dir, outage_csv_name)
+        plot_folder_path = os.path.join(output_dir, plot_folder)
+        raw_data_path = os.path.join(output_dir, raw_data_cache_name)
+
+        # 1. Load Inputs
+        try:
+            print(f"Loading manually-edited events from: {abbr_csv_path}")
+            abbr_df = pd.read_csv(abbr_csv_path)
+        except FileNotFoundError:
+            print(f"Error: Abbreviated events file not found at {abbr_csv_path}")
+            return
+
+        try:
+            print(f"Loading cached raw data from: {raw_data_path}")
+            if raw_data_path.endswith(".parquet"):
+                raw_data_df = pd.read_parquet(raw_data_path)
+            else:
+                raw_data_df = pd.read_csv(raw_data_path)
+        except FileNotFoundError:
+            # Try CSV fallback
+            csv_fallback_path = os.path.join(
+                output_dir, "raw_sensor_data.csv"
+            )
+            try:
+                print(
+                    f"Parquet not found. Trying CSV fallback: {csv_fallback_path}"
+                )
+                raw_data_df = pd.read_csv(csv_fallback_path)
+            except FileNotFoundError:
+                print(
+                    f"Error: Raw data cache not found at {raw_data_path} or {csv_fallback_path}"
+                )
+                print(
+                    "Please run `pull_data_gen_csvs_and_plots` first to generate the cache."
+                )
+                return
+        except Exception as e:
+            print(f"Error loading raw data: {e}")
+            return
+
+        # === MODIFIED: Ensure all date columns are converted before processing ===
+        try:
+            raw_data_df["date"] = pd.to_datetime(raw_data_df["date"], utc=True)
+            abbr_df["start_time_UTC"] = pd.to_datetime(
+                abbr_df["start_time_UTC"], utc=True
+            )
+            abbr_df["end_time_UTC"] = pd.to_datetime(
+                abbr_df["end_time_UTC"], utc=True
+            )
+        except Exception as e:
+            print(f"Error converting date columns: {e}. Aborting.")
+            return
+
+        print("Raw data and event CSVs loaded successfully.")
+
+        # 2. QC and Recalculate the Abbreviated CSV
+        print("Recalculating event summaries (duration, max levels)...")
+        # === NEW: Call the new helper ===
+        try:
+            abbr_df = self._recalculate_event_summaries(abbr_df, raw_data_df)
+        except Exception as e:
+            print(f"Error during recalculation: {e}")
+            # Continue, but warn the user
+            
+        print("Re-numbering and cleaning flood events...")
+        # This re-sorts by date and re-assigns sequential flood_event numbers
+        abbr_df = self._reassign_abbr_flood_numbers(abbr_df)
+
+        # Save the updated file
+        abbr_df.to_csv(abbr_csv_path, index=False)
+        print(f"Cleaned and recalculated event file saved to {abbr_csv_path}")
+
+        # 3. Regenerate Detailed CSV
+        print(f"Regenerating detailed event file: {full_csv_path}...")
+        try:
+            self._gen_flood_tracker_from_abbr(
+                raw_data_df, abbr_df, full_csv_path
+            )
+        except Exception as e:
+            print(f"Error during detailed CSV regeneration: {e}")
+            return
+
+        # 4. Re-check Outages
+        print(f"Re-checking outages for {outage_csv_path}...")
+        try:
+            self._check_for_outage_during_flood(
+                outage_csv_path, abbr_csv_path
+            )
+            print("Outage check complete.")
+        except Exception as e:
+            print(f"Error during outage check: {e}")
+            # Don't stop, just warn
+
+        # 5. Regenerate Plots
+        print(f"Regenerating plots in {plot_folder_path} (forcing overwrite)...")
+        try:
+            self._plot_and_save_flood_plots(
+                raw_data_df,
+                abbr_csv_path,
+                plot_folder_path,
+                force_overwrite=True,
+            )
+            print("Plotting completed.")
+        except Exception as e:
+            print(f"An error occurred during plotting: {e}")
+
+        print("--- Regeneration Complete ---")
+    
     def _sensor_list_generator(self, location_name: str) -> List[str]:
         """
         Provides a sensor identity list for a given location.
@@ -800,6 +982,73 @@ class EventTracker:
 
         df["flood_event"] = df["flood_event"].astype(int)
         return df
+    
+    def _recalculate_event_summaries(
+        self, abbr_df: pd.DataFrame, raw_data_df: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Updates duration, EST times, and max water levels in
+        abbr_df based on its start/end times and the raw data.
+
+        Parameters
+        ----------
+        abbr_df : pd.DataFrame
+            The loaded abbreviated events DataFrame.
+        raw_data_df : pd.DataFrame
+            The cached raw sensor data.
+
+        Returns
+        -------
+        pd.DataFrame
+            The abbr_df with recalculated summary columns.
+        """
+        # Make sure we are not modifying a copy
+        abbr_df = abbr_df.copy()
+        
+        # Ensure raw data `date` column is datetime
+        raw_data_df["date"] = pd.to_datetime(raw_data_df["date"], utc=True)
+        
+        eastern = pytz.timezone("EST")
+
+        for index, event in abbr_df.iterrows():
+            start_utc = event["start_time_UTC"]
+            end_utc = event["end_time_UTC"]
+            sensor_id = event["sensor_ID"]
+
+            # 1. Recalculate Duration
+            duration_seconds = (end_utc - start_utc).total_seconds()
+            duration_hours = round(duration_seconds / 3600, 3)
+            abbr_df.loc[index, "duration_(hours)"] = duration_hours
+
+            # 2. Recalculate EST Times
+            abbr_df.loc[index, "start_time_EST"] = start_utc.astimezone(
+                eastern
+            )
+            abbr_df.loc[index, "end_time_EST"] = end_utc.astimezone(eastern)
+
+            # 3. Recalculate Max Water Levels
+            event_mask = (
+                (raw_data_df["sensor_ID"] == sensor_id)
+                & (raw_data_df["date"] >= start_utc)
+                & (raw_data_df["date"] <= end_utc)
+            )
+            event_raw_data = raw_data_df[event_mask]
+
+            if event_raw_data.empty:
+                # No raw data for this event, set maxes to 0
+                max_ft = 0.0
+            else:
+                max_ft = event_raw_data["road_water_level_adj"].max()
+                # Handle case where all data in range might be NaN
+                if pd.isna(max_ft):
+                    max_ft = 0.0
+
+            max_m = max_ft / 3.28
+
+            abbr_df.loc[index, "max_road_water_level_(ft)"] = round(max_ft, 3)
+            abbr_df.loc[index, "max_road_water_level_(m)"] = round(max_m, 3)
+
+        return abbr_df
 
     def _gen_abbr_flood_event_csv(
         self,
@@ -1176,6 +1425,161 @@ class EventTracker:
 
         updated_data.to_csv(csv_filename, index=False)
 
+    # === NEW: Private method for regenerating detailed CSV ===
+    def _gen_flood_tracker_from_abbr(
+        self,
+        raw_data: pd.DataFrame,
+        abbr_events_df: pd.DataFrame,
+        csv_filename: str,
+    ):
+        """
+        Regenerates the detailed flood tracker CSV from an
+        abbreviated event list.
+
+        This method uses the event start/end times from the
+        `abbr_events_df` and filters the `raw_data` to build a
+        new, detailed `flood_events.csv`.
+
+        Parameters
+        ----------
+        raw_data : pd.DataFrame
+            The cached raw data DataFrame (e.g., from
+            'raw_sensor_data.parquet').
+        abbr_events_df : pd.DataFrame
+            The loaded and cleaned abbreviated flood events
+            DataFrame.
+        csv_filename : str
+            The path to save the new detailed CSV file to.
+        """
+        all_event_dfs = []
+        eastern = pytz.timezone("EST")
+
+        # Ensure raw_data dates are correct
+        raw_data["date"] = pd.to_datetime(raw_data["date"], utc=True)
+
+        # Ensure abbr_events_df dates are correct
+        abbr_events_df["start_time_UTC"] = pd.to_datetime(
+            abbr_events_df["start_time_UTC"], utc=True
+        )
+        abbr_events_df["end_time_UTC"] = pd.to_datetime(
+            abbr_events_df["end_time_UTC"], utc=True
+        )
+        
+        # Handle EST columns, ensuring they are timezone-aware.
+        # This handles strings from CSV or existing datetime objects.
+        abbr_events_df["start_time_EST"] = pd.to_datetime(
+            abbr_events_df["start_time_EST"]
+        ).apply(lambda x: x.tz_localize(eastern) if x.tzinfo is None else x.tz_convert(eastern))
+        abbr_events_df["end_time_EST"] = pd.to_datetime(
+            abbr_events_df["end_time_EST"]
+        ).apply(lambda x: x.tz_localize(eastern) if x.tzinfo is None else x.tz_convert(eastern))
+
+
+        for _, row in abbr_events_df.iterrows():
+            event_num = row["flood_event"]
+            sensor_id = row["sensor_ID"]
+            start_utc = row["start_time_UTC"]
+            end_utc = row["end_time_UTC"]
+
+            # Filter raw data for the exact event timespan
+            event_data_mask = (
+                (raw_data["sensor_ID"] == sensor_id)
+                & (raw_data["date"] >= start_utc)
+                & (raw_data["date"] <= end_utc)
+            )
+            event_df = raw_data.loc[event_data_mask].copy()
+
+            if event_df.empty:
+                print(f"Warning: No raw data found for event {event_num} ({sensor_id}). Skipping.")
+                continue  # Skip if no raw data found for this event
+
+            # Populate columns for the detailed CSV
+            event_df["flood_event"] = event_num
+            event_df["time_UTC"] = event_df["date"]
+            event_df["time_EST"] = event_df["date"].dt.tz_convert(eastern)
+            event_df["road_water_level"] = event_df["road_water_level_adj"]
+            event_df["sensor_water_level"] = event_df[
+                "sensor_water_level_adj"
+            ]
+
+            # Initialize summary columns
+            event_df["start_time_UTC"] = pd.Series(
+                pd.NaT, index=event_df.index, dtype="datetime64[ns, UTC]"
+            )
+            event_df["end_time_UTC"] = pd.Series(
+                pd.NaT, index=event_df.index, dtype="datetime64[ns, UTC]"
+            )
+            event_df["start_time_EST"] = pd.Series(
+                pd.NaT,
+                index=event_df.index,
+                dtype=f"datetime64[ns, {eastern}]",
+            )
+            event_df["end_time_EST"] = pd.Series(
+                pd.NaT,
+                index=event_df.index,
+                dtype=f"datetime64[ns, {eastern}]",
+            )
+            
+            event_df["duration_(hours)"] = pd.NA
+            event_df["max_road_water_level_(ft)"] = pd.NA
+            event_df["max_road_water_level_(m)"] = pd.NA
+
+            # Set the summary values *only* on the last row
+            last_index = event_df.index[-1]
+            event_df.loc[last_index, "start_time_UTC"] = start_utc
+            event_df.loc[last_index, "end_time_UTC"] = end_utc
+            event_df.loc[last_index, "start_time_EST"] = row["start_time_EST"]
+            event_df.loc[last_index, "end_time_EST"] = row["end_time_EST"]
+            event_df.loc[last_index, "duration_(hours)"] = row[
+                "duration_(hours)"
+            ]
+            event_df.loc[last_index, "max_road_water_level_(ft)"] = row[
+                "max_road_water_level_(ft)"
+            ]
+            event_df.loc[last_index, "max_road_water_level_(m)"] = row[
+                "max_road_water_level_(m)"
+            ]
+
+            all_event_dfs.append(event_df)
+
+        # Define columns even if no events are found
+        final_columns = [
+            "flood_event",
+            "sensor_ID",
+            "time_UTC",
+            "time_EST",
+            "road_water_level",
+            "sensor_water_level",
+            "start_time_UTC",
+            "end_time_UTC",
+            "start_time_EST",
+            "end_time_EST",
+            "duration_(hours)",
+            "max_road_water_level_(ft)",
+            "max_road_water_level_(m)",
+        ]
+
+        if not all_event_dfs:
+            print(
+                "No flood events from abbr_csv had matching raw data. No output generated."
+            )
+            # Create empty file to not cause FileNotFoundError later
+            final_df = pd.DataFrame(columns=final_columns)
+            final_df.to_csv(csv_filename, index=False)
+            return
+
+        final_df = pd.concat(all_event_dfs)
+
+        # Reorder columns to match the original spec
+        final_df = final_df[final_columns]
+
+        final_df.sort_values(by=["flood_event", "time_UTC"], inplace=True)
+        final_df.reset_index(drop=True, inplace=True)
+
+        final_df.to_csv(csv_filename, index=False)
+        print(f"Successfully regenerated detailed event file: {csv_filename}")
+    # === END NEW ===
+
     def _find_outages(
         self, dataframe: pd.DataFrame, csv_filename: str = "sensor_outages.csv"
     ) -> Optional[pd.DataFrame]:
@@ -1301,6 +1705,13 @@ class EventTracker:
             on="sensor_ID",
             suffixes=("_outage", "_flood"),
         )
+        
+        if merged.empty:
+            print("No matching sensor_IDs in outage and flood files. Skipping check.")
+            # Save the files with the initialized "No" columns
+            abbr_floods.to_csv(abbr_flood_csv, index=False)
+            outage_dataframe.to_csv(outage_csv, index=False)
+            return
 
         # Create a mask to find where outage start time is within a
         # flood event
@@ -1339,11 +1750,13 @@ class EventTracker:
         abbr_floods.to_csv(abbr_flood_csv, index=False)
         outage_dataframe.to_csv(outage_csv, index=False)
 
+    # === MODIFIED: Added force_overwrite parameter ===
     def _plot_and_save_flood_plots(
         self,
         sunnyd_data: pd.DataFrame,
         csv_filename: str = "abbr_flood_events.csv",
         plot_folder: str = "flood_plots",
+        force_overwrite: bool = False,
     ):
         """
         Plots flood events listed in the abbreviated flood event CSV.
@@ -1356,6 +1769,9 @@ class EventTracker:
             Filename of the abbreviated flood events CSV file.
         plot_folder : str, optional
             Name of the directory to save flood plots to.
+        force_overwrite : bool, optional
+            If True, existing plots will be overwritten. Default is
+            False.
         """
 
         # Create a folder to save the plots if it doesn't exist
@@ -1382,9 +1798,13 @@ class EventTracker:
             plot_filename = os.path.join(
                 plot_folder, f"flood_event_{event_number}_{sensor_id}.png"
             )
-            if os.path.exists(plot_filename):
-                print(f"Plot already exists: {plot_filename}")
+            # === MODIFIED: Check force_overwrite flag ===
+            if os.path.exists(plot_filename) and not force_overwrite:
+                print(f"Plot already exists (skipping): {plot_filename}")
                 continue
+            elif os.path.exists(plot_filename) and force_overwrite:
+                print(f"Plot already exists (overwriting): {plot_filename}")
+            # === END MODIFIED ===
 
             flood_start_time = pd.to_datetime(row["start_time_UTC"], utc=True)
             flood_end_time = pd.to_datetime(row["end_time_UTC"], utc=True)
