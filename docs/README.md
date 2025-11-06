@@ -75,7 +75,13 @@ The compiled executables will now exist in the 'bin' directory for use. You can 
 ```bash
 ../../docs/tests/test_compiled_funcs.sh
 ```
-## Tests
+## Segmentation Gym Container
+From the repository root directory run:
+```bash
+apptainer pull poseidon_deploy/segmentation/container/seg_gym.sif oras://ghcr.io/rtmccune/segmentation-gym-tf:latest
+```
+
+## Python Tests
 To test the posedion library, run the following command from the 'poseidon' directory.
   ```bash
   python -m pytest -v
