@@ -1,0 +1,3 @@
+[submodule "poseidon_deploy/segmentation/segmentation_gym"]
+	path = poseidon_deploy/segmentation/segmentation_gym
+	url = git@github.com:rtmccune/segmentation_gym.git

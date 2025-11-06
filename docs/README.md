@@ -15,6 +15,11 @@ It integrates image segmentation and georectification to detect water surfaces a
 
 
 # Setup
+## Clone the Repository
+```bash
+git clone --recurse-submodules https://github.com/rtmccune/poseidon.git
+```
+
 ## Environment
 To create a conda environment for this workflow navigate to your local copy of the 'poseidon' repository and run the following command:
 ```bash
