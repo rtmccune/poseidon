@@ -189,12 +189,15 @@ def create_flood_csvs_and_subfolders(
     try:
         # Parse the EST/EDT strings. pd.to_datetime() will automatically
         # make them "aware" because the strings likely contain offsets.
-        start_time_aware = pd.to_datetime(
+        start_time_naive = pd.to_datetime(
             abbr_df["start_time_EST"], errors="coerce"
         )
-        end_time_aware = pd.to_datetime(
+        end_time_naive = pd.to_datetime(
             abbr_df["end_time_EST"], errors="coerce"
         )
+        
+        start_time_aware = start_time_naive.dt.tz_localize("Etc/GMT+5")
+        end_time_aware = end_time_naive.dt.tz_localize("Etc/GMT+5")
 
         # Convert to UTC (from whatever offset they had) and apply
         # padding. This replaces the .tz_localize()...tz_convert() chain.
