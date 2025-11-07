@@ -1,0 +1,31 @@
+name: poseidon_mac
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pdal
+  - rioxarray
+  - zarr
+  - numpy
+  - matplotlib
+  - cmocean
+  - jupyter
+  - scipy
+  - scikit-image
+  - pandas
+  - geopandas
+  - gdal
+  - laspy
+  - opencv
+  - tqdm
+  - mpi4py
+  - contextily
+  - cxx-compiler
+  - c-compiler
+  - rasterio
+  - pytest
+  - pytest-cov
+  - pytest-mock
+  - svgpath2mpl
+  - dask
