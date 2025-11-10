@@ -24,9 +24,13 @@ PROJECT_DIR="$SUBMIT_DIR/../.."
 CONTAINER_PATH="${PROJECT_DIR}/poseidon_deploy/segmentation/container/seg_gym.sif"
 
 # Define the name of the specific data directory you wish to use
-DATA_DIR_NAME="$PROJECT_DIR/data/all_sites" ####---EDIT THIS LINE---####
+DATA_DIR_NAME="$PROJECT_DIR/data/segmentation/new_bern" ####---EDIT THIS LINE---####
 
 CONFIG_DIR="${PROJECT_DIR}/data/${DATA_DIR_NAME}/config"
+
+echo "DEBUG: PROJECT_DIR is: ${PROJECT_DIR}"
+echo "DEBUG: Checking for images in: ${DATA_DIR_NAME}/fromDoodler/images"
+ls -l "${DATA_DIR_NAME}/fromDoodler/images" | head -n 5
 
 # Execute the container with the correct syntax
 apptainer exec --nv \
@@ -35,5 +39,5 @@ apptainer exec --nv \
     python ${PROJECT_DIR}/poseidon_deploy/segmentation/segmentation_gym/make_dataset_no_tkinter_updated.py \
     --output ${DATA_DIR_NAME}/fromDoodler/npz4gym \
     --label_dir ${DATA_DIR_NAME}/fromDoodler/labels \
-    --image_dirs ${PROJECT_DIR}/data/${DATA_DIR_NAME}/fromDoodler/images \
-    --config ${DATA_DIR_NAME}/config/all_sites_5_class_v4_segformer.json ###---EDIT THIS LINE---###
+    --image_dirs ${DATA_DIR_NAME}/fromDoodler/images \
+    --config ${DATA_DIR_NAME}/config/new_bern_segformer_v1.json ###---EDIT THIS LINE---###
