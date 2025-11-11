@@ -2,9 +2,8 @@
 #BSUB -J seg_batch[1-32] ####--- EDIT THIS to match your number of file lists ---####
 #BSUB -W 45
 #BSUB -n 1
-#BSUB -R "rusage[mem=16G]"
-#BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -R "select[a100 || l40 || l40s || h100]"
+#BSUB -R "rusage[mem=4G]"
+#BSUB -gpu "num=1:mode=shared"
 #BSUB -q gpu
 #BSUB -o job_outputs/seg_batch.%J.%I.out
 #BSUB -e job_outputs/seg_batch.%J.%I.err
@@ -29,13 +28,13 @@ export APPTAINERENV_TRANSFORMERS_CACHE="$PROJECT_DIR/poseidon_deploy/segmentatio
 # --- CONFIGURATION ---
 CONTAINER_PATH="${PROJECT_DIR}/poseidon_deploy/segmentation/container/seg_gym.sif"
 
-WEIGHTS_FILE="${PROJECT_DIR}/data/segmentation/new_bern/weights/all_sites_5_class_v3_segformer_fullmodel.h5"
+WEIGHTS_FILE="${PROJECT_DIR}/data/segmentation/all_sites/weights/all_sites_5_class_v3_segformer_fullmodel.h5"
 
 # Directory containing your images (still needed by the script for output structure)
-IMAGES_DIR_NAME="/share/jcdietri/rmccune/poseidon/data/down_east/images/daylight_all_events"
+IMAGES_DIR_NAME="${PROJECT_DIR}/data/down_east/images/daylight_all_events"
 
 # Directory where you saved your text file lists from Step 2
-LISTS_DIR="${IMAGES_DIR_NAME}/job_lists"
+LISTS_DIR="${IMAGES_DIR_NAME}/job_file_lists"
 
 # Determine which file list this specific task should process.
 # LSF uses %I for index in filenames, but $LSB_JOBINDEX in the script.
@@ -61,7 +60,7 @@ fi
 apptainer exec --nv \
     --bind /share/jcdietri/rmccune:/share/jcdietri/rmccune \
     ${CONTAINER_PATH} \
-    python ${PROJECT_DIR}/segmentation_gym/seg_images_in_folder_no_tkinter.py \
+    python ${PROJECT_DIR}/poseidon_deploy/segmentation/segmentation_gym/seg_images_in_folder_no_tkinter.py \
     --images_dir ${IMAGES_DIR_NAME} \
     --weights ${WEIGHTS_FILE} \
     --file_list ${FILE_LIST}

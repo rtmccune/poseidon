@@ -6,6 +6,7 @@ mysecrets.py
 poseidon_deploy/hpc_submission_scripts/job_outputs/*
 poseidon_deploy/hpc_paths.env
 *.sif
+segformer_report.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

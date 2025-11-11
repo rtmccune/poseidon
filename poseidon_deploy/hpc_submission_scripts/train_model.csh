@@ -3,7 +3,7 @@
 #BSUB -J train_model
 #BSUB -W 60
 #BSUB -n 12
-#BSUB -R rusage[mem=20G]
+#BSUB -R rusage[mem=10G]
 #BSUB -R "select[a100 || l40 || l40s || h100]"
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -q gpu
