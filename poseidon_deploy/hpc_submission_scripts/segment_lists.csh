@@ -58,7 +58,7 @@ fi
 
 # Execute the container
 apptainer exec --nv \
-    --bind /share/jcdietri/rmccune:/share/jcdietri/rmccune \
+    --bind ${PROJECT_DIR} \
     ${CONTAINER_PATH} \
     python ${PROJECT_DIR}/poseidon_deploy/segmentation/segmentation_gym/seg_images_in_folder_no_tkinter.py \
     --images_dir ${IMAGES_DIR_NAME} \
