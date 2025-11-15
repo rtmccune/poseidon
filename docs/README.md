@@ -73,7 +73,7 @@ After the working 'poseidon' environment and OpenCV have been installed on your 
   ```
 The compiled executables will now exist in the 'bin' directory for use. You can test that these compiled executables are working by running the test_compiled_funcs.sh script from the docs/tests directory. To run these tests from the 'bin' directory simply:
 ```bash
-../../docs/tests/test_compiled_funcs.sh
+../../tests/test_compiled_funcs.sh
 ```
 ## Segmentation Gym Container
 From the repository root directory run:
@@ -84,5 +84,5 @@ apptainer pull poseidon_deploy/segmentation/container/seg_gym.sif oras://ghcr.io
 ## Python Tests
 To test the posedion library, run the following command from the 'poseidon' directory.
   ```bash
-  python -m pytest -v
+  python -m pytest -v tests/
   ```
