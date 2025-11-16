@@ -36,6 +36,12 @@ def main():
         help="Folder containing all original images to be sorted.",
     )
     parser.add_argument(
+        "--label_dir",
+        type=str,
+        required=True,
+        help="Folder containing all labels to be sorted.",
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         required=True,
@@ -48,6 +54,12 @@ def main():
         type=str,
         default="orig_images",
         help="Name of the subfolder inside each event folder to store images (default: 'orig_images').",
+    )
+    parser.add_argument(
+        "--label_subfolder",
+        type=str,
+        default="labels",
+        help="Name of the subfolder inside each event folder to store labels (default: 'labels').",
     )
     parser.add_argument(
         "--start_hour",
@@ -94,7 +106,22 @@ def main():
         subfolder_name=args.image_subfolder,
         padding_hours=args.padding_hours,
     )
+    
+    # --- Pipeline Step 4: Organize Labels into Folders ---
+    file_organizer.organize_images_into_flood_events(
+        image_folder=args.label_dir,
+        csv_file=args.filtered_abbr_csv,  # Use filtered CSV from Step 1
+        destination_folder=args.output_dir,  # Use same output dir as Step 2
+        subfolder_name=args.label_subfolder,
+        padding_hours=args.padding_hours,
+    )
 
+    # --- Pipeline Step 5: Prune Empty Event Folders ---
+    # NEW STEP: Clean up folders that have no images
+    file_organizer.prune_empty_event_folders(
+        output_parent_dir=args.output_dir,
+        image_subfolder_name=args.image_subfolder,
+    )
 
 if __name__ == "__main__":
     main()

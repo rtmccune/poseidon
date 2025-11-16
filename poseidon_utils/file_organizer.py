@@ -576,3 +576,64 @@ def prepare_job_lists(image_folder: str, num_jobs: int, output_dir: str = None):
     print(
         f"\nSuccess! Created {len(file_chunks)} file lists in '{final_output_path}' for a total of {total_files} files."
     )
+    
+def prune_empty_event_folders(output_parent_dir, image_subfolder_name):
+    """
+    Scans the output directory and removes any event subfolders
+    that were created but contain no images.
+
+    This cleanup step is for event subfolders that have a CSV file
+    but for which no matching images were found and copied.
+
+    Parameters
+    ----------
+    output_parent_dir : str
+        The parent directory containing all the individual
+        event subfolders to scan.
+    image_subfolder_name : str
+        The name of the subfolder that should contain images
+        (e.g., "orig_images").
+
+    Returns
+    -------
+    None
+        Folders are deleted from the disk. Logs status.
+    """
+    _log(f"Starting cleanup of empty event folders in '{output_parent_dir}'...")
+    _log(f"Looking for subfolders that are missing '{image_subfolder_name}'.")
+
+    removed_folders = []
+    
+    try:
+        # Get a list of all items in the parent directory
+        all_event_folders = os.listdir(output_parent_dir)
+    except FileNotFoundError:
+        _log(f"Parent directory not found: '{output_parent_dir}'", level="error")
+        return
+
+    for folder_name in all_event_folders:
+        event_folder_path = os.path.join(output_parent_dir, folder_name)
+
+        # Ensure we are only checking directories
+        if not os.path.isdir(event_folder_path):
+            continue
+
+        # This is the path to the folder we expect to find *inside*
+        # the event subfolder (e.g., .../CAM_NC_01_.../orig_images)
+        image_folder_path = os.path.join(event_folder_path, image_subfolder_name)
+
+        # The condition for deletion:
+        # The 'orig_images' folder does not exist.
+        if not os.path.exists(image_folder_path):
+            try:
+                # Log *before* deleting
+                _log(f"  - Pruning event folder (no images found): {folder_name}")
+                shutil.rmtree(event_folder_path)
+                removed_folders.append(folder_name)
+            except OSError as e:
+                _log(f"Failed to delete {event_folder_path}: {e}", level="error")
+
+    if not removed_folders:
+        _log("No empty event folders found to prune.")
+    else:
+        _log(f"Cleanup complete. Pruned {len(removed_folders)} empty event folders.")
