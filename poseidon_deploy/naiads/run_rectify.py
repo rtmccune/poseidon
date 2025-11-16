@@ -240,6 +240,48 @@ def main():
         print(f"Error: Config name {e} not found. Check INTRINSICS_CONFIG and EXTRINSICS_CONFIG.", file=sys.stderr)
         sys.exit(1)
 
+    # !!! START NEW PDAL DEBUGGING !!!
+    import subprocess
+    import json
+    print("--- 🕵️ PDAL DIRECT TEST 🕵️ ---")
+    
+    # Build the PDAL bounds string
+    pdal_bounds = f"([ {args.min_x}, {args.max_x} ], [ {args.min_y}, {args.max_y} ])"
+    print(f"DEBUG: Testing with PDAL bounds: {pdal_bounds}")
+    
+    pdal_cmd = [
+        "pdal", "info", args.lidar_file,
+        f"--readers.las.bounds={pdal_bounds}",
+    ]
+
+    try:
+        # Run the command and capture output
+        result = subprocess.run(
+            pdal_cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        # Parse the JSON output from pdal info
+        pdal_json = json.loads(result.stdout)
+        stats = pdal_json.get("stats", {})
+        count = stats.get("count", "COULD NOT FIND COUNT")
+        print(f"DEBUG: PDAL filtered point count: {count}")
+        
+    except FileNotFoundError:
+        print("!!! DEBUG: 'pdal' command not found. Is it in the $PATH? !!!")
+    except subprocess.CalledProcessError as e:
+        print(f"!!! DEBUG: PDAL command failed: {e} !!!")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
+    except json.JSONDecodeError:
+        print("!!! DEBUG: Could not parse PDAL's JSON output. !!!")
+        print(f"STDOUT: {result.stdout}")
+    
+    print("--- 🕵️ PDAL TEST COMPLETE 🕵️ ---")
+    # !!! END NEW PDAL DEBUGGING !!!
+
     # --- Step 2: Initialize Grid Generator ---
     print(f"Loading LiDAR data from: {args.lidar_file}")
     grid_gen = poseidon_core.GridGenerator(
