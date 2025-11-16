@@ -35,6 +35,7 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_rectify.py"
 
 LIDAR_FILE="$REPO_ROOT/data/lidar/combined_point_cloud_down_east.laz"
+GRID_DIR="$REPO_ROOT/data/grids"
 EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
 
 echo "Starting image rectifier Python script..."
@@ -47,6 +48,7 @@ python -u $RUNNER_SCRIPT \
     --max_y 127450.141 \
     --camera_name "DE_01" \
     --intrinsics_name "suds_cam" \
+    --grid_dir $GRID_DIR \
     --resolution 0.05 \
     --lidar_units "meters" \
     --grid_descr "down_east" \
@@ -54,7 +56,7 @@ python -u $RUNNER_SCRIPT \
     --label_subfolder 'labels' \
     --zarr_base "zarr" \
     --zarr_orig_name "orig_image_rects" \
-    --zarr_label_name "labels_rects" \
+    --zarr_label_name "labels_rects"
 
 echo "Deactivating conda environment..."
 conda deactivate

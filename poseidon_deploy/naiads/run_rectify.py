@@ -138,6 +138,12 @@ def main():
         help="Name of the camera intrinsics config to use (default: 'suds_cam').",
     )
     parser.add_argument(
+        "--grid_dir",
+        type=str,
+        required=True,
+        help="Name of the directory to save generated grids to.",
+    )
+    parser.add_argument(
         "--resolution",
         type=float,
         default=0.05,
@@ -233,6 +239,7 @@ def main():
     grid_x, grid_y, grid_z = grid_gen.gen_grid(
         args.resolution, 
         z=pts_array,
+        dir=args.grid_dir,
         grid_descriptor=args.grid_descr)
 
     # --- Step 3: Initialize Image Rectifier ---
