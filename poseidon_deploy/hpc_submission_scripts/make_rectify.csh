@@ -1,8 +1,9 @@
 #! /bin/bash
 
 #BSUB -J rectify
-#BSUB -W 60
+#BSUB -W 30
 #BSUB -n 12
+#BSUB -R "rusage[mem=4G]"
 #BSUB -gpu "num=1:mode=shared"
 #BSUB -q gpu
 #BSUB -o rectification.%J.out
