@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#BSUB -J "make_overlay[1-16]"  # <-- EDIT to the exact number of file lists you created.
+#BSUB -J "make_overlay[1-32]"  # <-- EDIT to the exact number of file lists you created.
 #BSUB -W 10
-#BSUB -n 16
+#BSUB -n 32
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=8]"
 #BSUB -q ccee
@@ -26,11 +26,11 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 EXEC_PATH="$REPO_ROOT/poseidon_utils/bin/overlay_generator"
 
 # Base directories for your data
-IMAGE_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
+IMAGE_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
 LISTS_DIR="$IMAGE_DIR/job_file_lists"
 
-PREDS_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_preds"
-OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_overlays"
+PREDS_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events_preds"
+OUTPUT_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events_overlays"
 
 
 # Use the LSF-provided job index to construct the path to the correct file list.

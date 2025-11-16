@@ -30,8 +30,8 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_create_file_lists.py"
 
-IMAGE_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
-OUTPUT_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events/job_file_lists"
+IMAGE_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events_preds"
+OUTPUT_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events_preds/job_file_lists"
 
 echo "Starting photo filter Python script..."
 python -u $RUNNER_SCRIPT \
