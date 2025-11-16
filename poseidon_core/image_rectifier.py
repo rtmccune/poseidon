@@ -1,4 +1,5 @@
 import os
+import logging
 import cv2
 import zarr
 import numpy as np
@@ -8,10 +9,7 @@ from cupyx.scipy.interpolate import RegularGridInterpolator as reg_interp_gpu
 from scipy.interpolate import RegularGridInterpolator as reg_interp
 
 
-def _log(message):
-    """Helper function for timestamped logging."""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
-
+logger = logging.getLogger(__name__)
 
 class ImageRectifier:
     """
@@ -98,10 +96,10 @@ class ImageRectifier:
             A flag indicating whether to use GPU for computations.
             Default is False.
         """
-        _log("--- Initializing ImageRectifier ---")
+        logger.info("--- Initializing ImageRectifier ---")
 
         self.use_gpu = use_gpu
-        _log(f"  Mode: {'GPU (CuPy)' if use_gpu else 'CPU (NumPy)'}")
+        logger.info(f"  Mode: {'GPU (CuPy)' if use_gpu else 'CPU (NumPy)'}")
 
         # Convert numpy arrays to cupy arrays for GPU acceleration
         if use_gpu:
@@ -117,21 +115,21 @@ class ImageRectifier:
             self.grid_y = grid_y
             self.grid_z = grid_z
 
-        _log(f"  Input grid shape: {grid_x.shape}")
+        logger.info(f"  Input grid shape: {grid_x.shape}")
 
         self.azimuth = self.extrinsics[3]  # Set azimuth from extrinsics
         self.tilt = self.extrinsics[4]  # Set tilt from extrinsics
         self.swing = self.extrinsics[5]  # Set swing from extrinsics
         self.grid_shape = grid_x.shape  # Set grid shape
 
-        _log("  Starting distortion map computation (Ud, Vd)...")
+        logger.info("  Starting distortion map computation (Ud, Vd)...")
         self.Ud, self.Vd = (
             # Compute list of distorted U and V coord. corresponding to
             # world xyz coord.
             self._compute_Ud_Vd()
         )
-        _log("  ...Distortion map computation complete.")
-        _log("--- ImageRectifier Initialization Complete ---")
+        logger.info("  ...Distortion map computation complete.")
+        logger.info("--- ImageRectifier Initialization Complete ---")
 
     def merge_rectify(self, image_path, labels=False, verbose=False):
         """Merge and rectify an image based on the provided path.
@@ -163,7 +161,7 @@ class ImageRectifier:
         represent pixel values.
         """
         if verbose:
-            _log(f"Rectifying single image: {image_path}")
+            logger.info(f"Rectifying single image: {image_path}")
 
         # Load image from path
         image = self._load_image(image_path, labels)
@@ -209,36 +207,36 @@ class ImageRectifier:
         utilized for GPU processing if `self.use_gpu` is set to True;
         otherwise, standard arrays are used.
         """
-        _log("\n=== Starting Batch Rectification ===")
-        _log(f"  Source folder: {folder_path}")
-        _log(f"  Output Zarr store: {zarr_store_path}")
+        logger.info("\n=== Starting Batch Rectification ===")
+        logger.info(f"  Source folder: {folder_path}")
+        logger.info(f"  Output Zarr store: {zarr_store_path}")
 
         # Open the Zarr store once before the loop
         try:
             store = zarr.open_group(zarr_store_path, mode="a")
         except Exception as e:
-            _log(
+            logger.error(
                 f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}"
             )
-            _log("=== Batch Rectification Aborted ===")
+            logger.error("=== Batch Rectification Aborted ===")
             return
 
         # Get a list of all images in the folder
         try:
             image_names = os.listdir(folder_path)
         except FileNotFoundError:
-            _log(f"  ERROR: Source folder not found at {folder_path}.")
-            _log("=== Batch Rectification Aborted ===")
+            logger.error(f"  ERROR: Source folder not found at {folder_path}.")
+            logger.error("=== Batch Rectification Aborted ===")
             return
 
         total_images = len(image_names)
 
         if total_images == 0:
-            _log("  WARNING: No images found in source folder. Nothing to do.")
-            _log("=== Batch Rectification Complete ===")
+            logger.warning("  WARNING: No images found in source folder. Nothing to do.")
+            logger.warning("=== Batch Rectification Complete ===")
             return
 
-        _log(f"  Found {total_images} images to process.")
+        logger.info(f"  Found {total_images} images to process.")
 
         # Determine report interval (print ~10 updates + first/last)
         report_interval = max(1, total_images // 10)
@@ -250,7 +248,7 @@ class ImageRectifier:
                 or i == 0
                 or (i + 1) == total_images
             ):
-                _log(f"  Processing image {i + 1}/{total_images}: {image_name}")
+                logger.info(f"  Processing image {i + 1}/{total_images}: {image_name}")
 
             image_path = os.path.join(folder_path, image_name)
 
@@ -259,7 +257,7 @@ class ImageRectifier:
                     image_path, labels, verbose=False  # Keep this quiet
                 )
             except Exception as e:
-                _log(f"  ERROR: Failed to rectify image {image_name}. {e}")
+                logger.error(f"  ERROR: Failed to rectify image {image_name}. {e}")
                 continue  # Skip to the next image
 
             # Create a dataset name by appending 'rectified' to the
@@ -275,13 +273,13 @@ class ImageRectifier:
                 else:  # Else, save array
                     store[dataset_name] = rectified_image
             except Exception as e:
-                _log(
+                logger.error(
                     f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}"
                 )
 
         # Print success message after all images are processed
-        _log(f"  Successfully processed {total_images} images.")
-        _log("=== Batch Rectification Complete ===")
+        logger.info(f"  Successfully processed {total_images} images.")
+        logger.info("=== Batch Rectification Complete ===")
 
     def _load_image(self, image_path, labels):
         """Load an image from the specified path.

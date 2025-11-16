@@ -2,6 +2,7 @@ import argparse
 import sys
 import os
 import concurrent.futures
+import logging
 
 import numpy as np
 import poseidon_core
@@ -51,10 +52,12 @@ def process_event_folder(event_dir_path, rectifier, args):
     Worker function to process a single event folder.
     Returns (status, message) tuple.
     """
+    logger = logging.getLogger(__name__)
     subfolder_name = os.path.basename(event_dir_path)
     
     # Check if it's a directory (scandir already did, but as a standalone func, we check)
     if not os.path.isdir(event_dir_path):
+        logger.info(f"Entry {subfolder_name} is not a directory.")
         return ('skip', f"Entry {subfolder_name} is not a directory.")
 
     orig_images_folder = os.path.join(event_dir_path, args.image_subfolder)
@@ -62,10 +65,11 @@ def process_event_folder(event_dir_path, rectifier, args):
 
     # Check if the required input folders exist
     if not (os.path.exists(orig_images_folder) and os.path.exists(labels_folder)):
+        logger.info(f"Skipping {subfolder_name}: Missing '{args.image_subfolder}' or '{args.label_subfolder}'.")
         return ('skip', f"Skipping {subfolder_name}: Missing '{args.image_subfolder}' or '{args.label_subfolder}'.")
 
     try:
-        print(f"--- Processing event: {subfolder_name} ---")
+        logger.info(f"--- Processing event: {subfolder_name} ---")
         
         # Define paths for saving rectified images, creating zarr dir
         zarr_output_dir = os.path.join(event_dir_path, args.zarr_base)
@@ -75,21 +79,29 @@ def process_event_folder(event_dir_path, rectifier, args):
         zarr_store_labels = os.path.join(zarr_output_dir, args.zarr_label_name)
 
         # --- Run Rectification for Images ---
-        print(f"[{subfolder_name}] Rectifying images from: {args.image_subfolder}")
+        logger.info(f"[{subfolder_name}] Rectifying images from: {args.image_subfolder}")
         rectifier.merge_rectify_folder(orig_images_folder, zarr_store_orig)
         
         # --- Run Rectification for Labels ---
-        print(f"[{subfolder_name}] Rectifying labels from: {args.label_subfolder}")
+        logger.info(f"[{subfolder_name}] Rectifying labels from: {args.label_subfolder}")
         rectifier.merge_rectify_folder(labels_folder, zarr_store_labels, labels=True)
         
-        print(f"+++ Successfully processed event {subfolder_name} +++")
+        logger.info(f"+++ Successfully processed event {subfolder_name} +++")
         return ('success', subfolder_name)
         
     except Exception as e:
-        print(f"!!! ERROR processing {subfolder_name}: {e} !!!", file=sys.stderr)
+        logger.error(f"!!! ERROR processing {subfolder_name}: {e} !!!")
         return ('error', f"Error in {subfolder_name}: {e}")
 
 def main():
+    log_format = "[%(asctime)s] [%(threadName)-12s] %(message)s"
+    logging.basicConfig(
+        level=logging.INFO, 
+        format=log_format, 
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    logger = logging.getLogger(__name__) # Get logger for this script
+    
     parser = argparse.ArgumentParser(
         description="Run the full image rectification pipeline for flood events."
     )
@@ -209,20 +221,20 @@ def main():
 
     args = parser.parse_args()
 
-    print("--- Starting Rectification Pipeline ---")
+    logger.info("--- Starting Rectification Pipeline ---")
 
     # --- Step 1: Load Camera Parameters ---
     try:
         intrinsics = INTRINSICS_CONFIG[args.intrinsics_name]
         extrinsics = EXTRINSICS_CONFIG[args.camera_name]
-        print(f"Loaded intrinsics: '{args.intrinsics_name}'")
-        print(f"Loaded extrinsics: '{args.camera_name}'")
+        logger.info(f"Loaded intrinsics: '{args.intrinsics_name}'")
+        logger.info(f"Loaded extrinsics: '{args.camera_name}'")
     except KeyError as e:
-        print(f"Error: Config name {e} not found. Check INTRINSICS_CONFIG and EXTRINSICS_CONFIG.", file=sys.stderr)
+        logger.error(f"Error: Config name {e} not found. Check INTRINSICS_CONFIG and EXTRINSICS_CONFIG.")
         sys.exit(1)
 
         # --- Step 2: Initialize Grid Generator ---
-    print(f"Loading LiDAR data from: {args.lidar_file}")
+    logger.info(f"Loading LiDAR data from: {args.lidar_file}")
     grid_gen = poseidon_core.GridGenerator(
         args.lidar_file,
         args.min_x,
@@ -233,10 +245,10 @@ def main():
         lidar_units=args.lidar_units
     )
 
-    print("Creating point array from LiDAR data...")
+    logger.info("Creating point array from LiDAR data...")
     pts_array = grid_gen.create_point_array()
       
-    print(f"Generating grid at {args.resolution}m resolution...")
+    logger.info(f"Generating grid at {args.resolution}m resolution...")
     grid_x, grid_y, grid_z = grid_gen.gen_grid(
         args.resolution, 
         pts_array,
@@ -244,13 +256,13 @@ def main():
         grid_descriptor=args.grid_descr)
 
     # --- Step 3: Initialize Image Rectifier ---
-    print(f"Initializing ImageRectifier... (GPU Enabled: {args.use_gpu})")
+    logger.info(f"Initializing ImageRectifier... (GPU Enabled: {args.use_gpu})")
     rectifier = poseidon_core.ImageRectifier(
         intrinsics, extrinsics, grid_x, grid_y, grid_z, use_gpu=args.use_gpu
     )
 
     # --- Step 4: Process Each Event Subfolder (in parallel) ---
-    print(f"Iterating through event folders in: {args.event_dir} using {args.workers} workers")
+    logger.info(f"Iterating through event folders in: {args.event_dir} using {args.workers} workers")
 
     # Use os.scandir for efficient directory listing
     event_paths = []
@@ -259,7 +271,7 @@ def main():
             if entry.is_dir():
                 event_paths.append(entry.path)
 
-    print(f"Found {len(event_paths)} potential event directories.")
+    logger.info(f"Found {len(event_paths)} potential event directories.")
     
     processed_count = 0
     skipped_count = 0
@@ -287,13 +299,13 @@ def main():
                 elif status == 'error':
                     error_count += 1
             except Exception as e:
-                print(f"!!! FATAL ERROR for path {path}: {e} !!!", file=sys.stderr)
+                logger.error(f"!!! FATAL ERROR for path {path}: {e} !!!")
                 error_count += 1
 
-    print("\n--- Rectification Pipeline Complete ---")
-    print(f"Total events processed: {processed_count}")
-    print(f"Total events skipped:   {skipped_count}")
-    print(f"Total events (errors):  {error_count}")
+    logger.info("\n--- Rectification Pipeline Complete ---")
+    logger.info(f"Total events processed: {processed_count}")
+    logger.info(f"Total events skipped:   {skipped_count}")
+    logger.info(f"Total events (errors):  {error_count}")
 
 if __name__ == "__main__":
     main()
