@@ -209,6 +209,25 @@ def main():
 
     args = parser.parse_args()
 
+    # !!! START OF NEW DEBUG CODE !!!
+    print("--- 🕵️ DEBUGGING START 🕵️ ---")
+    
+    # 1. Verify the file path is correct
+    lidar_path = args.lidar_file
+    print(f"DEBUG: --lidar_file argument: {lidar_path}")
+    
+    # 2. Verify the absolute path
+    abs_lidar_path = os.path.abspath(lidar_path)
+    print(f"DEBUG: Absolute path: {abs_lidar_path}")
+    
+    # 3. CRITICAL: Check if the file exists from the script's perspective
+    file_exists = os.path.exists(abs_lidar_path)
+    print(f"DEBUG: Does path exist? {file_exists}")
+    
+    if not file_exists:
+        print("!!! DEBUG: File not found at path. Exiting. !!!")
+        sys.exit(1) # Fail fast
+
     print("--- Starting Rectification Pipeline ---")
 
     # --- Step 1: Load Camera Parameters ---
@@ -234,6 +253,13 @@ def main():
 
     print("Creating point array from LiDAR data...")
     pts_array = grid_gen.create_point_array()
+    
+    # !!! MORE DEBUG CODE !!!
+    # 4. CRITICAL: Check if the pts_array is empty
+    print(f"DEBUG: pts_array shape: {pts_array.shape}")
+    print(f"DEBUG: Is pts_array empty? {pts_array.size == 0}")
+    print("--- 🕵️ DEBUGGING END 🕵️ ---")
+    # !!! END OF DEBUG CODE !!!
     
     print(f"Generating grid at {args.resolution}m resolution...")
     grid_x, grid_y, grid_z = grid_gen.gen_grid(
