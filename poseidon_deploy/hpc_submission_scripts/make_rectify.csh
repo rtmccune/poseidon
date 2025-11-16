@@ -4,6 +4,7 @@
 #BSUB -W 30
 #BSUB -n 12
 #BSUB -R "rusage[mem=4G]"
+#BSUB -R "select[a100 || l40 || l40s || h100]"
 #BSUB -gpu "num=1:mode=shared"
 #BSUB -q gpu
 #BSUB -o rectification.%J.out
