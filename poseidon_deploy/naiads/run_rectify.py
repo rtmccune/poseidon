@@ -240,47 +240,72 @@ def main():
         print(f"Error: Config name {e} not found. Check INTRINSICS_CONFIG and EXTRINSICS_CONFIG.", file=sys.stderr)
         sys.exit(1)
 
-    # !!! START NEW PDAL DEBUGGING !!!
+    # !!! START NEW PDAL DEBUGGING (v2) !!!
     import subprocess
     import json
-    print("--- 🕵️ PDAL DIRECT TEST 🕵️ ---")
+    print("--- 🕵️ PDAL PIPELINE TEST (v2) 🕵️ ---")
     
-    # Build the PDAL bounds string
-    pdal_bounds = f"([ {args.min_x}, {args.max_x} ], [ {args.min_y}, {args.max_y} ])"
+    # Build the PDAL bounds string in PDAL's expected format
+    # Note: No internal spaces, which was also a likely error in my last test
+    pdal_bounds = f"([{args.min_x},{args.max_x}],[{args.min_y},{args.max_y}])"
     print(f"DEBUG: Testing with PDAL bounds: {pdal_bounds}")
     
-    pdal_cmd = [
-        "pdal", "info", args.lidar_file,
-        f"--readers.las.bounds={pdal_bounds}",
-    ]
+    # Construct a JSON pipeline
+    # 1. Read the file
+    # 2. Crop to the bounds
+    # 3. Get stats (which will give us the count *after* cropping)
+    pipeline_json = f"""
+    {{
+      "pipeline": [
+        {{
+          "type": "readers.las",
+          "filename": "{args.lidar_file}"
+        }},
+        {{
+          "type": "filters.crop",
+          "bounds": "{pdal_bounds}"
+        }},
+        {{
+          "type": "filters.stats"
+        }}
+      ]
+    }}
+    """
+    
+    print(f"DEBUG: Testing with PDAL pipeline...")
+    
+    pdal_cmd = ["pdal", "pipeline", "--stdin"]
 
     try:
-        # Run the command and capture output
+        # Run the command and pass the JSON via stdin
         result = subprocess.run(
             pdal_cmd,
+            input=pipeline_json,  # Pass JSON string as stdin
             capture_output=True,
             text=True,
             check=True
         )
         
-        # Parse the JSON output from pdal info
+        # The output of a stats filter is a JSON metadata doc
         pdal_json = json.loads(result.stdout)
-        stats = pdal_json.get("stats", {})
-        count = stats.get("count", "COULD NOT FIND COUNT")
-        print(f"DEBUG: PDAL filtered point count: {count}")
+        
+        # Navigate the JSON to find the count
+        stats = pdal_json.get("metadata", {}).get("filters.stats", {})
+        count = stats.get("statistic", {}).get("count", "COULD NOT FIND COUNT")
+        print(f"DEBUG: PDAL filtered point count (v2): {count}")
         
     except FileNotFoundError:
-        print("!!! DEBUG: 'pdal' command not found. Is it in the $PATH? !!!")
+        print("!!! DEBUG (v2): 'pdal' command not found. Is it in the $PATH? !!!")
     except subprocess.CalledProcessError as e:
-        print(f"!!! DEBUG: PDAL command failed: {e} !!!")
+        print(f"!!! DEBUG (v2): PDAL command failed: {e} !!!")
         print(f"STDOUT: {e.stdout}")
         print(f"STDERR: {e.stderr}")
     except json.JSONDecodeError:
-        print("!!! DEBUG: Could not parse PDAL's JSON output. !!!")
+        print("!!! DEBUG (v2): Could not parse PDAL's JSON output. !!!")
         print(f"STDOUT: {result.stdout}")
     
-    print("--- 🕵️ PDAL TEST COMPLETE 🕵️ ---")
-    # !!! END NEW PDAL DEBUGGING !!!
+    print("--- 🕵️ PDAL TEST (v2) COMPLETE 🕵️ ---")
+    # !!! END NEW PDAL DEBUGGING (v2) !!!
 
     # --- Step 2: Initialize Grid Generator ---
     print(f"Loading LiDAR data from: {args.lidar_file}")
