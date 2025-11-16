@@ -209,25 +209,6 @@ def main():
 
     args = parser.parse_args()
 
-    # !!! START OF NEW DEBUG CODE !!!
-    print("--- 🕵️ DEBUGGING START 🕵️ ---")
-    
-    # 1. Verify the file path is correct
-    lidar_path = args.lidar_file
-    print(f"DEBUG: --lidar_file argument: {lidar_path}")
-    
-    # 2. Verify the absolute path
-    abs_lidar_path = os.path.abspath(lidar_path)
-    print(f"DEBUG: Absolute path: {abs_lidar_path}")
-    
-    # 3. CRITICAL: Check if the file exists from the script's perspective
-    file_exists = os.path.exists(abs_lidar_path)
-    print(f"DEBUG: Does path exist? {file_exists}")
-    
-    if not file_exists:
-        print("!!! DEBUG: File not found at path. Exiting. !!!")
-        sys.exit(1) # Fail fast
-
     print("--- Starting Rectification Pipeline ---")
 
     # --- Step 1: Load Camera Parameters ---
@@ -240,74 +221,7 @@ def main():
         print(f"Error: Config name {e} not found. Check INTRINSICS_CONFIG and EXTRINSICS_CONFIG.", file=sys.stderr)
         sys.exit(1)
 
-    # !!! START NEW PDAL DEBUGGING (v2) !!!
-    import subprocess
-    import json
-    print("--- 🕵️ PDAL PIPELINE TEST (v2) 🕵️ ---")
-    
-    # Build the PDAL bounds string in PDAL's expected format
-    # Note: No internal spaces, which was also a likely error in my last test
-    pdal_bounds = f"([{args.min_x},{args.max_x}],[{args.min_y},{args.max_y}])"
-    print(f"DEBUG: Testing with PDAL bounds: {pdal_bounds}")
-    
-    # Construct a JSON pipeline
-    # 1. Read the file
-    # 2. Crop to the bounds
-    # 3. Get stats (which will give us the count *after* cropping)
-    pipeline_json = f"""
-    {{
-      "pipeline": [
-        {{
-          "type": "readers.las",
-          "filename": "{args.lidar_file}"
-        }},
-        {{
-          "type": "filters.crop",
-          "bounds": "{pdal_bounds}"
-        }},
-        {{
-          "type": "filters.stats"
-        }}
-      ]
-    }}
-    """
-    
-    print(f"DEBUG: Testing with PDAL pipeline...")
-    
-    pdal_cmd = ["pdal", "pipeline", "--stdin"]
-
-    try:
-        # Run the command and pass the JSON via stdin
-        result = subprocess.run(
-            pdal_cmd,
-            input=pipeline_json,  # Pass JSON string as stdin
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
-        # The output of a stats filter is a JSON metadata doc
-        pdal_json = json.loads(result.stdout)
-        
-        # Navigate the JSON to find the count
-        stats = pdal_json.get("metadata", {}).get("filters.stats", {})
-        count = stats.get("statistic", {}).get("count", "COULD NOT FIND COUNT")
-        print(f"DEBUG: PDAL filtered point count (v2): {count}")
-        
-    except FileNotFoundError:
-        print("!!! DEBUG (v2): 'pdal' command not found. Is it in the $PATH? !!!")
-    except subprocess.CalledProcessError as e:
-        print(f"!!! DEBUG (v2): PDAL command failed: {e} !!!")
-        print(f"STDOUT: {e.stdout}")
-        print(f"STDERR: {e.stderr}")
-    except json.JSONDecodeError:
-        print("!!! DEBUG (v2): Could not parse PDAL's JSON output. !!!")
-        print(f"STDOUT: {result.stdout}")
-    
-    print("--- 🕵️ PDAL TEST (v2) COMPLETE 🕵️ ---")
-    # !!! END NEW PDAL DEBUGGING (v2) !!!
-
-    # --- Step 2: Initialize Grid Generator ---
+        # --- Step 2: Initialize Grid Generator ---
     print(f"Loading LiDAR data from: {args.lidar_file}")
     grid_gen = poseidon_core.GridGenerator(
         args.lidar_file,
@@ -315,19 +229,13 @@ def main():
         args.max_x,
         args.min_y,
         args.max_y,
-        args.lidar_units
+        extent_units="meters",
+        lidar_units=args.lidar_units
     )
 
     print("Creating point array from LiDAR data...")
     pts_array = grid_gen.create_point_array()
-    
-    # !!! MORE DEBUG CODE !!!
-    # 4. CRITICAL: Check if the pts_array is empty
-    print(f"DEBUG: pts_array shape: {pts_array.shape}")
-    print(f"DEBUG: Is pts_array empty? {pts_array.size == 0}")
-    print("--- 🕵️ DEBUGGING END 🕵️ ---")
-    # !!! END OF DEBUG CODE !!!
-    
+      
     print(f"Generating grid at {args.resolution}m resolution...")
     grid_x, grid_y, grid_z = grid_gen.gen_grid(
         args.resolution, 
