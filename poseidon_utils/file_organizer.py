@@ -187,26 +187,36 @@ def create_flood_csvs_and_subfolders(
 
     # Convert naive EST strings to aware datetime objects
     try:
-        # Parse the EST/EDT strings. pd.to_datetime() will automatically
-        # make them "aware" because the strings likely contain offsets.
-        start_time_naive = pd.to_datetime(
-            abbr_df["start_time_EST"], errors="coerce"
-        )
-        end_time_naive = pd.to_datetime(
-            abbr_df["end_time_EST"], errors="coerce"
-        )
+            # Parse the time strings. As the error message indicates,
+            # pd.to_datetime() is successfully reading them as
+            # timezone-AWARE objects (e.g., "2025-11-10 12:00:00-05:00").
+            start_time_aware = pd.to_datetime(
+                abbr_df["start_time_EST"], errors="coerce"
+            )
+            end_time_aware = pd.to_datetime(
+                abbr_df["end_time_EST"], errors="coerce"
+            )
 
-        start_time_aware = start_time_naive.dt.tz_localize("Etc/GMT+5")
-        end_time_aware = end_time_naive.dt.tz_localize("Etc/GMT+5")
-
-        # Convert to UTC (from whatever offset they had) and apply
-        # padding. This replaces the .tz_localize()...tz_convert() chain.
-        abbr_df["start_time_UTC_padded"] = (
-            start_time_aware.dt.tz_convert("UTC") - padding
-        )
-        abbr_df["end_time_UTC_padded"] = (
-            end_time_aware.dt.tz_convert("UTC") + padding
-        )
+            # Check for NaTs (Not a Time) created by errors="coerce"
+            # This handles the "ensure... valid timestamps" error.
+            invalid_rows = start_time_aware.isnull() | end_time_aware.isnull()
+            if invalid_rows.any():
+                _log(f"Found {invalid_rows.sum()} invalid timestamps. Dropping rows with errors.", level="error")
+                # Filter out the bad rows from both the Series and the DataFrame
+                start_time_aware = start_time_aware[~invalid_rows]
+                end_time_aware = end_time_aware[~invalid_rows]
+                # Use .copy() to avoid a SettingWithCopyWarning
+                abbr_df = abbr_df[~invalid_rows].copy() 
+        
+            # The error was caused by calling .tz_localize() on these
+            # already-aware datetimes.
+            # The correct step is to simply .tz_convert() them to UTC.
+            abbr_df["start_time_UTC_padded"] = (
+                start_time_aware.dt.tz_convert("UTC") - padding
+            )
+            abbr_df["end_time_UTC_padded"] = (
+                end_time_aware.dt.tz_convert("UTC") + padding
+            )
 
     except Exception as e:
         _log(
