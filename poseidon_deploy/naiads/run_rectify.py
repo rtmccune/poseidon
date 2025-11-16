@@ -238,7 +238,7 @@ def main():
     print(f"Generating grid at {args.resolution}m resolution...")
     grid_x, grid_y, grid_z = grid_gen.gen_grid(
         args.resolution, 
-        z=pts_array,
+        pts_array,
         dir=args.grid_dir,
         grid_descriptor=args.grid_descr)
 
@@ -249,11 +249,11 @@ def main():
     )
 
     # --- Step 4: Process Each Event Subfolder (in parallel) ---
-    print(f"Iterating through event folders in: {args.event_directory} using {args.workers} workers")
+    print(f"Iterating through event folders in: {args.event_dir} using {args.workers} workers")
 
     # Use os.scandir for efficient directory listing
     event_paths = []
-    with os.scandir(args.event_directory) as entries:
+    with os.scandir(args.event_dir) as entries:
         for entry in entries:
             if entry.is_dir():
                 event_paths.append(entry.path)
