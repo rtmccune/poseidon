@@ -30,13 +30,13 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_flood_event_setup.py"
 
-ABBR_EVENTS="$REPO_ROOT/data/down_east/abbr_flood_events.csv"
-FILT_ABBR_CSV="$REPO_ROOT/data/down_east/filt_abbr_flood_events.csv"
-FLOOD_EVENTS_CSV="$REPO_ROOT/data/down_east/flood_events.csv"
+ABBR_EVENTS="$REPO_ROOT/data/carolina_beach/abbr_flood_events.csv"
+FILT_ABBR_CSV="$REPO_ROOT/data/carolina_beach/filt_abbr_flood_events.csv"
+FLOOD_EVENTS_CSV="$REPO_ROOT/data/carolina_beach/flood_events.csv"
 
-IMAGE_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
-LABEL_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events_labels"
-OUTPUT_DIR="$REPO_ROOT/data/down_east/flood_events"
+IMAGE_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
+LABEL_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_labels"
+OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
 
 echo "Starting image organizer Python script..."
 python -u $RUNNER_SCRIPT \

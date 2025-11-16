@@ -35,24 +35,24 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_rectify.py"
 
-LIDAR_FILE="$REPO_ROOT/data/lidar/combined_point_cloud_down_east.laz"
+LIDAR_FILE="$REPO_ROOT/data/lidar/Job1051007_34077_04_88.laz"
 GRID_DIR="$REPO_ROOT/data/grids"
-EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
+EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
 
 echo "Starting image rectifier Python script..."
 python -u $RUNNER_SCRIPT \
     --lidar_file $LIDAR_FILE \
     --event_dir $EVENT_DIR \
-    --min_x 847809.694 \
-    --max_x 847973.874 \
-    --min_y 127254.634 \
-    --max_y 127450.141 \
-    --camera_name "DE_01" \
+    --min_x 712160 \
+    --max_x 712230 \
+    --min_y 33100 \
+    --max_y 33170 \
+    --camera_name "CB_03" \
     --intrinsics_name "suds_cam" \
     --grid_dir $GRID_DIR \
     --resolution 0.05 \
-    --lidar_units "meters" \
-    --grid_descr "down_east" \
+    --lidar_units "feet" \
+    --grid_descr "carolina_beach" \
     --image_subfolder 'orig_images' \
     --label_subfolder 'labels' \
     --zarr_base "zarr" \
