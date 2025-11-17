@@ -1,9 +1,9 @@
 #! /bin/bash
 
 #BSUB -J depths
-#BSUB -W 60
+#BSUB -W 360
 #BSUB -n 12
-#BSUB -R "rusage[mem=16G]"
+#BSUB -R "rusage[mem=4G]"
 #BSUB -R "select[a100 || l40 || l40s || h100]"
 #BSUB -gpu "num=1:mode=shared"
 #BSUB -q gpu
@@ -12,7 +12,7 @@
 
 source ~/.bashrc
 
-module load cuda/12.6
+module load cuda/11.2
 export MPI4PY_RC_INITIALIZE=False
 
 # Resolve the directory where the job was submitted from (LSF variable or fallback)
@@ -34,7 +34,7 @@ conda activate $POSEIDON_ENV
 
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
-RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_rectify.py"
+RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_calc_depths.py"
 
 LIDAR_FILE="$REPO_ROOT/data/lidar/combined_point_cloud_down_east.laz"
 GRID_DIR="$REPO_ROOT/data/grids"
@@ -54,7 +54,7 @@ python -u $RUNNER_SCRIPT \
     --grid_descr "down_east" \
     --zarr_base "zarr" \
     --zarr_label_dir "labels_rects" \
-    --zarr_depth_dir "labels_rects" \
+    --zarr_depth_dir "depth_maps" \
     --plot_base_dir "plots"
 
 echo "Deactivating conda environment..."

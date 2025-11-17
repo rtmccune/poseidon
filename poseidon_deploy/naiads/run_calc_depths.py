@@ -25,8 +25,8 @@ def process_event_folder(event_dir_path, processor, args):
 
     # Check if the required input folders exist
     if not os.path.exists(labels_folder):
-        logger.info(f"Skipping {subfolder_name}: Missing '{args.label_subfolder}'.")
-        return ('skip', f"Skipping {subfolder_name}: Missing '{args.label_subfolder}'.")
+        logger.info(f"Skipping {subfolder_name}: Missing '{args.zarr_label_dir}'.")
+        return ('skip', f"Skipping {subfolder_name}: Missing '{args.zarr_label_dir}'.")
 
     try:
         logger.info(f"--- Processing event: {subfolder_name} ---")
@@ -36,7 +36,7 @@ def process_event_folder(event_dir_path, processor, args):
         os.makedirs(zarr_output_dir, exist_ok=True)
 
         # --- Run Calculation ---
-        logger.info(f"[{subfolder_name}] Rectifying images from: {args.image_subfolder}")
+        logger.info(f"[{subfolder_name}] Calculating depths from: {args.zarr_label_dir}")
         processor.process_depth_maps(labels_folder, 
                                      zarr_output_dir,
                                      pond_edge_elev_plot_dir=os.path.join(event_dir_path, args.plot_base_dir))
@@ -173,7 +173,7 @@ def main():
         grid_descriptor=args.grid_descr)
 
     # --- Step 2: Initialize Depth Map Processor ---
-    logger.info(f"Initializing DepthMapProcessor... (GPU Enabled: {args.use_gpu})")
+    logger.info(f"Initializing DepthMapProcessor... ")
     processor = poseidon_core.DepthMapProcessor(
         grid_z,
     )
