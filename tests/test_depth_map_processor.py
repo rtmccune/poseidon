@@ -79,7 +79,7 @@ class TestDepthMapProcessor:
         processor = DepthMapProcessor(
             elevation_grid=sample_elev_grid_np,
             plot_edges=False,  # Disable plotting by default
-            pond_edge_elev_plot_dir="test_data/plots",
+            # pond_edge_elev_plot_dir="test_data/plots", <-- REMOVED
         )
         processor.elev_grid_cp = cp.array(sample_elev_grid_np)
         return processor
@@ -93,7 +93,7 @@ class TestDepthMapProcessor:
         processor = DepthMapProcessor(
             elevation_grid=sample_elev_grid_np,
             plot_edges=True,  # <-- UPDATED: Enable plotting
-            pond_edge_elev_plot_dir="test_data/plots",
+            # pond_edge_elev_plot_dir="test_data/plots", <-- REMOVED
         )
         processor.elev_grid_cp = cp.array(sample_elev_grid_np)
         return processor
@@ -111,7 +111,7 @@ class TestDepthMapProcessor:
         processor = DepthMapProcessor(
             elevation_grid=grid,
             plot_edges=False,  # Disable plotting by default
-            pond_edge_elev_plot_dir="test_data/plots",
+            # pond_edge_elev_plot_dir="test_data/plots", <-- REMOVED
         )
         processor.elev_grid_cp = cp.array(grid)
         return processor
@@ -174,7 +174,7 @@ class TestDepthMapProcessor:
         cp.testing.assert_allclose(
             processor.elev_grid_cp, cp.array(sample_elev_grid_np)
         )
-        assert processor.pond_edge_elev_plot_dir == "data/edge_histograms"
+        # assert processor.pond_edge_elev_plot_dir == "data/edge_histograms" <-- REMOVED
         assert processor.plot_edges is True  # Check default
 
     def test_init_plotting_disabled(self, sample_elev_grid_np):
@@ -531,6 +531,11 @@ class TestDepthMapProcessor:
         contour_values = {1: np.array([1.0, 2.0]), 3: np.array([3.0, 4.0])}
         file_name = "test_file"
 
+        # --- ADDED ---
+        # Set the attribute manually, as process_depth_maps() would
+        local_10x10_processor.pond_edge_elev_plot_dir = "test_data/plots"
+        # --- END ADDED ---
+
         local_10x10_processor._plot_pond_edge_elevations(
             labeled_data, contour_values, file_name
         )
@@ -581,6 +586,11 @@ class TestDepthMapProcessor:
         labeled_data[1, 1] = 1  # Pond 1 exists
         contour_values = {}  # But has no contour data
 
+        # --- ADDED ---
+        # Set the attribute manually, as process_depth_maps() would
+        local_10x10_processor.pond_edge_elev_plot_dir = "test_data/plots"
+        # --- END ADDED ---
+
         local_10x10_processor._plot_pond_edge_elevations(
             labeled_data, contour_values, "test_file"
         )
@@ -607,6 +617,11 @@ class TestDepthMapProcessor:
         labeled_data[3, 3] = 2  # Pond 2
         contour_values = {1: np.array([5.0, 6.0]), 2: np.array([7.0, 8.0])}
         file_name = "test_file"
+
+        # --- ADDED ---
+        # Set the attribute manually, as process_depth_maps() would
+        local_10x10_processor.pond_edge_elev_plot_dir = "test_data/plots"
+        # --- END ADDED ---
 
         local_10x10_processor._plot_pond_edge_elevations(
             labeled_data, contour_values, file_name
@@ -840,7 +855,14 @@ class TestDepthMapProcessor:
                 [{"image_name": "C_map", "depth_map": cp.array([2])}],
             ]
 
-            processor_instance.process_depth_maps("labels_dir", "depth_dir")
+            # --- UPDATED CALL ---
+            # Pass the plot dir arg explicitly to match old fixture's intent
+            processor_instance.process_depth_maps(
+                "labels_dir", 
+                "depth_dir",
+                pond_edge_elev_plot_dir="test_data/plots"
+            )
+            # --- END UPDATED CALL ---
 
             mock_listdir.assert_called_once_with("labels_dir")
 

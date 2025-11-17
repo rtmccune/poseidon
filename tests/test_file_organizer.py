@@ -161,11 +161,17 @@ def test_create_flood_csvs_and_subfolders_success(tmp_path):
     full_data_path = tmp_path / "full_data.csv"
     output_parent_dir = tmp_path / "output_events"
 
-    # Abbr events (naive EST, which is treated as UTC-5)
+    # Abbr events (NOW as aware UTC-5)
     abbr_data = {
         "sensor_ID": ["S1", "S2"],
-        "start_time_EST": ["2023-10-01 10:00:00", "2023-10-02 12:00:00"],
-        "end_time_EST": ["2023-10-01 12:00:00", "2023-10-02 13:00:00"],
+        "start_time_EST": [
+            "2023-10-01 10:00:00-05:00",
+            "2023-10-02 12:00:00-05:00",
+        ],
+        "end_time_EST": [
+            "2023-10-01 12:00:00-05:00",
+            "2023-10-02 13:00:00-05:00",  
+        ],
     }
     pd.DataFrame(abbr_data).to_csv(abbr_events_path, index=False)
 
