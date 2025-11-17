@@ -34,17 +34,12 @@ class DepthMapProcessor:
     plot_edges : bool
         Flag indicating whether to generate and save pond edge
         elevation plots.
-    pond_edge_elev_plot_dir : str
-        Path to the directory where output plots will be saved.
-        Subdirectories for individual and combined pond plots
-        will be created.
     """
 
     def __init__(
         self,
         elevation_grid,
         plot_edges=True,
-        pond_edge_elev_plot_dir="data/edge_histograms",
     ):
         """Initialize the object with an elevation grid.
 
@@ -56,15 +51,11 @@ class DepthMapProcessor:
         plot_edges : bool, optional
             If True (default), plots of pond edge elevations will be
             generated and saved.
-        pond_edge_elev_plot_dir : str, optional
-            The base directory path to save plots. Defaults to
-            'data/edge_histograms'.
         """
         self.elev_grid = elevation_grid
         self.elev_grid_cp = cp.array(self.elev_grid)
         self.plot_edges = plot_edges
-        self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
-
+    
     def process_single_depth_map(self, zarr_store_path, file_name):
         """Processes a Zarr store and computes depth maps.
 
@@ -124,7 +115,10 @@ class DepthMapProcessor:
 
         return depth_data
 
-    def process_depth_maps(self, labels_zarr_dir, depth_map_zarr_dir):
+    def process_depth_maps(self, 
+                           labels_zarr_dir,
+                           depth_map_zarr_dir,
+                           pond_edge_elev_plot_dir="data/edge_histograms",):
         """Creates and saves depth maps as zarr arrays with logging.
 
         Given a zarr directory containing rectified labels, this method
@@ -138,11 +132,16 @@ class DepthMapProcessor:
         depth_map_zarr_dir : str
             Path to the directory where processed depth maps will be
             saved.
+        pond_edge_elev_plot_dir : str, optional
+            The base directory path to save plots. Defaults to
+            'data/edge_histograms'.
 
         Returns
         -------
         None
         """
+        self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
+        
         _log("\n=== Starting Depth Map Generation ===")
         _log(f"  Source Zarr directory: {labels_zarr_dir}")
         _log(f"  Output Zarr directory: {depth_map_zarr_dir}")
