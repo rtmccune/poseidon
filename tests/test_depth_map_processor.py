@@ -858,9 +858,9 @@ class TestDepthMapProcessor:
             # --- UPDATED CALL ---
             # Pass the plot dir arg explicitly to match old fixture's intent
             processor_instance.process_depth_maps(
-                "labels_dir", 
+                "labels_dir",
                 "depth_dir",
-                pond_edge_elev_plot_dir="test_data/plots"
+                pond_edge_elev_plot_dir="test_data/plots",
             )
             # --- END UPDATED CALL ---
 

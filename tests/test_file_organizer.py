@@ -170,7 +170,7 @@ def test_create_flood_csvs_and_subfolders_success(tmp_path):
         ],
         "end_time_EST": [
             "2023-10-01 12:00:00-05:00",
-            "2023-10-02 13:00:00-05:00",  
+            "2023-10-02 13:00:00-05:00",
         ],
     }
     pd.DataFrame(abbr_data).to_csv(abbr_events_path, index=False)
