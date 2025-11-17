@@ -106,7 +106,7 @@ def main():
         subfolder_name=args.image_subfolder,
         padding_hours=args.padding_hours,
     )
-    
+
     # --- Pipeline Step 4: Organize Labels into Folders ---
     file_organizer.organize_images_into_flood_events(
         image_folder=args.label_dir,
@@ -122,6 +122,7 @@ def main():
         output_parent_dir=args.output_dir,
         image_subfolder_name=args.image_subfolder,
     )
+
 
 if __name__ == "__main__":
     main()

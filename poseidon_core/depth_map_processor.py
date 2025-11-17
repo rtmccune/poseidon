@@ -13,6 +13,7 @@ from skimage.measure import find_contours
 
 logger = logging.getLogger(__name__)
 
+
 class DepthMapProcessor:
     """
     A class for identifying, analyzing, and visualizing water depth.
@@ -53,7 +54,7 @@ class DepthMapProcessor:
         self.elev_grid = elevation_grid
         self.elev_grid_cp = cp.array(self.elev_grid)
         self.plot_edges = plot_edges
-    
+
     def process_single_depth_map(self, zarr_store_path, file_name):
         """Processes a Zarr store and computes depth maps.
 
@@ -113,10 +114,12 @@ class DepthMapProcessor:
 
         return depth_data
 
-    def process_depth_maps(self, 
-                           labels_zarr_dir,
-                           depth_map_zarr_dir,
-                           pond_edge_elev_plot_dir="data/edge_histograms",):
+    def process_depth_maps(
+        self,
+        labels_zarr_dir,
+        depth_map_zarr_dir,
+        pond_edge_elev_plot_dir="data/edge_histograms",
+    ):
         """Creates and saves depth maps as zarr arrays with logging.
 
         Given a zarr directory containing rectified labels, this method
@@ -139,7 +142,7 @@ class DepthMapProcessor:
         None
         """
         self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
-        
+
         logger.info("\n=== Starting Depth Map Generation ===")
         logger.info(f"  Source Zarr directory: {labels_zarr_dir}")
         logger.info(f"  Output Zarr directory: {depth_map_zarr_dir}")
@@ -148,11 +151,15 @@ class DepthMapProcessor:
         try:
             all_files = os.listdir(labels_zarr_dir)
         except FileNotFoundError:
-            logger.error(f"  ERROR: Source directory not found at {labels_zarr_dir}.")
+            logger.error(
+                f"  ERROR: Source directory not found at {labels_zarr_dir}."
+            )
             logger.info("=== Depth Map Generation Aborted ===")
             return
         except Exception as e:
-            logger.error(f"  ERROR: Could not read directory {labels_zarr_dir}. {e}")
+            logger.error(
+                f"  ERROR: Could not read directory {labels_zarr_dir}. {e}"
+            )
             logger.info("=== Depth Map Generation Aborted ===")
             return
 
@@ -181,7 +188,9 @@ class DepthMapProcessor:
                 or i == 0
                 or (i + 1) == total_files
             ):
-                logger.info(f"  Processing file {i + 1}/{total_files}: {file_name}")
+                logger.info(
+                    f"  Processing file {i + 1}/{total_files}: {file_name}"
+                )
 
             rectified_label_path = os.path.join(labels_zarr_dir, file_name)
 
@@ -224,7 +233,9 @@ class DepthMapProcessor:
             processed_count += 1
 
         # Print success message after all images are processed
-        logger.info(f"  Successfully processed {processed_count}/{total_files} files.")
+        logger.info(
+            f"  Successfully processed {processed_count}/{total_files} files."
+        )
         logger.info("=== Depth Map Generation Complete ===")
 
     def _label_ponds(self, gpu_label_array):

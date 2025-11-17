@@ -187,36 +187,39 @@ def create_flood_csvs_and_subfolders(
 
     # Convert naive EST strings to aware datetime objects
     try:
-            # Parse the time strings. As the error message indicates,
-            # pd.to_datetime() is successfully reading them as
-            # timezone-AWARE objects (e.g., "2025-11-10 12:00:00-05:00").
-            start_time_aware = pd.to_datetime(
-                abbr_df["start_time_EST"], errors="coerce"
-            )
-            end_time_aware = pd.to_datetime(
-                abbr_df["end_time_EST"], errors="coerce"
-            )
+        # Parse the time strings. As the error message indicates,
+        # pd.to_datetime() is successfully reading them as
+        # timezone-AWARE objects (e.g., "2025-11-10 12:00:00-05:00").
+        start_time_aware = pd.to_datetime(
+            abbr_df["start_time_EST"], errors="coerce"
+        )
+        end_time_aware = pd.to_datetime(
+            abbr_df["end_time_EST"], errors="coerce"
+        )
 
-            # Check for NaTs (Not a Time) created by errors="coerce"
-            # This handles the "ensure... valid timestamps" error.
-            invalid_rows = start_time_aware.isnull() | end_time_aware.isnull()
-            if invalid_rows.any():
-                _log(f"Found {invalid_rows.sum()} invalid timestamps. Dropping rows with errors.", level="error")
-                # Filter out the bad rows from both the Series and the DataFrame
-                start_time_aware = start_time_aware[~invalid_rows]
-                end_time_aware = end_time_aware[~invalid_rows]
-                # Use .copy() to avoid a SettingWithCopyWarning
-                abbr_df = abbr_df[~invalid_rows].copy() 
-        
-            # The error was caused by calling .tz_localize() on these
-            # already-aware datetimes.
-            # The correct step is to simply .tz_convert() them to UTC.
-            abbr_df["start_time_UTC_padded"] = (
-                start_time_aware.dt.tz_convert("UTC") - padding
+        # Check for NaTs (Not a Time) created by errors="coerce"
+        # This handles the "ensure... valid timestamps" error.
+        invalid_rows = start_time_aware.isnull() | end_time_aware.isnull()
+        if invalid_rows.any():
+            _log(
+                f"Found {invalid_rows.sum()} invalid timestamps. Dropping rows with errors.",
+                level="error",
             )
-            abbr_df["end_time_UTC_padded"] = (
-                end_time_aware.dt.tz_convert("UTC") + padding
-            )
+            # Filter out the bad rows from both the Series and the DataFrame
+            start_time_aware = start_time_aware[~invalid_rows]
+            end_time_aware = end_time_aware[~invalid_rows]
+            # Use .copy() to avoid a SettingWithCopyWarning
+            abbr_df = abbr_df[~invalid_rows].copy()
+
+        # The error was caused by calling .tz_localize() on these
+        # already-aware datetimes.
+        # The correct step is to simply .tz_convert() them to UTC.
+        abbr_df["start_time_UTC_padded"] = (
+            start_time_aware.dt.tz_convert("UTC") - padding
+        )
+        abbr_df["end_time_UTC_padded"] = (
+            end_time_aware.dt.tz_convert("UTC") + padding
+        )
 
     except Exception as e:
         _log(
@@ -576,7 +579,8 @@ def prepare_job_lists(image_folder: str, num_jobs: int, output_dir: str = None):
     print(
         f"\nSuccess! Created {len(file_chunks)} file lists in '{final_output_path}' for a total of {total_files} files."
     )
-    
+
+
 def prune_empty_event_folders(output_parent_dir, image_subfolder_name):
     """
     Scans the output directory and removes any event subfolders
@@ -603,12 +607,14 @@ def prune_empty_event_folders(output_parent_dir, image_subfolder_name):
     _log(f"Looking for subfolders that are missing '{image_subfolder_name}'.")
 
     removed_folders = []
-    
+
     try:
         # Get a list of all items in the parent directory
         all_event_folders = os.listdir(output_parent_dir)
     except FileNotFoundError:
-        _log(f"Parent directory not found: '{output_parent_dir}'", level="error")
+        _log(
+            f"Parent directory not found: '{output_parent_dir}'", level="error"
+        )
         return
 
     for folder_name in all_event_folders:
@@ -620,20 +626,28 @@ def prune_empty_event_folders(output_parent_dir, image_subfolder_name):
 
         # This is the path to the folder we expect to find *inside*
         # the event subfolder (e.g., .../CAM_NC_01_.../orig_images)
-        image_folder_path = os.path.join(event_folder_path, image_subfolder_name)
+        image_folder_path = os.path.join(
+            event_folder_path, image_subfolder_name
+        )
 
         # The condition for deletion:
         # The 'orig_images' folder does not exist.
         if not os.path.exists(image_folder_path):
             try:
                 # Log *before* deleting
-                _log(f"  - Pruning event folder (no images found): {folder_name}")
+                _log(
+                    f"  - Pruning event folder (no images found): {folder_name}"
+                )
                 shutil.rmtree(event_folder_path)
                 removed_folders.append(folder_name)
             except OSError as e:
-                _log(f"Failed to delete {event_folder_path}: {e}", level="error")
+                _log(
+                    f"Failed to delete {event_folder_path}: {e}", level="error"
+                )
 
     if not removed_folders:
         _log("No empty event folders found to prune.")
     else:
-        _log(f"Cleanup complete. Pruned {len(removed_folders)} empty event folders.")
+        _log(
+            f"Cleanup complete. Pruned {len(removed_folders)} empty event folders."
+        )

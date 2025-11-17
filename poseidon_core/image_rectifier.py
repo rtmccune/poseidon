@@ -11,6 +11,7 @@ from scipy.interpolate import RegularGridInterpolator as reg_interp
 
 logger = logging.getLogger(__name__)
 
+
 class ImageRectifier:
     """
     Manages image rectification and distortion correction.
@@ -232,7 +233,9 @@ class ImageRectifier:
         total_images = len(image_names)
 
         if total_images == 0:
-            logger.warning("  WARNING: No images found in source folder. Nothing to do.")
+            logger.warning(
+                "  WARNING: No images found in source folder. Nothing to do."
+            )
             logger.warning("=== Batch Rectification Complete ===")
             return
 
@@ -248,7 +251,9 @@ class ImageRectifier:
                 or i == 0
                 or (i + 1) == total_images
             ):
-                logger.info(f"  Processing image {i + 1}/{total_images}: {image_name}")
+                logger.info(
+                    f"  Processing image {i + 1}/{total_images}: {image_name}"
+                )
 
             image_path = os.path.join(folder_path, image_name)
 
@@ -257,7 +262,9 @@ class ImageRectifier:
                     image_path, labels, verbose=False  # Keep this quiet
                 )
             except Exception as e:
-                logger.error(f"  ERROR: Failed to rectify image {image_name}. {e}")
+                logger.error(
+                    f"  ERROR: Failed to rectify image {image_name}. {e}"
+                )
                 continue  # Skip to the next image
 
             # Create a dataset name by appending 'rectified' to the
