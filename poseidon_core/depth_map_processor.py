@@ -1,4 +1,5 @@
 import os
+import logging
 import zarr
 import cupy as cp
 import numpy as np
@@ -10,10 +11,7 @@ from cucim.skimage.morphology import binary_closing
 from skimage.measure import find_contours
 
 
-def _log(message):
-    """Helper function for timestamped logging."""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
-
+logger = logging.getLogger(__name__)
 
 class DepthMapProcessor:
     """
@@ -142,20 +140,20 @@ class DepthMapProcessor:
         """
         self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
         
-        _log("\n=== Starting Depth Map Generation ===")
-        _log(f"  Source Zarr directory: {labels_zarr_dir}")
-        _log(f"  Output Zarr directory: {depth_map_zarr_dir}")
+        logger.info("\n=== Starting Depth Map Generation ===")
+        logger.info(f"  Source Zarr directory: {labels_zarr_dir}")
+        logger.info(f"  Output Zarr directory: {depth_map_zarr_dir}")
 
         # Get a list of all files in the source directory
         try:
             all_files = os.listdir(labels_zarr_dir)
         except FileNotFoundError:
-            _log(f"  ERROR: Source directory not found at {labels_zarr_dir}.")
-            _log("=== Depth Map Generation Aborted ===")
+            logger.error(f"  ERROR: Source directory not found at {labels_zarr_dir}.")
+            logger.info("=== Depth Map Generation Aborted ===")
             return
         except Exception as e:
-            _log(f"  ERROR: Could not read directory {labels_zarr_dir}. {e}")
-            _log("=== Depth Map Generation Aborted ===")
+            logger.error(f"  ERROR: Could not read directory {labels_zarr_dir}. {e}")
+            logger.info("=== Depth Map Generation Aborted ===")
             return
 
         # Filter for the files we actually need to process
@@ -163,14 +161,14 @@ class DepthMapProcessor:
         total_files = len(files_to_process)
 
         if total_files == 0:
-            _log(
+            logger.warning(
                 f"  WARNING: No '_rectified' files found in {labels_zarr_dir}. "
                 f"Nothing to do."
             )
-            _log("=== Depth Map Generation Complete ===")
+            logger.info("=== Depth Map Generation Complete ===")
             return
 
-        _log(f"  Found {total_files} rectified label arrays to process.")
+        logger.info(f"  Found {total_files} rectified label arrays to process.")
 
         # Determine report interval (print ~10 updates + first/last)
         report_interval = max(1, total_files // 10)
@@ -183,7 +181,7 @@ class DepthMapProcessor:
                 or i == 0
                 or (i + 1) == total_files
             ):
-                _log(f"  Processing file {i + 1}/{total_files}: {file_name}")
+                logger.info(f"  Processing file {i + 1}/{total_files}: {file_name}")
 
             rectified_label_path = os.path.join(labels_zarr_dir, file_name)
 
@@ -193,7 +191,7 @@ class DepthMapProcessor:
                     rectified_label_path, file_name
                 )
             except Exception as e:
-                _log(
+                logger.error(
                     f"  ERROR: Failed to process depth map for {file_name}. {e}"
                 )
                 continue  # Skip to the next file
@@ -202,13 +200,13 @@ class DepthMapProcessor:
             try:
                 depth_maps = pd.DataFrame(depth_data)
                 if depth_maps.empty:
-                    _log(
+                    logger.warning(
                         f"  WARNING: No depth data generated for {file_name}. "
                         f"Skipping save."
                     )
                     continue
             except Exception as e:
-                _log(
+                logger.error(
                     f"  ERROR: Failed to create DataFrame for {file_name}. {e}"
                 )
                 continue  # Skip to the next file
@@ -217,7 +215,7 @@ class DepthMapProcessor:
             try:
                 self._save_depth_maps(depth_maps, depth_map_zarr_dir)
             except Exception as e:
-                _log(
+                logger.error(
                     f"  ERROR: Failed to save depth maps for {file_name} to "
                     f"{depth_map_zarr_dir}. {e}"
                 )
@@ -226,8 +224,8 @@ class DepthMapProcessor:
             processed_count += 1
 
         # Print success message after all images are processed
-        _log(f"  Successfully processed {processed_count}/{total_files} files.")
-        _log("=== Depth Map Generation Complete ===")
+        logger.info(f"  Successfully processed {processed_count}/{total_files} files.")
+        logger.info("=== Depth Map Generation Complete ===")
 
     def _label_ponds(self, gpu_label_array):
         """Labels and processes pond regions efficiently using a LUT.
@@ -438,7 +436,7 @@ class DepthMapProcessor:
                 k: cp.array(v) for k, v in contour_values_per_pond.items()
             }
         except Exception as e:
-            print(f"Error converting contour values to CuPy: {e}")
+            logger.error(f"Error converting contour values to CuPy: {e}")
             return {}  # Return empty on error
 
         unique_pond_ids = cp.unique(labeled_data)
@@ -459,7 +457,7 @@ class DepthMapProcessor:
                 continue
 
             if pond_id_cpu not in gpu_contours:
-                print(
+                logger.warning(
                     f"Warning: No contours found for pond_id {pond_id_cpu}. "
                     f"Skipping depth calculation for this pond."
                 )
@@ -616,14 +614,14 @@ class DepthMapProcessor:
                     pond_id_key
                 ]
             else:
-                print(
+                logger.warning(
                     f"Warning: No contours for pond_id {pond_id_key}. "
                     f"Skipping plot."
                 )
 
         # Check if there is anything to plot
         if not edge_elevs_by_pond:
-            print(
+            logger.warning(
                 f"No pond edge elevations found for {file_name}. "
                 f"Skipping all histograms."
             )
@@ -716,7 +714,7 @@ class DepthMapProcessor:
         """
         # Ensure there is data to prevent errors with empty arrays
         if data.size == 0:
-            print(f"Warning: No data to plot for '{title}'. Skipping.")
+            logger.warning(f"Warning: No data to plot for '{title}'. Skipping.")
             return
 
         # Compute all required statistics

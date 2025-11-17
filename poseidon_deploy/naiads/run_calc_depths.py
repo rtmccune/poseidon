@@ -53,7 +53,8 @@ def main():
     logging.basicConfig(
         level=logging.INFO, 
         format=log_format, 
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        stream=sys.stdout
     )
     logger = logging.getLogger(__name__) # Get logger for this script
     
@@ -194,7 +195,10 @@ def main():
     error_count = 0
 
     # Use ThreadPoolExecutor to parallelize the work
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=args.workers,
+        thread_name_prefix='EventWorker'
+        ) as executor:
         # Create a "future" for each call to process_event_folder
         # We pass the rectifier and args objects to each thread
         future_to_path = {
@@ -211,7 +215,6 @@ def main():
                     processed_count += 1
                 elif status == 'skip':
                     skipped_count += 1
-                    print(message) # Print skip messages
                 elif status == 'error':
                     error_count += 1
             except Exception as e:
