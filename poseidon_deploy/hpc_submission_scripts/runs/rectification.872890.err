@@ -1,0 +1,910 @@
+[2025-12-30 19:51:39] [MainThread  ] --- Starting Rectification Pipeline ---
+[2025-12-30 19:51:39] [MainThread  ] Loaded intrinsics: 'suds_cam'
+[2025-12-30 19:51:39] [MainThread  ] Loaded extrinsics: 'CB_03'
+[2025-12-30 19:51:39] [MainThread  ] Loading LiDAR data from: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/lidar/Job1051007_34077_04_88.laz
+[2025-12-30 19:51:41] [MainThread  ] Creating point array from LiDAR data...
+[2025-12-30 19:51:41] [MainThread  ] Generating grid at 0.05m resolution...
+[2025-12-30 19:51:43] [MainThread  ] Initializing ImageRectifier... (GPU Enabled: True)
+[2025-12-30 19:51:43] [MainThread  ] --- Initializing ImageRectifier ---
+[2025-12-30 19:51:43] [MainThread  ]   Mode: GPU (CuPy)
+[2025-12-30 19:51:43] [MainThread  ]   Input grid shape: (1400, 1400)
+[2025-12-30 19:51:43] [MainThread  ]   Starting distortion map computation (Ud, Vd)...
+[2025-12-30 19:51:47] [MainThread  ]   ...Distortion map computation complete.
+[2025-12-30 19:51:47] [MainThread  ] --- ImageRectifier Initialization Complete ---
+[2025-12-30 19:51:47] [MainThread  ] Iterating through event folders in: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events using 4 workers
+[2025-12-30 19:51:47] [MainThread  ] Found 21 potential event directories.
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0] --- Processing event: CB_03_20220819133226_20220819200826 ---
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1] --- Processing event: CB_03_20220929122627_20220929210227 ---
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2] --- Processing event: CB_03_20220930102326_20221001011226 ---
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3] --- Processing event: CB_03_20221004180501_20221005012401 ---
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2] [CB_03_20220930102326_20221001011226] Rectifying images from: orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220930102326_20221001011226/orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220930102326_20221001011226/zarr/orig_image_rects
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0] [CB_03_20220819133226_20220819200826] Rectifying images from: orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220819133226_20220819200826/orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220819133226_20220819200826/zarr/orig_image_rects
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1] [CB_03_20220929122627_20220929210227] Rectifying images from: orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220929122627_20220929210227/orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220929122627_20220929210227/zarr/orig_image_rects
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3] [CB_03_20221004180501_20221005012401] Rectifying images from: orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221004180501_20221005012401/orig_images
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221004180501_20221005012401/zarr/orig_image_rects
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0]   Found 66 images to process.
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_0]   Processing image 1/66: CAM_CB_03_20220819172426.jpg
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3]   Found 57 images to process.
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_3]   Processing image 1/57: CAM_CB_03_20221004224226.jpg
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2]   Found 136 images to process.
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_2]   Processing image 1/136: CAM_CB_03_20220930204225.jpg
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1]   Found 86 images to process.
+[2025-12-30 19:51:47] [ThreadPoolExecutor-0_1]   Processing image 1/86: CAM_CB_03_20220929184825.jpg
+[2025-12-30 19:51:53] [ThreadPoolExecutor-0_3]   Processing image 5/57: CAM_CB_03_20221004192425.jpg
+[2025-12-30 19:51:54] [ThreadPoolExecutor-0_0]   Processing image 6/66: CAM_CB_03_20220819150025.jpg
+[2025-12-30 19:51:55] [ThreadPoolExecutor-0_1]   Processing image 8/86: CAM_CB_03_20220929160025.jpg
+[2025-12-30 19:51:58] [ThreadPoolExecutor-0_3]   Processing image 10/57: CAM_CB_03_20221004191225.jpg
+[2025-12-30 19:52:01] [ThreadPoolExecutor-0_0]   Processing image 12/66: CAM_CB_03_20220819133625.jpg
+[2025-12-30 19:52:02] [ThreadPoolExecutor-0_2]   Processing image 13/136: CAM_CB_03_20220930131826.jpg
+[2025-12-30 19:52:04] [ThreadPoolExecutor-0_1]   Processing image 16/86: CAM_CB_03_20220929200625.jpg
+[2025-12-30 19:52:04] [ThreadPoolExecutor-0_3]   Processing image 15/57: CAM_CB_03_20221004184825.jpg
+[2025-12-30 19:52:07] [ThreadPoolExecutor-0_0]   Processing image 18/66: CAM_CB_03_20220819183625.jpg
+[2025-12-30 19:52:09] [ThreadPoolExecutor-0_3]   Processing image 20/57: CAM_CB_03_20221004213625.jpg
+[2025-12-30 19:52:12] [ThreadPoolExecutor-0_1]   Processing image 24/86: CAM_CB_03_20220929161225.jpg
+[2025-12-30 19:52:14] [ThreadPoolExecutor-0_0]   Processing image 24/66: CAM_CB_03_20220819161826.jpg
+[2025-12-30 19:52:15] [ThreadPoolExecutor-0_3]   Processing image 25/57: CAM_CB_03_20221004182426.jpg
+[2025-12-30 19:52:17] [ThreadPoolExecutor-0_2]   Processing image 26/136: CAM_CB_03_20220930173026.jpg
+[2025-12-30 19:52:22] [ThreadPoolExecutor-0_1]   Processing image 32/86: CAM_CB_03_20220929172425.jpg
+[2025-12-30 19:52:22] [ThreadPoolExecutor-0_3]   Processing image 30/57: CAM_CB_03_20221004221226.jpg
+[2025-12-30 19:52:22] [ThreadPoolExecutor-0_0]   Processing image 30/66: CAM_CB_03_20220819173625.jpg
+[2025-12-30 19:52:29] [ThreadPoolExecutor-0_3]   Processing image 35/57: CAM_CB_03_20221004222425.jpg
+[2025-12-30 19:52:30] [ThreadPoolExecutor-0_0]   Processing image 36/66: CAM_CB_03_20220819173026.jpg
+[2025-12-30 19:52:33] [ThreadPoolExecutor-0_1]   Processing image 40/86: CAM_CB_03_20220929133025.jpg
+[2025-12-30 19:52:34] [ThreadPoolExecutor-0_2]   Processing image 39/136: CAM_CB_03_20220930213625.jpg
+[2025-12-30 19:52:35] [ThreadPoolExecutor-0_3]   Processing image 40/57: CAM_CB_03_20221004225426.jpg
+[2025-12-30 19:52:38] [ThreadPoolExecutor-0_0]   Processing image 42/66: CAM_CB_03_20220819192426.jpg
+[2025-12-30 19:52:41] [ThreadPoolExecutor-0_3]   Processing image 45/57: CAM_CB_03_20221004194826.jpg
+[2025-12-30 19:52:42] [ThreadPoolExecutor-0_1]   Processing image 48/86: CAM_CB_03_20220929144826.jpg
+[2025-12-30 19:52:45] [ThreadPoolExecutor-0_0]   Processing image 48/66: CAM_CB_03_20220819142425.jpg
+[2025-12-30 19:52:47] [ThreadPoolExecutor-0_3]   Processing image 50/57: CAM_CB_03_20221004204226.jpg
+[2025-12-30 19:52:49] [ThreadPoolExecutor-0_2]   Processing image 52/136: CAM_CB_03_20220930201225.jpg
+[2025-12-30 19:52:50] [ThreadPoolExecutor-0_1]   Processing image 56/86: CAM_CB_03_20220929142425.jpg
+[2025-12-30 19:52:51] [ThreadPoolExecutor-0_0]   Processing image 54/66: CAM_CB_03_20220819152426.jpg
+[2025-12-30 19:52:52] [ThreadPoolExecutor-0_3]   Processing image 55/57: CAM_CB_03_20221004220626.jpg
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3]   Processing image 57/57: CAM_CB_03_20221004203025.jpg
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3]   Successfully processed 57 images.
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3] [CB_03_20221004180501_20221005012401] Rectifying labels from: labels
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221004180501_20221005012401/labels
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221004180501_20221005012401/zarr/labels_rects
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3]   Found 57 images to process.
+[2025-12-30 19:52:54] [ThreadPoolExecutor-0_3]   Processing image 1/57: CAM_CB_03_20221004202426_predseg_labels.png
+[2025-12-30 19:52:56] [ThreadPoolExecutor-0_0]   Processing image 60/66: CAM_CB_03_20220819181825.jpg
+[2025-12-30 19:52:57] [ThreadPoolExecutor-0_1]   Processing image 64/86: CAM_CB_03_20220929140626.jpg
+[2025-12-30 19:52:58] [ThreadPoolExecutor-0_3]   Processing image 5/57: CAM_CB_03_20221004233629_predseg_labels.png
+[2025-12-30 19:53:01] [ThreadPoolExecutor-0_3]   Processing image 10/57: CAM_CB_03_20221004193026_predseg_labels.png
+[2025-12-30 19:53:02] [ThreadPoolExecutor-0_2]   Processing image 65/136: CAM_CB_03_20220930123626.jpg
+[2025-12-30 19:53:03] [ThreadPoolExecutor-0_0]   Processing image 66/66: CAM_CB_03_20220819194826.jpg
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0]   Successfully processed 66 images.
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0] [CB_03_20220819133226_20220819200826] Rectifying labels from: labels
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220819133226_20220819200826/labels
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220819133226_20220819200826/zarr/labels_rects
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0]   Found 66 images to process.
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_0]   Processing image 1/66: CAM_CB_03_20220819190026_predseg_labels.png
+[2025-12-30 19:53:04] [ThreadPoolExecutor-0_3]   Processing image 15/57: CAM_CB_03_20221004180626_predseg_labels.png
+[2025-12-30 19:53:05] [ThreadPoolExecutor-0_1]   Processing image 72/86: CAM_CB_03_20220929152425.jpg
+[2025-12-30 19:53:07] [ThreadPoolExecutor-0_0]   Processing image 6/66: CAM_CB_03_20220819165425_predseg_labels.png
+[2025-12-30 19:53:08] [ThreadPoolExecutor-0_3]   Processing image 20/57: CAM_CB_03_20221004221826_predseg_labels.png
+[2025-12-30 19:53:11] [ThreadPoolExecutor-0_3]   Processing image 25/57: CAM_CB_03_20221004214826_predseg_labels.png
+[2025-12-30 19:53:11] [ThreadPoolExecutor-0_1]   Processing image 80/86: CAM_CB_03_20220929164825.jpg
+[2025-12-30 19:53:11] [ThreadPoolExecutor-0_0]   Processing image 12/66: CAM_CB_03_20220819161225_predseg_labels.png
+[2025-12-30 19:53:12] [ThreadPoolExecutor-0_2]   Processing image 78/136: CAM_CB_03_20220930132426.jpg
+[2025-12-30 19:53:14] [ThreadPoolExecutor-0_3]   Processing image 30/57: CAM_CB_03_20221004201225_predseg_labels.png
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_0]   Processing image 18/66: CAM_CB_03_20220819183625_predseg_labels.png
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1]   Processing image 86/86: CAM_CB_03_20220929151826.jpg
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1]   Successfully processed 86 images.
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1] [CB_03_20220929122627_20220929210227] Rectifying labels from: labels
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220929122627_20220929210227/labels
+[2025-12-30 19:53:15] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220929122627_20220929210227/zarr/labels_rects
+[2025-12-30 19:53:16] [ThreadPoolExecutor-0_1]   Found 86 images to process.
+[2025-12-30 19:53:16] [ThreadPoolExecutor-0_1]   Processing image 1/86: CAM_CB_03_20220929175425_predseg_labels.png
+[2025-12-30 19:53:16] [ThreadPoolExecutor-0_3]   Processing image 35/57: CAM_CB_03_20221004182426_predseg_labels.png
+[2025-12-30 19:53:17] [ThreadPoolExecutor-0_0]   Processing image 24/66: CAM_CB_03_20220819184826_predseg_labels.png
+[2025-12-30 19:53:18] [ThreadPoolExecutor-0_1]   Processing image 8/86: CAM_CB_03_20220929140025_predseg_labels.png
+[2025-12-30 19:53:18] [ThreadPoolExecutor-0_3]   Processing image 40/57: CAM_CB_03_20221004201826_predseg_labels.png
+[2025-12-30 19:53:19] [ThreadPoolExecutor-0_2]   Processing image 91/136: CAM_CB_03_20220930210026.jpg
+[2025-12-30 19:53:20] [ThreadPoolExecutor-0_0]   Processing image 30/66: CAM_CB_03_20220819162425_predseg_labels.png
+[2025-12-30 19:53:21] [ThreadPoolExecutor-0_3]   Processing image 45/57: CAM_CB_03_20221004220626_predseg_labels.png
+[2025-12-30 19:53:22] [ThreadPoolExecutor-0_1]   Processing image 16/86: CAM_CB_03_20220929163626_predseg_labels.png
+[2025-12-30 19:53:23] [ThreadPoolExecutor-0_3]   Processing image 50/57: CAM_CB_03_20221004200625_predseg_labels.png
+[2025-12-30 19:53:23] [ThreadPoolExecutor-0_0]   Processing image 36/66: CAM_CB_03_20220819164226_predseg_labels.png
+[2025-12-30 19:53:25] [ThreadPoolExecutor-0_1]   Processing image 24/86: CAM_CB_03_20220929132426_predseg_labels.png
+[2025-12-30 19:53:25] [ThreadPoolExecutor-0_3]   Processing image 55/57: CAM_CB_03_20221004191225_predseg_labels.png
+[2025-12-30 19:53:26] [ThreadPoolExecutor-0_2]   Processing image 104/136: CAM_CB_03_20220930161225.jpg
+[2025-12-30 19:53:26] [ThreadPoolExecutor-0_0]   Processing image 42/66: CAM_CB_03_20220819193626_predseg_labels.png
+[2025-12-30 19:53:26] [ThreadPoolExecutor-0_3]   Processing image 57/57: CAM_CB_03_20221004195425_predseg_labels.png
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3]   Successfully processed 57 images.
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3] +++ Successfully processed event CB_03_20221004180501_20221005012401 +++
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3] --- Processing event: CB_03_20221125103134_20221125183634 ---
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3] [CB_03_20221125103134_20221125183634] Rectifying images from: orig_images
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221125103134_20221125183634/orig_images
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221125103134_20221125183634/zarr/orig_image_rects
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3]   Found 77 images to process.
+[2025-12-30 19:53:27] [ThreadPoolExecutor-0_3]   Processing image 1/77: CAM_CB_03_20221125160626.jpg
+[2025-12-30 19:53:28] [ThreadPoolExecutor-0_0]   Processing image 48/66: CAM_CB_03_20220819174225_predseg_labels.png
+[2025-12-30 19:53:29] [ThreadPoolExecutor-0_1]   Processing image 32/86: CAM_CB_03_20220929174826_predseg_labels.png
+[2025-12-30 19:53:31] [ThreadPoolExecutor-0_0]   Processing image 54/66: CAM_CB_03_20220819134225_predseg_labels.png
+[2025-12-30 19:53:32] [ThreadPoolExecutor-0_3]   Processing image 7/77: CAM_CB_03_20221125134226.jpg
+[2025-12-30 19:53:33] [ThreadPoolExecutor-0_1]   Processing image 40/86: CAM_CB_03_20220929203626_predseg_labels.png
+[2025-12-30 19:53:35] [ThreadPoolExecutor-0_0]   Processing image 60/66: CAM_CB_03_20220819145426_predseg_labels.png
+[2025-12-30 19:53:35] [ThreadPoolExecutor-0_2]   Processing image 117/136: CAM_CB_03_20220930200026.jpg
+[2025-12-30 19:53:36] [ThreadPoolExecutor-0_1]   Processing image 48/86: CAM_CB_03_20220929170025_predseg_labels.png
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_3]   Processing image 14/77: CAM_CB_03_20221125110635.jpg
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0]   Processing image 66/66: CAM_CB_03_20220819154826_predseg_labels.png
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0]   Successfully processed 66 images.
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0] +++ Successfully processed event CB_03_20220819133226_20220819200826 +++
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0] --- Processing event: CB_03_20221222085004_20221222183804 ---
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0] [CB_03_20221222085004_20221222183804] Rectifying images from: orig_images
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221222085004_20221222183804/orig_images
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221222085004_20221222183804/zarr/orig_image_rects
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0]   Found 73 images to process.
+[2025-12-30 19:53:37] [ThreadPoolExecutor-0_0]   Processing image 1/73: CAM_CB_03_20221222124226.jpg
+[2025-12-30 19:53:40] [ThreadPoolExecutor-0_1]   Processing image 56/86: CAM_CB_03_20220929193026_predseg_labels.png
+[2025-12-30 19:53:43] [ThreadPoolExecutor-0_0]   Processing image 7/73: CAM_CB_03_20221222172445.jpg
+[2025-12-30 19:53:43] [ThreadPoolExecutor-0_3]   Processing image 21/77: CAM_CB_03_20221125144225.jpg
+[2025-12-30 19:53:44] [ThreadPoolExecutor-0_1]   Processing image 64/86: CAM_CB_03_20220929181826_predseg_labels.png
+[2025-12-30 19:53:46] [ThreadPoolExecutor-0_2]   Processing image 130/136: CAM_CB_03_20220930142426.jpg
+[2025-12-30 19:53:48] [ThreadPoolExecutor-0_1]   Processing image 72/86: CAM_CB_03_20220929131826_predseg_labels.png
+[2025-12-30 19:53:49] [ThreadPoolExecutor-0_0]   Processing image 14/73: CAM_CB_03_20221222140028.jpg
+[2025-12-30 19:53:49] [ThreadPoolExecutor-0_3]   Processing image 28/77: CAM_CB_03_20221125152425.jpg
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2]   Processing image 136/136: CAM_CB_03_20220930111226.jpg
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_1]   Processing image 80/86: CAM_CB_03_20220929165425_predseg_labels.png
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2]   Successfully processed 136 images.
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2] [CB_03_20220930102326_20221001011226] Rectifying labels from: labels
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220930102326_20221001011226/labels
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20220930102326_20221001011226/zarr/labels_rects
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2]   Found 136 images to process.
+[2025-12-30 19:53:52] [ThreadPoolExecutor-0_2]   Processing image 1/136: CAM_CB_03_20220930155426_predseg_labels.png
+[2025-12-30 19:53:54] [ThreadPoolExecutor-0_0]   Processing image 21/73: CAM_CB_03_20221222151226.jpg
+[2025-12-30 19:53:54] [ThreadPoolExecutor-0_3]   Processing image 35/77: CAM_CB_03_20221125124825.jpg
+[2025-12-30 19:53:55] [ThreadPoolExecutor-0_1]   Processing image 86/86: CAM_CB_03_20220929150026_predseg_labels.png
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1]   Successfully processed 86 images.
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1] +++ Successfully processed event CB_03_20220929122627_20220929210227 +++
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1] --- Processing event: CB_03_20230122092349_20230122191149 ---
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1] [CB_03_20230122092349_20230122191149] Rectifying images from: orig_images
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230122092349_20230122191149/orig_images
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230122092349_20230122191149/zarr/orig_image_rects
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1]   Found 82 images to process.
+[2025-12-30 19:53:56] [ThreadPoolExecutor-0_1]   Processing image 1/82: CAM_CB_03_20230122154225.jpg
+[2025-12-30 19:54:00] [ThreadPoolExecutor-0_2]   Processing image 13/136: CAM_CB_03_20220930173625_predseg_labels.png
+[2025-12-30 19:54:00] [ThreadPoolExecutor-0_0]   Processing image 28/73: CAM_CB_03_20221222143626.jpg
+[2025-12-30 19:54:00] [ThreadPoolExecutor-0_3]   Processing image 42/77: CAM_CB_03_20221125132426.jpg
+[2025-12-30 19:54:02] [ThreadPoolExecutor-0_1]   Processing image 8/82: CAM_CB_03_20230122153625.jpg
+[2025-12-30 19:54:06] [ThreadPoolExecutor-0_0]   Processing image 35/73: CAM_CB_03_20221222183026.jpg
+[2025-12-30 19:54:06] [ThreadPoolExecutor-0_3]   Processing image 49/77: CAM_CB_03_20221125181826.jpg
+[2025-12-30 19:54:09] [ThreadPoolExecutor-0_2]   Processing image 26/136: CAM_CB_03_20220930130026_predseg_labels.png
+[2025-12-30 19:54:10] [ThreadPoolExecutor-0_1]   Processing image 16/82: CAM_CB_03_20230122141226.jpg
+[2025-12-30 19:54:14] [ThreadPoolExecutor-0_3]   Processing image 56/77: CAM_CB_03_20221125182425.jpg
+[2025-12-30 19:54:14] [ThreadPoolExecutor-0_0]   Processing image 42/73: CAM_CB_03_20221222123626.jpg
+[2025-12-30 19:54:18] [ThreadPoolExecutor-0_2]   Processing image 39/136: CAM_CB_03_20220930195425_predseg_labels.png
+[2025-12-30 19:54:19] [ThreadPoolExecutor-0_1]   Processing image 24/82: CAM_CB_03_20230122123625.jpg
+[2025-12-30 19:54:22] [ThreadPoolExecutor-0_3]   Processing image 63/77: CAM_CB_03_20221125175426.jpg
+[2025-12-30 19:54:22] [ThreadPoolExecutor-0_0]   Processing image 49/73: CAM_CB_03_20221222154246.jpg
+[2025-12-30 19:54:27] [ThreadPoolExecutor-0_1]   Processing image 32/82: CAM_CB_03_20230122122426.jpg
+[2025-12-30 19:54:27] [ThreadPoolExecutor-0_2]   Processing image 52/136: CAM_CB_03_20220930173026_predseg_labels.png
+[2025-12-30 19:54:28] [ThreadPoolExecutor-0_3]   Processing image 70/77: CAM_CB_03_20221125133025.jpg
+[2025-12-30 19:54:28] [ThreadPoolExecutor-0_0]   Processing image 56/73: CAM_CB_03_20221222141826.jpg
+[2025-12-30 19:54:32] [ThreadPoolExecutor-0_1]   Processing image 40/82: CAM_CB_03_20230122114831.jpg
+[2025-12-30 19:54:33] [ThreadPoolExecutor-0_2]   Processing image 65/136: CAM_CB_03_20220930154826_predseg_labels.png
+[2025-12-30 19:54:33] [ThreadPoolExecutor-0_0]   Processing image 63/73: CAM_CB_03_20221222180026.jpg
+[2025-12-30 19:54:33] [ThreadPoolExecutor-0_3]   Processing image 77/77: CAM_CB_03_20221125174226.jpg
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3]   Successfully processed 77 images.
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3] [CB_03_20221125103134_20221125183634] Rectifying labels from: labels
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221125103134_20221125183634/labels
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221125103134_20221125183634/zarr/labels_rects
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3]   Found 77 images to process.
+[2025-12-30 19:54:34] [ThreadPoolExecutor-0_3]   Processing image 1/77: CAM_CB_03_20221125174226_predseg_labels.png
+[2025-12-30 19:54:38] [ThreadPoolExecutor-0_1]   Processing image 48/82: CAM_CB_03_20230122115432.jpg
+[2025-12-30 19:54:39] [ThreadPoolExecutor-0_3]   Processing image 7/77: CAM_CB_03_20221125153026_predseg_labels.png
+[2025-12-30 19:54:39] [ThreadPoolExecutor-0_0]   Processing image 70/73: CAM_CB_03_20221222142306.jpg
+[2025-12-30 19:54:41] [ThreadPoolExecutor-0_0]   Processing image 73/73: CAM_CB_03_20221222174826.jpg
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_2]   Processing image 78/136: CAM_CB_03_20220930204225_predseg_labels.png
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0]   Successfully processed 73 images.
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0] [CB_03_20221222085004_20221222183804] Rectifying labels from: labels
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221222085004_20221222183804/labels
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20221222085004_20221222183804/zarr/labels_rects
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0]   Found 73 images to process.
+[2025-12-30 19:54:42] [ThreadPoolExecutor-0_0]   Processing image 1/73: CAM_CB_03_20221222140626_predseg_labels.png
+[2025-12-30 19:54:43] [ThreadPoolExecutor-0_3]   Processing image 14/77: CAM_CB_03_20221125132426_predseg_labels.png
+[2025-12-30 19:54:45] [ThreadPoolExecutor-0_1]   Processing image 56/82: CAM_CB_03_20230122155426.jpg
+[2025-12-30 19:54:46] [ThreadPoolExecutor-0_0]   Processing image 7/73: CAM_CB_03_20221222132045_predseg_labels.png
+[2025-12-30 19:54:47] [ThreadPoolExecutor-0_3]   Processing image 21/77: CAM_CB_03_20221125173025_predseg_labels.png
+[2025-12-30 19:54:48] [ThreadPoolExecutor-0_2]   Processing image 91/136: CAM_CB_03_20220930234830_predseg_labels.png
+[2025-12-30 19:54:49] [ThreadPoolExecutor-0_0]   Processing image 14/73: CAM_CB_03_20221222122426_predseg_labels.png
+[2025-12-30 19:54:49] [ThreadPoolExecutor-0_1]   Processing image 64/82: CAM_CB_03_20230122162426.jpg
+[2025-12-30 19:54:50] [ThreadPoolExecutor-0_3]   Processing image 28/77: CAM_CB_03_20221125170626_predseg_labels.png
+[2025-12-30 19:54:52] [ThreadPoolExecutor-0_0]   Processing image 21/73: CAM_CB_03_20221222121826_predseg_labels.png
+[2025-12-30 19:54:52] [ThreadPoolExecutor-0_1]   Processing image 72/82: CAM_CB_03_20230122170026.jpg
+[2025-12-30 19:54:53] [ThreadPoolExecutor-0_3]   Processing image 35/77: CAM_CB_03_20221125172426_predseg_labels.png
+[2025-12-30 19:54:54] [ThreadPoolExecutor-0_2]   Processing image 104/136: CAM_CB_03_20220930152426_predseg_labels.png
+[2025-12-30 19:54:55] [ThreadPoolExecutor-0_0]   Processing image 28/73: CAM_CB_03_20221222173034_predseg_labels.png
+[2025-12-30 19:54:55] [ThreadPoolExecutor-0_3]   Processing image 42/77: CAM_CB_03_20221125113629_predseg_labels.png
+[2025-12-30 19:54:56] [ThreadPoolExecutor-0_1]   Processing image 80/82: CAM_CB_03_20230122113031.jpg
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1]   Processing image 82/82: CAM_CB_03_20230122171225.jpg
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1]   Successfully processed 82 images.
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1] [CB_03_20230122092349_20230122191149] Rectifying labels from: labels
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230122092349_20230122191149/labels
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230122092349_20230122191149/zarr/labels_rects
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1]   Found 82 images to process.
+[2025-12-30 19:54:57] [ThreadPoolExecutor-0_1]   Processing image 1/82: CAM_CB_03_20230122180026_predseg_labels.png
+[2025-12-30 19:54:58] [ThreadPoolExecutor-0_0]   Processing image 35/73: CAM_CB_03_20221222160026_predseg_labels.png
+[2025-12-30 19:54:59] [ThreadPoolExecutor-0_3]   Processing image 49/77: CAM_CB_03_20221125120026_predseg_labels.png
+[2025-12-30 19:54:59] [ThreadPoolExecutor-0_2]   Processing image 117/136: CAM_CB_03_20220930222426_predseg_labels.png
+[2025-12-30 19:55:00] [ThreadPoolExecutor-0_1]   Processing image 8/82: CAM_CB_03_20230122165426_predseg_labels.png
+[2025-12-30 19:55:01] [ThreadPoolExecutor-0_0]   Processing image 42/73: CAM_CB_03_20221222131826_predseg_labels.png
+[2025-12-30 19:55:01] [ThreadPoolExecutor-0_3]   Processing image 56/77: CAM_CB_03_20221125130026_predseg_labels.png
+[2025-12-30 19:55:03] [ThreadPoolExecutor-0_1]   Processing image 16/82: CAM_CB_03_20230122174825_predseg_labels.png
+[2025-12-30 19:55:04] [ThreadPoolExecutor-0_0]   Processing image 49/73: CAM_CB_03_20221222144826_predseg_labels.png
+[2025-12-30 19:55:04] [ThreadPoolExecutor-0_2]   Processing image 130/136: CAM_CB_03_20220930161225_predseg_labels.png
+[2025-12-30 19:55:04] [ThreadPoolExecutor-0_3]   Processing image 63/77: CAM_CB_03_20221125163626_predseg_labels.png
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_1]   Processing image 24/82: CAM_CB_03_20230122182426_predseg_labels.png
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2]   Processing image 136/136: CAM_CB_03_20220930200026_predseg_labels.png
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_0]   Processing image 56/73: CAM_CB_03_20221222113631_predseg_labels.png
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2]   Successfully processed 136 images.
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2] +++ Successfully processed event CB_03_20220930102326_20221001011226 +++
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2] --- Processing event: CB_03_20230827203804_20230828025604 ---
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2] [CB_03_20230827203804_20230828025604] Rectifying images from: orig_images
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230827203804_20230828025604/orig_images
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230827203804_20230828025604/zarr/orig_image_rects
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2]   Found 32 images to process.
+[2025-12-30 19:55:06] [ThreadPoolExecutor-0_2]   Processing image 1/32: CAM_CB_03_20230827213625.jpg
+[2025-12-30 19:55:07] [ThreadPoolExecutor-0_3]   Processing image 70/77: CAM_CB_03_20221125124825_predseg_labels.png
+[2025-12-30 19:55:07] [ThreadPoolExecutor-0_2]   Processing image 3/32: CAM_CB_03_20230827213026.jpg
+[2025-12-30 19:55:09] [ThreadPoolExecutor-0_1]   Processing image 32/82: CAM_CB_03_20230122175426_predseg_labels.png
+[2025-12-30 19:55:09] [ThreadPoolExecutor-0_2]   Processing image 6/32: CAM_CB_03_20230827235430.jpg
+[2025-12-30 19:55:09] [ThreadPoolExecutor-0_0]   Processing image 63/73: CAM_CB_03_20221222142426_predseg_labels.png
+[2025-12-30 19:55:10] [ThreadPoolExecutor-0_3]   Processing image 77/77: CAM_CB_03_20221125154225_predseg_labels.png
+[2025-12-30 19:55:10] [ThreadPoolExecutor-0_2]   Processing image 9/32: CAM_CB_03_20230827211225.jpg
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3]   Successfully processed 77 images.
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3] +++ Successfully processed event CB_03_20221125103134_20221125183634 +++
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3] --- Processing event: CB_03_20230830200204_20230831071404 ---
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3] [CB_03_20230830200204_20230831071404] Rectifying images from: orig_images
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230830200204_20230831071404/orig_images
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230830200204_20230831071404/zarr/orig_image_rects
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3]   Found 39 images to process.
+[2025-12-30 19:55:11] [ThreadPoolExecutor-0_3]   Processing image 1/39: CAM_CB_03_20230830210625.jpg
+[2025-12-30 19:55:13] [ThreadPoolExecutor-0_3]   Processing image 3/39: CAM_CB_03_20230830211226.jpg
+[2025-12-30 19:55:13] [ThreadPoolExecutor-0_2]   Processing image 12/32: CAM_CB_03_20230827234226.jpg
+[2025-12-30 19:55:13] [ThreadPoolExecutor-0_1]   Processing image 40/82: CAM_CB_03_20230122181225_predseg_labels.png
+[2025-12-30 19:55:13] [ThreadPoolExecutor-0_0]   Processing image 70/73: CAM_CB_03_20221222161226_predseg_labels.png
+[2025-12-30 19:55:15] [ThreadPoolExecutor-0_0]   Processing image 73/73: CAM_CB_03_20221222112429_predseg_labels.png
+[2025-12-30 19:55:15] [ThreadPoolExecutor-0_3]   Processing image 6/39: CAM_CB_03_20230830220625.jpg
+[2025-12-30 19:55:15] [ThreadPoolExecutor-0_2]   Processing image 15/32: CAM_CB_03_20230827223025.jpg
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0]   Successfully processed 73 images.
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0] +++ Successfully processed event CB_03_20221222085004_20221222183804 +++
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0] --- Processing event: CB_03_20230901122604_20230901183804 ---
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0] [CB_03_20230901122604_20230901183804] Rectifying images from: orig_images
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230901122604_20230901183804/orig_images
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230901122604_20230901183804/zarr/orig_image_rects
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0]   Found 62 images to process.
+[2025-12-30 19:55:16] [ThreadPoolExecutor-0_0]   Processing image 1/62: CAM_CB_03_20230901150625.jpg
+[2025-12-30 19:55:17] [ThreadPoolExecutor-0_1]   Processing image 48/82: CAM_CB_03_20230122171225_predseg_labels.png
+[2025-12-30 19:55:17] [ThreadPoolExecutor-0_2]   Processing image 18/32: CAM_CB_03_20230827230625.jpg
+[2025-12-30 19:55:17] [ThreadPoolExecutor-0_3]   Processing image 9/39: CAM_CB_03_20230830211825.jpg
+[2025-12-30 19:55:19] [ThreadPoolExecutor-0_2]   Processing image 21/32: CAM_CB_03_20230827215425.jpg
+[2025-12-30 19:55:19] [ThreadPoolExecutor-0_0]   Processing image 6/62: CAM_CB_03_20230901153626.jpg
+[2025-12-30 19:55:20] [ThreadPoolExecutor-0_3]   Processing image 12/39: CAM_CB_03_20230830223026.jpg
+[2025-12-30 19:55:20] [ThreadPoolExecutor-0_1]   Processing image 56/82: CAM_CB_03_20230122134825_predseg_labels.png
+[2025-12-30 19:55:21] [ThreadPoolExecutor-0_2]   Processing image 24/32: CAM_CB_03_20230827221225.jpg
+[2025-12-30 19:55:21] [ThreadPoolExecutor-0_3]   Processing image 15/39: CAM_CB_03_20230830233025.jpg
+[2025-12-30 19:55:23] [ThreadPoolExecutor-0_2]   Processing image 27/32: CAM_CB_03_20230827204225.jpg
+[2025-12-30 19:55:23] [ThreadPoolExecutor-0_0]   Processing image 12/62: CAM_CB_03_20230901141825.jpg
+[2025-12-30 19:55:23] [ThreadPoolExecutor-0_3]   Processing image 18/39: CAM_CB_03_20230830200625.jpg
+[2025-12-30 19:55:24] [ThreadPoolExecutor-0_1]   Processing image 64/82: CAM_CB_03_20230122163626_predseg_labels.png
+[2025-12-30 19:55:25] [ThreadPoolExecutor-0_2]   Processing image 30/32: CAM_CB_03_20230827221825.jpg
+[2025-12-30 19:55:25] [ThreadPoolExecutor-0_3]   Processing image 21/39: CAM_CB_03_20230830215425.jpg
+[2025-12-30 19:55:26] [ThreadPoolExecutor-0_2]   Processing image 32/32: CAM_CB_03_20230827210025.jpg
+[2025-12-30 19:55:26] [ThreadPoolExecutor-0_1]   Processing image 72/82: CAM_CB_03_20230122153625_predseg_labels.png
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2]   Successfully processed 32 images.
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2] [CB_03_20230827203804_20230828025604] Rectifying labels from: labels
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230827203804_20230828025604/labels
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230827203804_20230828025604/zarr/labels_rects
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2]   Found 32 images to process.
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2]   Processing image 1/32: CAM_CB_03_20230827204225_predseg_labels.png
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_3]   Processing image 24/39: CAM_CB_03_20230830204225.jpg
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_0]   Processing image 18/62: CAM_CB_03_20230901141225.jpg
+[2025-12-30 19:55:27] [ThreadPoolExecutor-0_2]   Processing image 3/32: CAM_CB_03_20230827233626_predseg_labels.png
+[2025-12-30 19:55:28] [ThreadPoolExecutor-0_3]   Processing image 27/39: CAM_CB_03_20230830230625.jpg
+[2025-12-30 19:55:28] [ThreadPoolExecutor-0_2]   Processing image 6/32: CAM_CB_03_20230827235430_predseg_labels.png
+[2025-12-30 19:55:29] [ThreadPoolExecutor-0_1]   Processing image 80/82: CAM_CB_03_20230122160025_predseg_labels.png
+[2025-12-30 19:55:29] [ThreadPoolExecutor-0_2]   Processing image 9/32: CAM_CB_03_20230827231225_predseg_labels.png
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1]   Processing image 82/82: CAM_CB_03_20230122185426_predseg_labels.png
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_0]   Processing image 24/62: CAM_CB_03_20230901174825.jpg
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_3]   Processing image 30/39: CAM_CB_03_20230830231225.jpg
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1]   Successfully processed 82 images.
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1] +++ Successfully processed event CB_03_20230122092349_20230122191149 +++
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1] --- Processing event: CB_03_20230902131404_20230902193204 ---
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1] [CB_03_20230902131404_20230902193204] Rectifying images from: orig_images
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230902131404_20230902193204/orig_images
+[2025-12-30 19:55:30] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230902131404_20230902193204/zarr/orig_image_rects
+[2025-12-30 19:55:31] [ThreadPoolExecutor-0_1]   Found 63 images to process.
+[2025-12-30 19:55:31] [ThreadPoolExecutor-0_1]   Processing image 1/63: CAM_CB_03_20230902135425.jpg
+[2025-12-30 19:55:31] [ThreadPoolExecutor-0_2]   Processing image 12/32: CAM_CB_03_20230827232425_predseg_labels.png
+[2025-12-30 19:55:32] [ThreadPoolExecutor-0_3]   Processing image 33/39: CAM_CB_03_20230830234826.jpg
+[2025-12-30 19:55:32] [ThreadPoolExecutor-0_2]   Processing image 15/32: CAM_CB_03_20230827223625_predseg_labels.png
+[2025-12-30 19:55:34] [ThreadPoolExecutor-0_2]   Processing image 18/32: CAM_CB_03_20230827220625_predseg_labels.png
+[2025-12-30 19:55:35] [ThreadPoolExecutor-0_3]   Processing image 36/39: CAM_CB_03_20230830232425.jpg
+[2025-12-30 19:55:35] [ThreadPoolExecutor-0_1]   Processing image 6/63: CAM_CB_03_20230902170625.jpg
+[2025-12-30 19:55:35] [ThreadPoolExecutor-0_0]   Processing image 30/62: CAM_CB_03_20230901143625.jpg
+[2025-12-30 19:55:36] [ThreadPoolExecutor-0_2]   Processing image 21/32: CAM_CB_03_20230827231825_predseg_labels.png
+[2025-12-30 19:55:37] [ThreadPoolExecutor-0_3]   Processing image 39/39: CAM_CB_03_20230830204826.jpg
+[2025-12-30 19:55:37] [ThreadPoolExecutor-0_2]   Processing image 24/32: CAM_CB_03_20230827230625_predseg_labels.png
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3]   Successfully processed 39 images.
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3] [CB_03_20230830200204_20230831071404] Rectifying labels from: labels
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230830200204_20230831071404/labels
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230830200204_20230831071404/zarr/labels_rects
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3]   Found 39 images to process.
+[2025-12-30 19:55:38] [ThreadPoolExecutor-0_3]   Processing image 1/39: CAM_CB_03_20230830214225_predseg_labels.png
+[2025-12-30 19:55:39] [ThreadPoolExecutor-0_2]   Processing image 27/32: CAM_CB_03_20230827222425_predseg_labels.png
+[2025-12-30 19:55:40] [ThreadPoolExecutor-0_3]   Processing image 3/39: CAM_CB_03_20230830222425_predseg_labels.png
+[2025-12-30 19:55:40] [ThreadPoolExecutor-0_1]   Processing image 12/63: CAM_CB_03_20230902154225.jpg
+[2025-12-30 19:55:40] [ThreadPoolExecutor-0_0]   Processing image 36/62: CAM_CB_03_20230901154225.jpg
+[2025-12-30 19:55:42] [ThreadPoolExecutor-0_2]   Processing image 30/32: CAM_CB_03_20230827220025_predseg_labels.png
+[2025-12-30 19:55:43] [ThreadPoolExecutor-0_3]   Processing image 6/39: CAM_CB_03_20230830231825_predseg_labels.png
+[2025-12-30 19:55:43] [ThreadPoolExecutor-0_2]   Processing image 32/32: CAM_CB_03_20230827221825_predseg_labels.png
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2]   Successfully processed 32 images.
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2] +++ Successfully processed event CB_03_20230827203804_20230828025604 +++
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2] --- Processing event: CB_03_20230929095004_20230929182004 ---
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2] [CB_03_20230929095004_20230929182004] Rectifying images from: orig_images
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230929095004_20230929182004/orig_images
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230929095004_20230929182004/zarr/orig_image_rects
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2]   Found 84 images to process.
+[2025-12-30 19:55:44] [ThreadPoolExecutor-0_2]   Processing image 1/84: CAM_CB_03_20230929104827.jpg
+[2025-12-30 19:55:45] [ThreadPoolExecutor-0_3]   Processing image 9/39: CAM_CB_03_20230830203025_predseg_labels.png
+[2025-12-30 19:55:47] [ThreadPoolExecutor-0_0]   Processing image 42/62: CAM_CB_03_20230901163026.jpg
+[2025-12-30 19:55:47] [ThreadPoolExecutor-0_1]   Processing image 18/63: CAM_CB_03_20230902133025.jpg
+[2025-12-30 19:55:48] [ThreadPoolExecutor-0_3]   Processing image 12/39: CAM_CB_03_20230830225425_predseg_labels.png
+[2025-12-30 19:55:50] [ThreadPoolExecutor-0_3]   Processing image 15/39: CAM_CB_03_20230830202425_predseg_labels.png
+[2025-12-30 19:55:52] [ThreadPoolExecutor-0_2]   Processing image 8/84: CAM_CB_03_20230929100046.jpg
+[2025-12-30 19:55:53] [ThreadPoolExecutor-0_3]   Processing image 18/39: CAM_CB_03_20230830203625_predseg_labels.png
+[2025-12-30 19:55:53] [ThreadPoolExecutor-0_0]   Processing image 48/62: CAM_CB_03_20230901181226.jpg
+[2025-12-30 19:55:53] [ThreadPoolExecutor-0_1]   Processing image 24/63: CAM_CB_03_20230902170025.jpg
+[2025-12-30 19:55:56] [ThreadPoolExecutor-0_3]   Processing image 21/39: CAM_CB_03_20230830210625_predseg_labels.png
+[2025-12-30 19:55:59] [ThreadPoolExecutor-0_3]   Processing image 24/39: CAM_CB_03_20230830213626_predseg_labels.png
+[2025-12-30 19:55:59] [ThreadPoolExecutor-0_0]   Processing image 54/62: CAM_CB_03_20230901164826.jpg
+[2025-12-30 19:55:59] [ThreadPoolExecutor-0_1]   Processing image 30/63: CAM_CB_03_20230902144225.jpg
+[2025-12-30 19:56:00] [ThreadPoolExecutor-0_2]   Processing image 16/84: CAM_CB_03_20230929161225.jpg
+[2025-12-30 19:56:02] [ThreadPoolExecutor-0_3]   Processing image 27/39: CAM_CB_03_20230830205425_predseg_labels.png
+[2025-12-30 19:56:04] [ThreadPoolExecutor-0_3]   Processing image 30/39: CAM_CB_03_20230830223625_predseg_labels.png
+[2025-12-30 19:56:05] [ThreadPoolExecutor-0_0]   Processing image 60/62: CAM_CB_03_20230901183025.jpg
+[2025-12-30 19:56:05] [ThreadPoolExecutor-0_1]   Processing image 36/63: CAM_CB_03_20230902151825.jpg
+[2025-12-30 19:56:07] [ThreadPoolExecutor-0_3]   Processing image 33/39: CAM_CB_03_20230830223026_predseg_labels.png
+[2025-12-30 19:56:07] [ThreadPoolExecutor-0_0]   Processing image 62/62: CAM_CB_03_20230901160625.jpg
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0]   Successfully processed 62 images.
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0] [CB_03_20230901122604_20230901183804] Rectifying labels from: labels
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230901122604_20230901183804/labels
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230901122604_20230901183804/zarr/labels_rects
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_2]   Processing image 24/84: CAM_CB_03_20230929131825.jpg
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0]   Found 62 images to process.
+[2025-12-30 19:56:08] [ThreadPoolExecutor-0_0]   Processing image 1/62: CAM_CB_03_20230901165425_predseg_labels.png
+[2025-12-30 19:56:10] [ThreadPoolExecutor-0_3]   Processing image 36/39: CAM_CB_03_20230830204826_predseg_labels.png
+[2025-12-30 19:56:11] [ThreadPoolExecutor-0_1]   Processing image 42/63: CAM_CB_03_20230902183025.jpg
+[2025-12-30 19:56:12] [ThreadPoolExecutor-0_0]   Processing image 6/62: CAM_CB_03_20230901140625_predseg_labels.png
+[2025-12-30 19:56:13] [ThreadPoolExecutor-0_3]   Processing image 39/39: CAM_CB_03_20230830235427_predseg_labels.png
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3]   Successfully processed 39 images.
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3] +++ Successfully processed event CB_03_20230830200204_20230831071404 +++
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3] --- Processing event: CB_03_20230930121404_20230930184404 ---
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3] [CB_03_20230930121404_20230930184404] Rectifying images from: orig_images
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230930121404_20230930184404/orig_images
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230930121404_20230930184404/zarr/orig_image_rects
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3]   Found 65 images to process.
+[2025-12-30 19:56:15] [ThreadPoolExecutor-0_3]   Processing image 1/65: CAM_CB_03_20230930142425.jpg
+[2025-12-30 19:56:18] [ThreadPoolExecutor-0_0]   Processing image 12/62: CAM_CB_03_20230901160025_predseg_labels.png
+[2025-12-30 19:56:18] [ThreadPoolExecutor-0_2]   Processing image 32/84: CAM_CB_03_20230929151225.jpg
+[2025-12-30 19:56:20] [ThreadPoolExecutor-0_1]   Processing image 48/63: CAM_CB_03_20230902163026.jpg
+[2025-12-30 19:56:23] [ThreadPoolExecutor-0_0]   Processing image 18/62: CAM_CB_03_20230901150625_predseg_labels.png
+[2025-12-30 19:56:23] [ThreadPoolExecutor-0_3]   Processing image 6/65: CAM_CB_03_20230930132425.jpg
+[2025-12-30 19:56:27] [ThreadPoolExecutor-0_0]   Processing image 24/62: CAM_CB_03_20230901174825_predseg_labels.png
+[2025-12-30 19:56:29] [ThreadPoolExecutor-0_1]   Processing image 54/63: CAM_CB_03_20230902154826.jpg
+[2025-12-30 19:56:30] [ThreadPoolExecutor-0_2]   Processing image 40/84: CAM_CB_03_20230929120625.jpg
+[2025-12-30 19:56:31] [ThreadPoolExecutor-0_3]   Processing image 12/65: CAM_CB_03_20230930175425.jpg
+[2025-12-30 19:56:32] [ThreadPoolExecutor-0_0]   Processing image 30/62: CAM_CB_03_20230901171825_predseg_labels.png
+[2025-12-30 19:56:36] [ThreadPoolExecutor-0_1]   Processing image 60/63: CAM_CB_03_20230902165425.jpg
+[2025-12-30 19:56:36] [ThreadPoolExecutor-0_0]   Processing image 36/62: CAM_CB_03_20230901140025_predseg_labels.png
+[2025-12-30 19:56:39] [ThreadPoolExecutor-0_3]   Processing image 18/65: CAM_CB_03_20230930180025.jpg
+[2025-12-30 19:56:40] [ThreadPoolExecutor-0_2]   Processing image 48/84: CAM_CB_03_20230929171225.jpg
+[2025-12-30 19:56:40] [ThreadPoolExecutor-0_1]   Processing image 63/63: CAM_CB_03_20230902152425.jpg
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_0]   Processing image 42/62: CAM_CB_03_20230901150025_predseg_labels.png
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1]   Successfully processed 63 images.
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1] [CB_03_20230902131404_20230902193204] Rectifying labels from: labels
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230902131404_20230902193204/labels
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230902131404_20230902193204/zarr/labels_rects
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1]   Found 63 images to process.
+[2025-12-30 19:56:42] [ThreadPoolExecutor-0_1]   Processing image 1/63: CAM_CB_03_20230902135425_predseg_labels.png
+[2025-12-30 19:56:46] [ThreadPoolExecutor-0_0]   Processing image 48/62: CAM_CB_03_20230901153026_predseg_labels.png
+[2025-12-30 19:56:46] [ThreadPoolExecutor-0_3]   Processing image 24/65: CAM_CB_03_20230930125425.jpg
+[2025-12-30 19:56:47] [ThreadPoolExecutor-0_1]   Processing image 6/63: CAM_CB_03_20230902191225_predseg_labels.png
+[2025-12-30 19:56:49] [ThreadPoolExecutor-0_2]   Processing image 56/84: CAM_CB_03_20230929112425.jpg
+[2025-12-30 19:56:50] [ThreadPoolExecutor-0_0]   Processing image 54/62: CAM_CB_03_20230901161825_predseg_labels.png
+[2025-12-30 19:56:52] [ThreadPoolExecutor-0_3]   Processing image 30/65: CAM_CB_03_20230930183025.jpg
+[2025-12-30 19:56:53] [ThreadPoolExecutor-0_1]   Processing image 12/63: CAM_CB_03_20230902140625_predseg_labels.png
+[2025-12-30 19:56:55] [ThreadPoolExecutor-0_0]   Processing image 60/62: CAM_CB_03_20230901130625_predseg_labels.png
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0]   Processing image 62/62: CAM_CB_03_20230901153626_predseg_labels.png
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0]   Successfully processed 62 images.
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0] +++ Successfully processed event CB_03_20230901122604_20230901183804 +++
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_1]   Processing image 18/63: CAM_CB_03_20230902173625_predseg_labels.png
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0] --- Processing event: CB_03_20231001123713_20231001194913 ---
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0] [CB_03_20231001123713_20231001194913] Rectifying images from: orig_images
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231001123713_20231001194913/orig_images
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231001123713_20231001194913/zarr/orig_image_rects
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0]   Found 72 images to process.
+[2025-12-30 19:56:56] [ThreadPoolExecutor-0_0]   Processing image 1/72: CAM_CB_03_20231001163625.jpg
+[2025-12-30 19:56:57] [ThreadPoolExecutor-0_3]   Processing image 36/65: CAM_CB_03_20230930121825.jpg
+[2025-12-30 19:56:57] [ThreadPoolExecutor-0_2]   Processing image 64/84: CAM_CB_03_20230929173025.jpg
+[2025-12-30 19:57:00] [ThreadPoolExecutor-0_1]   Processing image 24/63: CAM_CB_03_20230902145425_predseg_labels.png
+[2025-12-30 19:57:04] [ThreadPoolExecutor-0_0]   Processing image 7/72: CAM_CB_03_20231001164825.jpg
+[2025-12-30 19:57:05] [ThreadPoolExecutor-0_3]   Processing image 42/65: CAM_CB_03_20230930153025.jpg
+[2025-12-30 19:57:08] [ThreadPoolExecutor-0_1]   Processing image 30/63: CAM_CB_03_20230902161825_predseg_labels.png
+[2025-12-30 19:57:08] [ThreadPoolExecutor-0_2]   Processing image 72/84: CAM_CB_03_20230929132425.jpg
+[2025-12-30 19:57:13] [ThreadPoolExecutor-0_0]   Processing image 14/72: CAM_CB_03_20231001180625.jpg
+[2025-12-30 19:57:13] [ThreadPoolExecutor-0_3]   Processing image 48/65: CAM_CB_03_20230930130625.jpg
+[2025-12-30 19:57:15] [ThreadPoolExecutor-0_1]   Processing image 36/63: CAM_CB_03_20230902160625_predseg_labels.png
+[2025-12-30 19:57:19] [ThreadPoolExecutor-0_2]   Processing image 80/84: CAM_CB_03_20230929120025.jpg
+[2025-12-30 19:57:21] [ThreadPoolExecutor-0_1]   Processing image 42/63: CAM_CB_03_20230902174225_predseg_labels.png
+[2025-12-30 19:57:21] [ThreadPoolExecutor-0_3]   Processing image 54/65: CAM_CB_03_20230930161825.jpg
+[2025-12-30 19:57:22] [ThreadPoolExecutor-0_0]   Processing image 21/72: CAM_CB_03_20231001183625.jpg
+[2025-12-30 19:57:24] [ThreadPoolExecutor-0_2]   Processing image 84/84: CAM_CB_03_20230929160625.jpg
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2]   Successfully processed 84 images.
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2] [CB_03_20230929095004_20230929182004] Rectifying labels from: labels
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230929095004_20230929182004/labels
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230929095004_20230929182004/zarr/labels_rects
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2]   Found 84 images to process.
+[2025-12-30 19:57:25] [ThreadPoolExecutor-0_2]   Processing image 1/84: CAM_CB_03_20230929120625_predseg_labels.png
+[2025-12-30 19:57:26] [ThreadPoolExecutor-0_1]   Processing image 48/63: CAM_CB_03_20230902163026_predseg_labels.png
+[2025-12-30 19:57:29] [ThreadPoolExecutor-0_3]   Processing image 60/65: CAM_CB_03_20230930134225.jpg
+[2025-12-30 19:57:30] [ThreadPoolExecutor-0_0]   Processing image 28/72: CAM_CB_03_20231001131225.jpg
+[2025-12-30 19:57:32] [ThreadPoolExecutor-0_2]   Processing image 8/84: CAM_CB_03_20230929100646_predseg_labels.png
+[2025-12-30 19:57:32] [ThreadPoolExecutor-0_1]   Processing image 54/63: CAM_CB_03_20230902170625_predseg_labels.png
+[2025-12-30 19:57:33] [ThreadPoolExecutor-0_3]   Processing image 65/65: CAM_CB_03_20230930155426.jpg
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3]   Successfully processed 65 images.
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3] [CB_03_20230930121404_20230930184404] Rectifying labels from: labels
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230930121404_20230930184404/labels
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20230930121404_20230930184404/zarr/labels_rects
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3]   Found 65 images to process.
+[2025-12-30 19:57:34] [ThreadPoolExecutor-0_3]   Processing image 1/65: CAM_CB_03_20230930150025_predseg_labels.png
+[2025-12-30 19:57:37] [ThreadPoolExecutor-0_1]   Processing image 60/63: CAM_CB_03_20230902150025_predseg_labels.png
+[2025-12-30 19:57:37] [ThreadPoolExecutor-0_0]   Processing image 35/72: CAM_CB_03_20231001192425.jpg
+[2025-12-30 19:57:38] [ThreadPoolExecutor-0_3]   Processing image 6/65: CAM_CB_03_20230930143625_predseg_labels.png
+[2025-12-30 19:57:39] [ThreadPoolExecutor-0_2]   Processing image 16/84: CAM_CB_03_20230929181825_predseg_labels.png
+[2025-12-30 19:57:40] [ThreadPoolExecutor-0_1]   Processing image 63/63: CAM_CB_03_20230902153025_predseg_labels.png
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1]   Successfully processed 63 images.
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1] +++ Successfully processed event CB_03_20230902131404_20230902193204 +++
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1] --- Processing event: CB_03_20231002131313_20231002203713 ---
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1] [CB_03_20231002131313_20231002203713] Rectifying images from: orig_images
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231002131313_20231002203713/orig_images
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231002131313_20231002203713/zarr/orig_image_rects
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1]   Found 74 images to process.
+[2025-12-30 19:57:41] [ThreadPoolExecutor-0_1]   Processing image 1/74: CAM_CB_03_20231002192425.jpg
+[2025-12-30 19:57:43] [ThreadPoolExecutor-0_3]   Processing image 12/65: CAM_CB_03_20230930161225_predseg_labels.png
+[2025-12-30 19:57:43] [ThreadPoolExecutor-0_0]   Processing image 42/72: CAM_CB_03_20231001135425.jpg
+[2025-12-30 19:57:45] [ThreadPoolExecutor-0_2]   Processing image 24/84: CAM_CB_03_20230929160625_predseg_labels.png
+[2025-12-30 19:57:46] [ThreadPoolExecutor-0_1]   Processing image 7/74: CAM_CB_03_20231002174225.jpg
+[2025-12-30 19:57:48] [ThreadPoolExecutor-0_3]   Processing image 18/65: CAM_CB_03_20230930153625_predseg_labels.png
+[2025-12-30 19:57:49] [ThreadPoolExecutor-0_0]   Processing image 49/72: CAM_CB_03_20231001132425.jpg
+[2025-12-30 19:57:50] [ThreadPoolExecutor-0_1]   Processing image 14/74: CAM_CB_03_20231002163025.jpg
+[2025-12-30 19:57:51] [ThreadPoolExecutor-0_2]   Processing image 32/84: CAM_CB_03_20230929100046_predseg_labels.png
+[2025-12-30 19:57:52] [ThreadPoolExecutor-0_3]   Processing image 24/65: CAM_CB_03_20230930183025_predseg_labels.png
+[2025-12-30 19:57:53] [ThreadPoolExecutor-0_0]   Processing image 56/72: CAM_CB_03_20231001165425.jpg
+[2025-12-30 19:57:55] [ThreadPoolExecutor-0_1]   Processing image 21/74: CAM_CB_03_20231002201225.jpg
+[2025-12-30 19:57:56] [ThreadPoolExecutor-0_3]   Processing image 30/65: CAM_CB_03_20230930131225_predseg_labels.png
+[2025-12-30 19:57:57] [ThreadPoolExecutor-0_2]   Processing image 40/84: CAM_CB_03_20230929125425_predseg_labels.png
+[2025-12-30 19:57:58] [ThreadPoolExecutor-0_0]   Processing image 63/72: CAM_CB_03_20231001182425.jpg
+[2025-12-30 19:57:59] [ThreadPoolExecutor-0_3]   Processing image 36/65: CAM_CB_03_20230930144225_predseg_labels.png
+[2025-12-30 19:58:00] [ThreadPoolExecutor-0_1]   Processing image 28/74: CAM_CB_03_20231002193626.jpg
+[2025-12-30 19:58:01] [ThreadPoolExecutor-0_2]   Processing image 48/84: CAM_CB_03_20230929103042_predseg_labels.png
+[2025-12-30 19:58:02] [ThreadPoolExecutor-0_3]   Processing image 42/65: CAM_CB_03_20230930173625_predseg_labels.png
+[2025-12-30 19:58:02] [ThreadPoolExecutor-0_0]   Processing image 70/72: CAM_CB_03_20231001130025.jpg
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0]   Processing image 72/72: CAM_CB_03_20231001134226.jpg
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_1]   Processing image 35/74: CAM_CB_03_20231002182425.jpg
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0]   Successfully processed 72 images.
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0] [CB_03_20231001123713_20231001194913] Rectifying labels from: labels
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231001123713_20231001194913/labels
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231001123713_20231001194913/zarr/labels_rects
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0]   Found 72 images to process.
+[2025-12-30 19:58:04] [ThreadPoolExecutor-0_0]   Processing image 1/72: CAM_CB_03_20231001174226_predseg_labels.png
+[2025-12-30 19:58:06] [ThreadPoolExecutor-0_2]   Processing image 56/84: CAM_CB_03_20230929101846_predseg_labels.png
+[2025-12-30 19:58:06] [ThreadPoolExecutor-0_3]   Processing image 48/65: CAM_CB_03_20230930141825_predseg_labels.png
+[2025-12-30 19:58:08] [ThreadPoolExecutor-0_0]   Processing image 7/72: CAM_CB_03_20231001193625_predseg_labels.png
+[2025-12-30 19:58:09] [ThreadPoolExecutor-0_1]   Processing image 42/74: CAM_CB_03_20231002161225.jpg
+[2025-12-30 19:58:10] [ThreadPoolExecutor-0_3]   Processing image 54/65: CAM_CB_03_20230930174225_predseg_labels.png
+[2025-12-30 19:58:11] [ThreadPoolExecutor-0_2]   Processing image 64/84: CAM_CB_03_20230929133625_predseg_labels.png
+[2025-12-30 19:58:13] [ThreadPoolExecutor-0_0]   Processing image 14/72: CAM_CB_03_20231001163625_predseg_labels.png
+[2025-12-30 19:58:13] [ThreadPoolExecutor-0_1]   Processing image 49/74: CAM_CB_03_20231002190625.jpg
+[2025-12-30 19:58:14] [ThreadPoolExecutor-0_3]   Processing image 60/65: CAM_CB_03_20230930151225_predseg_labels.png
+[2025-12-30 19:58:16] [ThreadPoolExecutor-0_2]   Processing image 72/84: CAM_CB_03_20230929145425_predseg_labels.png
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3]   Processing image 65/65: CAM_CB_03_20230930155426_predseg_labels.png
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_0]   Processing image 21/72: CAM_CB_03_20231001155426_predseg_labels.png
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3]   Successfully processed 65 images.
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3] +++ Successfully processed event CB_03_20230930121404_20230930184404 +++
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3] --- Processing event: CB_03_20231003133713_20231003210713 ---
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3] [CB_03_20231003133713_20231003210713] Rectifying images from: orig_images
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231003133713_20231003210713/orig_images
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231003133713_20231003210713/zarr/orig_image_rects
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_1]   Processing image 56/74: CAM_CB_03_20231002180625.jpg
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3]   Found 75 images to process.
+[2025-12-30 19:58:18] [ThreadPoolExecutor-0_3]   Processing image 1/75: CAM_CB_03_20231003155425.jpg
+[2025-12-30 19:58:21] [ThreadPoolExecutor-0_2]   Processing image 80/84: CAM_CB_03_20230929141225_predseg_labels.png
+[2025-12-30 19:58:21] [ThreadPoolExecutor-0_0]   Processing image 28/72: CAM_CB_03_20231001181225_predseg_labels.png
+[2025-12-30 19:58:21] [ThreadPoolExecutor-0_3]   Processing image 7/75: CAM_CB_03_20231003143025.jpg
+[2025-12-30 19:58:22] [ThreadPoolExecutor-0_1]   Processing image 63/74: CAM_CB_03_20231002191225.jpg
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2]   Processing image 84/84: CAM_CB_03_20230929114825_predseg_labels.png
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2]   Successfully processed 84 images.
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2] +++ Successfully processed event CB_03_20230929095004_20230929182004 +++
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2] --- Processing event: CB_03_20231016111555_20231016190955 ---
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2] [CB_03_20231016111555_20231016190955] Rectifying images from: orig_images
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231016111555_20231016190955/orig_images
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231016111555_20231016190955/zarr/orig_image_rects
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2]   Found 79 images to process.
+[2025-12-30 19:58:23] [ThreadPoolExecutor-0_2]   Processing image 1/79: CAM_CB_03_20231016153025.jpg
+[2025-12-30 19:58:24] [ThreadPoolExecutor-0_0]   Processing image 35/72: CAM_CB_03_20231001143025_predseg_labels.png
+[2025-12-30 19:58:25] [ThreadPoolExecutor-0_3]   Processing image 14/75: CAM_CB_03_20231003140025.jpg
+[2025-12-30 19:58:26] [ThreadPoolExecutor-0_1]   Processing image 70/74: CAM_CB_03_20231002150626.jpg
+[2025-12-30 19:58:26] [ThreadPoolExecutor-0_2]   Processing image 7/79: CAM_CB_03_20231016122425.jpg
+[2025-12-30 19:58:27] [ThreadPoolExecutor-0_0]   Processing image 42/72: CAM_CB_03_20231001170026_predseg_labels.png
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1]   Processing image 74/74: CAM_CB_03_20231002133025.jpg
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1]   Successfully processed 74 images.
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1] [CB_03_20231002131313_20231002203713] Rectifying labels from: labels
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231002131313_20231002203713/labels
+[2025-12-30 19:58:28] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231002131313_20231002203713/zarr/labels_rects
+[2025-12-30 19:58:29] [ThreadPoolExecutor-0_1]   Found 74 images to process.
+[2025-12-30 19:58:29] [ThreadPoolExecutor-0_1]   Processing image 1/74: CAM_CB_03_20231002164226_predseg_labels.png
+[2025-12-30 19:58:29] [ThreadPoolExecutor-0_3]   Processing image 21/75: CAM_CB_03_20231003161225.jpg
+[2025-12-30 19:58:29] [ThreadPoolExecutor-0_0]   Processing image 49/72: CAM_CB_03_20231001154825_predseg_labels.png
+[2025-12-30 19:58:30] [ThreadPoolExecutor-0_2]   Processing image 14/79: CAM_CB_03_20231016173625.jpg
+[2025-12-30 19:58:30] [ThreadPoolExecutor-0_1]   Processing image 7/74: CAM_CB_03_20231002194225_predseg_labels.png
+[2025-12-30 19:58:32] [ThreadPoolExecutor-0_0]   Processing image 56/72: CAM_CB_03_20231001174825_predseg_labels.png
+[2025-12-30 19:58:32] [ThreadPoolExecutor-0_3]   Processing image 28/75: CAM_CB_03_20231003143625.jpg
+[2025-12-30 19:58:32] [ThreadPoolExecutor-0_1]   Processing image 14/74: CAM_CB_03_20231002190025_predseg_labels.png
+[2025-12-30 19:58:33] [ThreadPoolExecutor-0_2]   Processing image 21/79: CAM_CB_03_20231016161825.jpg
+[2025-12-30 19:58:37] [ThreadPoolExecutor-0_0]   Processing image 63/72: CAM_CB_03_20231001171225_predseg_labels.png
+[2025-12-30 19:58:37] [ThreadPoolExecutor-0_1]   Processing image 21/74: CAM_CB_03_20231002153025_predseg_labels.png
+[2025-12-30 19:58:38] [ThreadPoolExecutor-0_3]   Processing image 35/75: CAM_CB_03_20231003140625.jpg
+[2025-12-30 19:58:40] [ThreadPoolExecutor-0_2]   Processing image 28/79: CAM_CB_03_20231016131225.jpg
+[2025-12-30 19:58:41] [ThreadPoolExecutor-0_0]   Processing image 70/72: CAM_CB_03_20231001171825_predseg_labels.png
+[2025-12-30 19:58:42] [ThreadPoolExecutor-0_1]   Processing image 28/74: CAM_CB_03_20231002163625_predseg_labels.png
+[2025-12-30 19:58:42] [ThreadPoolExecutor-0_0]   Processing image 72/72: CAM_CB_03_20231001133025_predseg_labels.png
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0]   Successfully processed 72 images.
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0] +++ Successfully processed event CB_03_20231001123713_20231001194913 +++
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0] --- Processing event: CB_03_20231217120426_20231218011626 ---
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0] [CB_03_20231217120426_20231218011626] Rectifying images from: orig_images
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231217120426_20231218011626/orig_images
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231217120426_20231218011626/zarr/orig_image_rects
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0]   Found 129 images to process.
+[2025-12-30 19:58:43] [ThreadPoolExecutor-0_0]   Processing image 1/129: CAM_CB_03_20231217120626.jpg
+[2025-12-30 19:58:44] [ThreadPoolExecutor-0_3]   Processing image 42/75: CAM_CB_03_20231003144825.jpg
+[2025-12-30 19:58:44] [ThreadPoolExecutor-0_1]   Processing image 35/74: CAM_CB_03_20231002144825_predseg_labels.png
+[2025-12-30 19:58:45] [ThreadPoolExecutor-0_2]   Processing image 35/79: CAM_CB_03_20231016180025.jpg
+[2025-12-30 19:58:46] [ThreadPoolExecutor-0_1]   Processing image 42/74: CAM_CB_03_20231002165425_predseg_labels.png
+[2025-12-30 19:58:47] [ThreadPoolExecutor-0_3]   Processing image 49/75: CAM_CB_03_20231003161825.jpg
+[2025-12-30 19:58:48] [ThreadPoolExecutor-0_2]   Processing image 42/79: CAM_CB_03_20231016125425.jpg
+[2025-12-30 19:58:48] [ThreadPoolExecutor-0_0]   Processing image 12/129: CAM_CB_03_20231217164225.jpg
+[2025-12-30 19:58:48] [ThreadPoolExecutor-0_1]   Processing image 49/74: CAM_CB_03_20231002160625_predseg_labels.png
+[2025-12-30 19:58:50] [ThreadPoolExecutor-0_3]   Processing image 56/75: CAM_CB_03_20231003163025.jpg
+[2025-12-30 19:58:50] [ThreadPoolExecutor-0_1]   Processing image 56/74: CAM_CB_03_20231002161225_predseg_labels.png
+[2025-12-30 19:58:51] [ThreadPoolExecutor-0_2]   Processing image 49/79: CAM_CB_03_20231016141225.jpg
+[2025-12-30 19:58:52] [ThreadPoolExecutor-0_1]   Processing image 63/74: CAM_CB_03_20231002141825_predseg_labels.png
+[2025-12-30 19:58:53] [ThreadPoolExecutor-0_3]   Processing image 63/75: CAM_CB_03_20231003193025.jpg
+[2025-12-30 19:58:53] [ThreadPoolExecutor-0_0]   Processing image 24/129: CAM_CB_03_20231218005431.jpg
+[2025-12-30 19:58:54] [ThreadPoolExecutor-0_2]   Processing image 56/79: CAM_CB_03_20231016190025.jpg
+[2025-12-30 19:58:54] [ThreadPoolExecutor-0_1]   Processing image 70/74: CAM_CB_03_20231002172425_predseg_labels.png
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1]   Processing image 74/74: CAM_CB_03_20231002150626_predseg_labels.png
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1]   Successfully processed 74 images.
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1] +++ Successfully processed event CB_03_20231002131313_20231002203713 +++
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1] --- Processing event: CB_03_20231227092826_20231227172826 ---
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1] [CB_03_20231227092826_20231227172826] Rectifying images from: orig_images
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231227092826_20231227172826/orig_images
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231227092826_20231227172826/zarr/orig_image_rects
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1]   Found 65 images to process.
+[2025-12-30 19:58:55] [ThreadPoolExecutor-0_1]   Processing image 1/65: CAM_CB_03_20231227130025.jpg
+[2025-12-30 19:58:56] [ThreadPoolExecutor-0_3]   Processing image 70/75: CAM_CB_03_20231003192426.jpg
+[2025-12-30 19:58:57] [ThreadPoolExecutor-0_2]   Processing image 63/79: CAM_CB_03_20231016184825.jpg
+[2025-12-30 19:58:57] [ThreadPoolExecutor-0_1]   Processing image 6/65: CAM_CB_03_20231227140025.jpg
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3]   Processing image 75/75: CAM_CB_03_20231003190025.jpg
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_0]   Processing image 36/129: CAM_CB_03_20231217145425.jpg
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3]   Successfully processed 75 images.
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3] [CB_03_20231003133713_20231003210713] Rectifying labels from: labels
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231003133713_20231003210713/labels
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231003133713_20231003210713/zarr/labels_rects
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3]   Found 75 images to process.
+[2025-12-30 19:58:58] [ThreadPoolExecutor-0_3]   Processing image 1/75: CAM_CB_03_20231003200625_predseg_labels.png
+[2025-12-30 19:58:59] [ThreadPoolExecutor-0_2]   Processing image 70/79: CAM_CB_03_20231016131825.jpg
+[2025-12-30 19:58:59] [ThreadPoolExecutor-0_1]   Processing image 12/65: CAM_CB_03_20231227164825.jpg
+[2025-12-30 19:59:00] [ThreadPoolExecutor-0_3]   Processing image 7/75: CAM_CB_03_20231003171825_predseg_labels.png
+[2025-12-30 19:59:01] [ThreadPoolExecutor-0_1]   Processing image 18/65: CAM_CB_03_20231227112428.jpg
+[2025-12-30 19:59:02] [ThreadPoolExecutor-0_3]   Processing image 14/75: CAM_CB_03_20231003141225_predseg_labels.png
+[2025-12-30 19:59:02] [ThreadPoolExecutor-0_0]   Processing image 48/129: CAM_CB_03_20231217161225.jpg
+[2025-12-30 19:59:02] [ThreadPoolExecutor-0_2]   Processing image 77/79: CAM_CB_03_20231016114225.jpg
+[2025-12-30 19:59:03] [ThreadPoolExecutor-0_2]   Processing image 79/79: CAM_CB_03_20231016171226.jpg
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2]   Successfully processed 79 images.
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2] [CB_03_20231016111555_20231016190955] Rectifying labels from: labels
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231016111555_20231016190955/labels
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231016111555_20231016190955/zarr/labels_rects
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_3]   Processing image 21/75: CAM_CB_03_20231003193025_predseg_labels.png
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2]   Found 79 images to process.
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_2]   Processing image 1/79: CAM_CB_03_20231016131225_predseg_labels.png
+[2025-12-30 19:59:04] [ThreadPoolExecutor-0_1]   Processing image 24/65: CAM_CB_03_20231227121826.jpg
+[2025-12-30 19:59:06] [ThreadPoolExecutor-0_2]   Processing image 7/79: CAM_CB_03_20231016150625_predseg_labels.png
+[2025-12-30 19:59:06] [ThreadPoolExecutor-0_3]   Processing image 28/75: CAM_CB_03_20231003170625_predseg_labels.png
+[2025-12-30 19:59:07] [ThreadPoolExecutor-0_1]   Processing image 30/65: CAM_CB_03_20231227142425.jpg
+[2025-12-30 19:59:07] [ThreadPoolExecutor-0_0]   Processing image 60/129: CAM_CB_03_20231217134825.jpg
+[2025-12-30 19:59:07] [ThreadPoolExecutor-0_2]   Processing image 14/79: CAM_CB_03_20231016184225_predseg_labels.png
+[2025-12-30 19:59:07] [ThreadPoolExecutor-0_3]   Processing image 35/75: CAM_CB_03_20231003165425_predseg_labels.png
+[2025-12-30 19:59:09] [ThreadPoolExecutor-0_1]   Processing image 36/65: CAM_CB_03_20231227124225.jpg
+[2025-12-30 19:59:09] [ThreadPoolExecutor-0_2]   Processing image 21/79: CAM_CB_03_20231016123625_predseg_labels.png
+[2025-12-30 19:59:10] [ThreadPoolExecutor-0_3]   Processing image 42/75: CAM_CB_03_20231003144825_predseg_labels.png
+[2025-12-30 19:59:11] [ThreadPoolExecutor-0_1]   Processing image 42/65: CAM_CB_03_20231227155425.jpg
+[2025-12-30 19:59:11] [ThreadPoolExecutor-0_2]   Processing image 28/79: CAM_CB_03_20231016181225_predseg_labels.png
+[2025-12-30 19:59:11] [ThreadPoolExecutor-0_3]   Processing image 49/75: CAM_CB_03_20231003163025_predseg_labels.png
+[2025-12-30 19:59:11] [ThreadPoolExecutor-0_0]   Processing image 72/129: CAM_CB_03_20231218003629.jpg
+[2025-12-30 19:59:13] [ThreadPoolExecutor-0_2]   Processing image 35/79: CAM_CB_03_20231016125425_predseg_labels.png
+[2025-12-30 19:59:13] [ThreadPoolExecutor-0_3]   Processing image 56/75: CAM_CB_03_20231003203025_predseg_labels.png
+[2025-12-30 19:59:13] [ThreadPoolExecutor-0_1]   Processing image 48/65: CAM_CB_03_20231227145425.jpg
+[2025-12-30 19:59:15] [ThreadPoolExecutor-0_2]   Processing image 42/79: CAM_CB_03_20231016122425_predseg_labels.png
+[2025-12-30 19:59:15] [ThreadPoolExecutor-0_3]   Processing image 63/75: CAM_CB_03_20231003200025_predseg_labels.png
+[2025-12-30 19:59:15] [ThreadPoolExecutor-0_1]   Processing image 54/65: CAM_CB_03_20231227163626.jpg
+[2025-12-30 19:59:16] [ThreadPoolExecutor-0_0]   Processing image 84/129: CAM_CB_03_20231217170625.jpg
+[2025-12-30 19:59:17] [ThreadPoolExecutor-0_2]   Processing image 49/79: CAM_CB_03_20231016140025_predseg_labels.png
+[2025-12-30 19:59:17] [ThreadPoolExecutor-0_3]   Processing image 70/75: CAM_CB_03_20231003144225_predseg_labels.png
+[2025-12-30 19:59:18] [ThreadPoolExecutor-0_1]   Processing image 60/65: CAM_CB_03_20231227162425.jpg
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_2]   Processing image 56/79: CAM_CB_03_20231016141825_predseg_labels.png
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3]   Processing image 75/75: CAM_CB_03_20231003163625_predseg_labels.png
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3]   Successfully processed 75 images.
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3] +++ Successfully processed event CB_03_20231003133713_20231003210713 +++
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3] --- Processing event: CB_03_20240809150654_20240809232454 ---
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3] [CB_03_20240809150654_20240809232454] Rectifying images from: orig_images
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240809150654_20240809232454/orig_images
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240809150654_20240809232454/zarr/orig_image_rects
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3]   Found 83 images to process.
+[2025-12-30 19:59:19] [ThreadPoolExecutor-0_3]   Processing image 1/83: CAM_CB_03_20240809202425.jpg
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1]   Processing image 65/65: CAM_CB_03_20231227141825.jpg
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1]   Successfully processed 65 images.
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1] [CB_03_20231227092826_20231227172826] Rectifying labels from: labels
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231227092826_20231227172826/labels
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231227092826_20231227172826/zarr/labels_rects
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1]   Found 65 images to process.
+[2025-12-30 19:59:20] [ThreadPoolExecutor-0_1]   Processing image 1/65: CAM_CB_03_20231227155425_predseg_labels.png
+[2025-12-30 19:59:21] [ThreadPoolExecutor-0_2]   Processing image 63/79: CAM_CB_03_20231016151825_predseg_labels.png
+[2025-12-30 19:59:21] [ThreadPoolExecutor-0_0]   Processing image 96/129: CAM_CB_03_20231217191825.jpg
+[2025-12-30 19:59:22] [ThreadPoolExecutor-0_1]   Processing image 6/65: CAM_CB_03_20231227132425_predseg_labels.png
+[2025-12-30 19:59:22] [ThreadPoolExecutor-0_3]   Processing image 8/83: CAM_CB_03_20240809220625.jpg
+[2025-12-30 19:59:23] [ThreadPoolExecutor-0_2]   Processing image 70/79: CAM_CB_03_20231016185425_predseg_labels.png
+[2025-12-30 19:59:23] [ThreadPoolExecutor-0_1]   Processing image 12/65: CAM_CB_03_20231227130625_predseg_labels.png
+[2025-12-30 19:59:24] [ThreadPoolExecutor-0_2]   Processing image 77/79: CAM_CB_03_20231016173625_predseg_labels.png
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_3]   Processing image 16/83: CAM_CB_03_20240809201825.jpg
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2]   Processing image 79/79: CAM_CB_03_20231016184825_predseg_labels.png
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2]   Successfully processed 79 images.
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2] +++ Successfully processed event CB_03_20231016111555_20231016190955 +++
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2] --- Processing event: CB_03_20240812145454_20240812212454 ---
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2] [CB_03_20240812145454_20240812212454] Rectifying images from: orig_images
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240812145454_20240812212454/orig_images
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240812145454_20240812212454/zarr/orig_image_rects
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_0]   Processing image 108/129: CAM_CB_03_20231217231829.jpg
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_1]   Processing image 18/65: CAM_CB_03_20231227161825_predseg_labels.png
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2]   Found 73 images to process.
+[2025-12-30 19:59:25] [ThreadPoolExecutor-0_2]   Processing image 1/73: CAM_CB_03_20240812183026.jpg
+[2025-12-30 19:59:27] [ThreadPoolExecutor-0_1]   Processing image 24/65: CAM_CB_03_20231227135425_predseg_labels.png
+[2025-12-30 19:59:29] [ThreadPoolExecutor-0_3]   Processing image 24/83: CAM_CB_03_20240809221225.jpg
+[2025-12-30 19:59:29] [ThreadPoolExecutor-0_2]   Processing image 7/73: CAM_CB_03_20240812184226.jpg
+[2025-12-30 19:59:30] [ThreadPoolExecutor-0_1]   Processing image 30/65: CAM_CB_03_20231227110029_predseg_labels.png
+[2025-12-30 19:59:32] [ThreadPoolExecutor-0_1]   Processing image 36/65: CAM_CB_03_20231227163025_predseg_labels.png
+[2025-12-30 19:59:32] [ThreadPoolExecutor-0_0]   Processing image 120/129: CAM_CB_03_20231217235430.jpg
+[2025-12-30 19:59:33] [ThreadPoolExecutor-0_2]   Processing image 14/73: CAM_CB_03_20240812181825.jpg
+[2025-12-30 19:59:34] [ThreadPoolExecutor-0_3]   Processing image 32/83: CAM_CB_03_20240809164825.jpg
+[2025-12-30 19:59:35] [ThreadPoolExecutor-0_1]   Processing image 42/65: CAM_CB_03_20231227143625_predseg_labels.png
+[2025-12-30 19:59:37] [ThreadPoolExecutor-0_1]   Processing image 48/65: CAM_CB_03_20231227131825_predseg_labels.png
+[2025-12-30 19:59:37] [ThreadPoolExecutor-0_2]   Processing image 21/73: CAM_CB_03_20240812175605.jpg
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0]   Processing image 129/129: CAM_CB_03_20231217193625.jpg
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0]   Successfully processed 129 images.
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0] [CB_03_20231217120426_20231218011626] Rectifying labels from: labels
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231217120426_20231218011626/labels
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20231217120426_20231218011626/zarr/labels_rects
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_3]   Processing image 40/83: CAM_CB_03_20240809211225.jpg
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0]   Found 129 images to process.
+[2025-12-30 19:59:38] [ThreadPoolExecutor-0_0]   Processing image 1/129: CAM_CB_03_20231217121225_predseg_labels.png
+[2025-12-30 19:59:39] [ThreadPoolExecutor-0_1]   Processing image 54/65: CAM_CB_03_20231227151225_predseg_labels.png
+[2025-12-30 19:59:41] [ThreadPoolExecutor-0_2]   Processing image 28/73: CAM_CB_03_20240812175805.jpg
+[2025-12-30 19:59:41] [ThreadPoolExecutor-0_1]   Processing image 60/65: CAM_CB_03_20231227145425_predseg_labels.png
+[2025-12-30 19:59:42] [ThreadPoolExecutor-0_0]   Processing image 12/129: CAM_CB_03_20231217132425_predseg_labels.png
+[2025-12-30 19:59:43] [ThreadPoolExecutor-0_3]   Processing image 48/83: CAM_CB_03_20240809162426.jpg
+[2025-12-30 19:59:43] [ThreadPoolExecutor-0_1]   Processing image 65/65: CAM_CB_03_20231227112428_predseg_labels.png
+[2025-12-30 19:59:43] [ThreadPoolExecutor-0_1]   Successfully processed 65 images.
+[2025-12-30 19:59:43] [ThreadPoolExecutor-0_1] === Batch Rectification Complete ===
+[2025-12-30 19:59:43] [ThreadPoolExecutor-0_1] +++ Successfully processed event CB_03_20231227092826_20231227172826 +++
+[2025-12-30 19:59:45] [ThreadPoolExecutor-0_2]   Processing image 35/73: CAM_CB_03_20240812195425.jpg
+[2025-12-30 19:59:46] [ThreadPoolExecutor-0_0]   Processing image 24/129: CAM_CB_03_20231217203626_predseg_labels.png
+[2025-12-30 19:59:46] [ThreadPoolExecutor-0_3]   Processing image 56/83: CAM_CB_03_20240809203025.jpg
+[2025-12-30 19:59:48] [ThreadPoolExecutor-0_2]   Processing image 42/73: CAM_CB_03_20240812193625.jpg
+[2025-12-30 19:59:49] [ThreadPoolExecutor-0_0]   Processing image 36/129: CAM_CB_03_20231217201825_predseg_labels.png
+[2025-12-30 19:59:49] [ThreadPoolExecutor-0_3]   Processing image 64/83: CAM_CB_03_20240809191225.jpg
+[2025-12-30 19:59:50] [ThreadPoolExecutor-0_2]   Processing image 49/73: CAM_CB_03_20240812194225.jpg
+[2025-12-30 19:59:52] [ThreadPoolExecutor-0_3]   Processing image 72/83: CAM_CB_03_20240809211825.jpg
+[2025-12-30 19:59:52] [ThreadPoolExecutor-0_0]   Processing image 48/129: CAM_CB_03_20231217181825_predseg_labels.png
+[2025-12-30 19:59:53] [ThreadPoolExecutor-0_2]   Processing image 56/73: CAM_CB_03_20240812201826.jpg
+[2025-12-30 19:59:55] [ThreadPoolExecutor-0_3]   Processing image 80/83: CAM_CB_03_20240809163026.jpg
+[2025-12-30 19:59:55] [ThreadPoolExecutor-0_2]   Processing image 63/73: CAM_CB_03_20240812152425.jpg
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_0]   Processing image 60/129: CAM_CB_03_20231217184225_predseg_labels.png
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3]   Processing image 83/83: CAM_CB_03_20240809224226.jpg
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3]   Successfully processed 83 images.
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3] [CB_03_20240809150654_20240809232454] Rectifying labels from: labels
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240809150654_20240809232454/labels
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240809150654_20240809232454/zarr/labels_rects
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3]   Found 83 images to process.
+[2025-12-30 19:59:56] [ThreadPoolExecutor-0_3]   Processing image 1/83: CAM_CB_03_20240809172425_predseg_labels.png
+[2025-12-30 19:59:58] [ThreadPoolExecutor-0_2]   Processing image 70/73: CAM_CB_03_20240812211225.jpg
+[2025-12-30 19:59:58] [ThreadPoolExecutor-0_3]   Processing image 8/83: CAM_CB_03_20240809154825_predseg_labels.png
+[2025-12-30 19:59:58] [ThreadPoolExecutor-0_2]   Processing image 73/73: CAM_CB_03_20240812201225.jpg
+[2025-12-30 19:59:58] [ThreadPoolExecutor-0_0]   Processing image 72/129: CAM_CB_03_20231217135426_predseg_labels.png
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2]   Successfully processed 73 images.
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2] [CB_03_20240812145454_20240812212454] Rectifying labels from: labels
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2] 
+=== Starting Batch Rectification ===
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2]   Source folder: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240812145454_20240812212454/labels
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2]   Output Zarr store: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/carolina_beach/flood_events/CB_03_20240812145454_20240812212454/zarr/labels_rects
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2]   Found 73 images to process.
+[2025-12-30 19:59:59] [ThreadPoolExecutor-0_2]   Processing image 1/73: CAM_CB_03_20240812151825_predseg_labels.png
+[2025-12-30 20:00:00] [ThreadPoolExecutor-0_3]   Processing image 16/83: CAM_CB_03_20240809204225_predseg_labels.png
+[2025-12-30 20:00:00] [ThreadPoolExecutor-0_2]   Processing image 7/73: CAM_CB_03_20240812160025_predseg_labels.png
+[2025-12-30 20:00:01] [ThreadPoolExecutor-0_0]   Processing image 84/129: CAM_CB_03_20231217184825_predseg_labels.png
+[2025-12-30 20:00:01] [ThreadPoolExecutor-0_2]   Processing image 14/73: CAM_CB_03_20240812194825_predseg_labels.png
+[2025-12-30 20:00:02] [ThreadPoolExecutor-0_3]   Processing image 24/83: CAM_CB_03_20240809174226_predseg_labels.png
+[2025-12-30 20:00:03] [ThreadPoolExecutor-0_2]   Processing image 21/73: CAM_CB_03_20240812201225_predseg_labels.png
+[2025-12-30 20:00:03] [ThreadPoolExecutor-0_3]   Processing image 32/83: CAM_CB_03_20240809153025_predseg_labels.png
+[2025-12-30 20:00:03] [ThreadPoolExecutor-0_0]   Processing image 96/129: CAM_CB_03_20231218004230_predseg_labels.png
+[2025-12-30 20:00:05] [ThreadPoolExecutor-0_2]   Processing image 28/73: CAM_CB_03_20240812175635_predseg_labels.png
+[2025-12-30 20:00:05] [ThreadPoolExecutor-0_3]   Processing image 40/83: CAM_CB_03_20240809195425_predseg_labels.png
+[2025-12-30 20:00:06] [ThreadPoolExecutor-0_0]   Processing image 108/129: CAM_CB_03_20231217141225_predseg_labels.png
+[2025-12-30 20:00:06] [ThreadPoolExecutor-0_2]   Processing image 35/73: CAM_CB_03_20240812181226_predseg_labels.png
+[2025-12-30 20:00:07] [ThreadPoolExecutor-0_3]   Processing image 48/83: CAM_CB_03_20240809183025_predseg_labels.png
+[2025-12-30 20:00:07] [ThreadPoolExecutor-0_2]   Processing image 42/73: CAM_CB_03_20240812161226_predseg_labels.png
+[2025-12-30 20:00:08] [ThreadPoolExecutor-0_3]   Processing image 56/83: CAM_CB_03_20240809171226_predseg_labels.png
+[2025-12-30 20:00:08] [ThreadPoolExecutor-0_0]   Processing image 120/129: CAM_CB_03_20231217121825_predseg_labels.png
+[2025-12-30 20:00:09] [ThreadPoolExecutor-0_2]   Processing image 49/73: CAM_CB_03_20240812170625_predseg_labels.png
+[2025-12-30 20:00:10] [ThreadPoolExecutor-0_3]   Processing image 64/83: CAM_CB_03_20240809163625_predseg_labels.png
+[2025-12-30 20:00:10] [ThreadPoolExecutor-0_0]   Processing image 129/129: CAM_CB_03_20231217153025_predseg_labels.png
+[2025-12-30 20:00:10] [ThreadPoolExecutor-0_0]   Successfully processed 129 images.
+[2025-12-30 20:00:10] [ThreadPoolExecutor-0_0] === Batch Rectification Complete ===
+[2025-12-30 20:00:10] [ThreadPoolExecutor-0_0] +++ Successfully processed event CB_03_20231217120426_20231218011626 +++
+[2025-12-30 20:00:10] [ThreadPoolExecutor-0_2]   Processing image 56/73: CAM_CB_03_20240812211825_predseg_labels.png
+[2025-12-30 20:00:11] [ThreadPoolExecutor-0_3]   Processing image 72/83: CAM_CB_03_20240809151226_predseg_labels.png
+[2025-12-30 20:00:12] [ThreadPoolExecutor-0_2]   Processing image 63/73: CAM_CB_03_20240812175425_predseg_labels.png
+[2025-12-30 20:00:13] [ThreadPoolExecutor-0_3]   Processing image 80/83: CAM_CB_03_20240809220025_predseg_labels.png
+[2025-12-30 20:00:13] [ThreadPoolExecutor-0_2]   Processing image 70/73: CAM_CB_03_20240812193625_predseg_labels.png
+[2025-12-30 20:00:13] [ThreadPoolExecutor-0_3]   Processing image 83/83: CAM_CB_03_20240809231825_predseg_labels.png
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_3]   Successfully processed 83 images.
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_3] === Batch Rectification Complete ===
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_3] +++ Successfully processed event CB_03_20240809150654_20240809232454 +++
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_2]   Processing image 73/73: CAM_CB_03_20240812195425_predseg_labels.png
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_2]   Successfully processed 73 images.
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_2] === Batch Rectification Complete ===
+[2025-12-30 20:00:14] [ThreadPoolExecutor-0_2] +++ Successfully processed event CB_03_20240812145454_20240812212454 +++
+[2025-12-30 20:00:14] [MainThread  ] 
+--- Rectification Pipeline Complete ---
+[2025-12-30 20:00:14] [MainThread  ] Total events processed: 21
+[2025-12-30 20:00:14] [MainThread  ] Total events skipped:   0
+[2025-12-30 20:00:14] [MainThread  ] Total events (errors):  0

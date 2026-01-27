@@ -1,0 +1,98 @@
+Loaded environment variables from /share/jcdietri/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts/../hpc_paths.env
+Activating conda environment...
+Starting photo filter Python script...
+Starting job list preparation...
+Using specified output directory: /gpfs_common/share01/jcdietri/rmccune/poseidon/data/down_east/images/daylight_all_events/job_file_lists
+
+Success! Created 32 file lists in '/gpfs_common/share01/jcdietri/rmccune/poseidon/data/down_east/images/daylight_all_events/job_file_lists' for a total of 4349 files.
+Job list preparation finished.
+Deactivating conda environment...
+Job finished.
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@c051n01>
+Subject: Job 857267: <make_jobs> in cluster <Hazel> Done
+
+Job <make_jobs> was submitted from host <login04> by user <rmccune> in cluster <Hazel> at Mon Dec 29 22:24:30 2025
+Job was executed on host(s) <c051n01>, in queue <ccee>, as user <rmccune> in cluster <Hazel> at Mon Dec 29 22:24:31 2025
+</home/rmccune> was used as the home directory.
+</share/jcdietri/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts> was used as the working directory.
+Started at Mon Dec 29 22:24:31 2025
+Terminated at Mon Dec 29 22:24:41 2025
+Results reported at Mon Dec 29 22:24:41 2025
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#! /bin/bash
+
+#BSUB -J make_jobs
+#BSUB -W 15
+#BSUB -n 1
+#BSUB -q ccee
+#BSUB -o make_jobs.%J.out
+#BSUB -e make_jobs.%J.err
+
+source ~/.bashrc
+
+# Resolve the directory where the job was submitted from (LSF variable or fallback)
+SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
+
+# Point one directory up from that
+ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
+
+# Load the env file if it exists
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+    echo "Loaded environment variables from $ENV_FILE"
+else
+    echo "Warning: No hpc_paths.env file found at $ENV_FILE"
+fi
+
+echo "Activating conda environment..."
+conda activate $POSEIDON_ENV
+
+REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
+
+RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_create_file_lists.py"
+
+IMAGE_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
+OUTPUT_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events/job_file_lists"
+
+echo "Starting photo filter Python script..."
+python -u $RUNNER_SCRIPT \
+    --image_dir $IMAGE_DIR \
+    --output_dir $OUTPUT_DIR \
+    --num_jobs 32 \
+
+echo "Deactivating conda environment..."
+conda deactivate
+
+echo "Job finished."
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   4.82 sec.
+    Max Memory :                                 -
+    Average Memory :                             -
+    Total Requested Memory :                     2.00 GB
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              4
+    Max Threads :                                5
+    Run time :                                   16 sec.
+    Turnaround time :                            11 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <make_jobs.857267.err> for stderr output of this job.
+

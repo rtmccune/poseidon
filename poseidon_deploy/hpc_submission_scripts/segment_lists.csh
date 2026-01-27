@@ -31,7 +31,7 @@ CONTAINER_PATH="${PROJECT_DIR}/poseidon_deploy/segmentation/container/seg_gym.si
 WEIGHTS_FILE="${PROJECT_DIR}/data/segmentation/all_sites/weights/all_sites_5_class_v3_segformer_fullmodel.h5"
 
 # Directory containing your images (still needed by the script for output structure)
-IMAGES_DIR_NAME="${PROJECT_DIR}/data/down_east/images/daylight_all_events"
+IMAGES_DIR_NAME="${PROJECT_DIR}/data/carolina_beach/images/daylight_all_events"
 
 # Directory where you saved your text file lists from Step 2
 LISTS_DIR="${IMAGES_DIR_NAME}/job_file_lists"

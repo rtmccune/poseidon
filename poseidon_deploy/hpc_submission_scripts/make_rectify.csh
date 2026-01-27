@@ -1,7 +1,7 @@
 #! /bin/bash
 
 #BSUB -J rectify
-#BSUB -W 120
+#BSUB -W 360
 #BSUB -n 12
 #BSUB -R "rusage[mem=4G]"
 #BSUB -R "select[a100 || l40 || l40s || h100]"

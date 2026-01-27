@@ -1,0 +1,114 @@
+Loaded environment variables from /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts/../hpc_paths.env
+Activating conda environment...
+Starting image rectifier Python script...
+
+--- Starting grid generation for 'down_east' at 0.05m ---
+  [IO] Using existing directory: /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/grids
+  [GRID] Generating grid coordinates...
+    X Extent: 847809.69 to 847973.87
+    Y Extent: 127254.63 to 127450.14
+    Initial grid shape (before transpose): (3284, 3911)
+  [GRID] Interpolating Z grid from 205550 input points...
+    [WARN] 8834 grid points were outside the interpolation area (set to NaN).
+  [GRID] Transposing grids to (Y, X) convention.
+    Final grid shape: (3911, 3284)
+  [IO] Saving compressed Zarr arrays (mode='w', overwriting)...
+    X -> /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/grids/down_east_grid_x_0.05m.zarr
+    Y -> /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/grids/down_east_grid_y_0.05m.zarr
+    Z -> /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/data/grids/down_east_grid_z_0.05m.zarr
+--- Grid generation successful in 12.60 seconds. ---
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@gpu26>
+Subject: Job 872908: <rectify> in cluster <Hazel> Exited
+
+Job <rectify> was submitted from host <login02.hpc.ncsu.edu> by user <rmccune> in cluster <Hazel> at Tue Dec 30 20:17:20 2025
+Job was executed on host(s) <12*gpu26>, in queue <gpu>, as user <rmccune> in cluster <Hazel> at Tue Dec 30 20:17:20 2025
+</home/rmccune> was used as the home directory.
+</rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts> was used as the working directory.
+Started at Tue Dec 30 20:17:20 2025
+Terminated at Tue Dec 30 22:17:29 2025
+Results reported at Tue Dec 30 22:17:29 2025
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#! /bin/bash
+
+#BSUB -J rectify
+#BSUB -W 120
+#BSUB -n 12
+#BSUB -R "rusage[mem=4G]"
+#BSUB -R "select[a100 || l40 || l40s || h100]"
+#BSUB -gpu "num=1:mode=shared"
+#BSUB -q gpu
+#BSUB -o rectification.%J.out
+#BSUB -e rectification.%J.err
+
+source ~/.bashrc
+
+module load cuda/12.6
+export MPI4PY_RC_INITIALIZE=False
+
+# Resolve the directory where the job was submitted from (LSF variable or fallback)
+SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
+
+# Point one directory up from that
+ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
+
+# Load the env file if it exists
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+    echo "Loaded environment variables from $ENV_FILE"
+else
+    echo "Warning: No hpc_paths.env file found at $ENV_FILE"
+fi
+
+echo "Activating conda environment..."
+conda activate $POSEIDON_ENV
+
+REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
+
+RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_rectify.py"
+
+LIDAR_FILE="$REPO_ROOT/data/lidar/combined_point_cloud_down_east.laz"
+GRID_DIR="$REPO_ROOT/data/grids"
+EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
+
+echo "Starting image rectifier Python script..."
+python -u $RUNNER_SCRIPT \
+    --lidar_file $LIDAR_FILE \
+    --event_dir $EVENT_DIR \
+    --min_x 847809.694 \
+    --max_x 847973.874 \
+    --min_y 127254.634 \
+    --max_y 127450.141 \
+
+(... more ...)
+------------------------------------------------------------
+
+TERM_RUNLIMIT: job killed after reaching LSF run time limit.
+Exited with exit code 140.
+
+Resource usage summary:
+
+    CPU time :                                   3806.00 sec.
+    Max Memory :                                 5 GB
+    Average Memory :                             4.79 GB
+    Total Requested Memory :                     4.00 GB
+    Delta Memory :                               -1.00 GB
+    Max Swap :                                   -
+    Max Processes :                              4
+    Max Threads :                                110
+    Run time :                                   7210 sec.
+    Turnaround time :                            7209 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <rectification.872908.err> for stderr output of this job.
+
