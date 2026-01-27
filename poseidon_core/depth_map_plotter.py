@@ -22,7 +22,7 @@ from datetime import timedelta
 
 def _log(message):
     """Helper function for timestamped logging."""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
 
 
 def _extract_camera_name(filename):
