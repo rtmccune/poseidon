@@ -84,6 +84,10 @@ def generate_time_series_parallel(plotter, logger):
 
 def main():
     # MPI Setup
+    
+    # REQUIRED because MPI4PY_RC_INITIALIZE=False in the submission script
+    MPI.Init()
+    
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     
