@@ -4,8 +4,8 @@
 #BSUB -W 120
 #BSUB -n 12
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=4G]"
-#BSUB -q cee
+#BSUB -R "rusage[mem=8G]"
+#BSUB -q ccee
 #BSUB -o plotting.%J.out
 #BSUB -e plotting.%J.err
 

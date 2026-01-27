@@ -1,0 +1,105 @@
+--------------------------------------------------------------------------
+PRTE has detected that the head of the session directory tree (where
+scratch files and shared memory backing storage will be placed)
+resides on a shared file system:
+
+   Directory: /share/jcdietri/rmccune/tmp
+   File system type: gpfs
+
+For performance reasons, it is strongly recommended that the session
+directory be located on a local file system. This can be controlled by
+setting the system temporary directory to be used by PRTE using either
+the TMPDIR envar or the "prte_tmpdir_base" MCA param.
+
+If you need the temporary directory to be different on remote nodes
+from the local one where prterun is running (e.g., when a login node is
+being employed), then you can set the local temporary directory using
+the "prte_local_tmpdir_base" MCA param and the one to be used on all
+other nodes using the "prte_remote_tmpdir_base" param.
+
+This is only a warning advisory and your job will continue. You can
+disable this warning in the future by setting the
+"prte_silence_shared_fs" MCA param to "1".
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+PRTE has detected that the head of the session directory tree (where
+scratch files and shared memory backing storage will be placed)
+resides on a shared file system:
+
+   Directory: /share/jcdietri/rmccune/tmp
+   File system type: gpfs
+
+For performance reasons, it is strongly recommended that the session
+directory be located on a local file system. This can be controlled by
+setting the system temporary directory to be used by PRTE using either
+the TMPDIR envar or the "prte_tmpdir_base" MCA param.
+
+If you need the temporary directory to be different on remote nodes
+from the local one where prterun is running (e.g., when a login node is
+being employed), then you can set the local temporary directory using
+the "prte_local_tmpdir_base" MCA param and the one to be used on all
+other nodes using the "prte_remote_tmpdir_base" param.
+
+This is only a warning advisory and your job will continue. You can
+disable this warning in the future by setting the
+"prte_silence_shared_fs" MCA param to "1".
+--------------------------------------------------------------------------
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803001] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1802998] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803002] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1802997] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803023] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803017] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803018] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803008] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803026] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803011] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1802995] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803005] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+*** The MPI_Comm_rank() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
+[c046n01:1803014] Local abort before MPI_INIT completed completed successfully, but am not able to aggregate error messages, and not able to guarantee that all other processes were killed!
+--------------------------------------------------------------------------
+prterun detected that one or more processes exited with non-zero status,
+thus causing the job to be terminated. The first process to do so was:
+
+   Process name: [prterun-c046n01-1802967@1,21]
+   Exit code:    14
+--------------------------------------------------------------------------
