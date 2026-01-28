@@ -1,0 +1,195 @@
+Loaded environment variables from /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts/../hpc_paths.env
+Activating conda environment...
+Activating conda environment...
+Starting Roadway Analysis...
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+ cuFile initialization faileddlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loadingdlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ cuFile initialization failed
+ cuFile initialization failed
+dlopen error libcuda.so.1: cannot open shared object file: No such file or directory
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ missing cuda symbols while dynamic loading
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ cuFile initialization failed
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading missing cuda symbols while dynamic loading
+
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ missing cuda symbols while dynamic loading
+ missing cuda symbols while dynamic loading
+ missing cuda symbols while dynamic loading
+ cuFile initialization failed
+ cuFile initialization failed
+ cuFile initialization failed
+ cuFile initialization failed
+ cuFile initialization failed
+ cuFile initialization failed
+ cuFile initialization failed
+Job Finished
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@c042n03>
+Subject: Job 52562: <roadway_calc> in cluster <Hazel> Done
+
+Job <roadway_calc> was submitted from host <login04> by user <rmccune> in cluster <Hazel> at Wed Jan 28 04:44:59 2026
+Job was executed on host(s) <24*c042n03>, in queue <ccee>, as user <rmccune> in cluster <Hazel> at Wed Jan 28 04:44:59 2026
+</home/rmccune> was used as the home directory.
+</rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_deploy/hpc_submission_scripts> was used as the working directory.
+Started at Wed Jan 28 04:44:59 2026
+Terminated at Wed Jan 28 04:59:04 2026
+Results reported at Wed Jan 28 04:59:04 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#! /bin/bash
+
+#BSUB -J roadway_calc
+#BSUB -W 120
+#BSUB -n 24
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=8G]"
+#BSUB -q ccee
+#BSUB -o roadway.%J.out
+#BSUB -e roadway.%J.err
+
+source ~/.bashrc
+
+export MPI4PY_RC_INITIALIZE=False
+export TMPDIR=/tmp
+
+SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
+ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
+
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+    echo "Loaded environment variables from $ENV_FILE"
+else
+    echo "Warning: No hpc_paths.env file found at $ENV_FILE"
+fi
+
+echo "Activating conda environment..."
+conda activate $POSEIDON_ENV
+
+REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
+RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_roadway_analyzer.py"
+
+# Point to data on /rsstu
+EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
+
+# Define your LabelMe JSON file location
+# (Upload this file to /share or /rsstu before running)
+JSON_FILE="$REPO_ROOT/data/transects/canal_dr_transect.json"
+
+echo "Activating conda environment..."
+conda activate $POSEIDON_ENV
+
+echo "Starting Roadway Analysis..."
+mpirun python -u $RUNNER_SCRIPT \
+    --event_dir $EVENT_DIR \
+    --json_path $JSON_FILE \
+    --label "roadway" \
+    --step_size 1.0
+
+echo "Job Finished"
+
+(... more ...)
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   274.78 sec.
+    Max Memory :                                 6 GB
+    Average Memory :                             2.90 GB
+    Total Requested Memory :                     8.00 GB
+    Delta Memory :                               2.00 GB
+    Max Swap :                                   -
+    Max Processes :                              36
+    Max Threads :                                75
+    Run time :                                   868 sec.
+    Turnaround time :                            845 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <roadway.52562.err> for stderr output of this job.
+
