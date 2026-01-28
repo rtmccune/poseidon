@@ -31,11 +31,11 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_roadway_analyzer.py"
 
 # Point to data on /rsstu
-EVENT_DIR="/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/data/down_east/flood_events"
+EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
 
 # Define your LabelMe JSON file location
 # (Upload this file to /share or /rsstu before running)
-JSON_FILE="$REPO_ROOT/data/transects/roadway_transect_CB03.json"
+JSON_FILE="$REPO_ROOT/data/transects/canal_dr_transect.json"
 
 echo "Activating conda environment..."
 conda activate $POSEIDON_ENV
