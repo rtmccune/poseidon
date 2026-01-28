@@ -1,0 +1,702 @@
+[2026-01-27 22:19:27] [Rank 0] Loaded sensor config for: 'CB_03'
+[2026-01-27 22:19:27] [Rank 0] --- Initializing DepthMapPlotter ---
+[2026-01-27 22:19:27] [Rank 0] --- Starting Preprocessing (Rank 0) ---
+Preprocessing flood events for plotting...:   0%|          | 0/21 [00:00<?, ?event/s]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:   5%|▍         | 1/21 [03:59<1:19:43, 239.18s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_core/depth_map_plotter.py:481: RuntimeWarning: All-NaN slice encountered
+  max_depth_array[idx] = np.nanmax(depth_map)
+/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_core/depth_map_plotter.py:482: RuntimeWarning: Mean of empty slice
+  avg_depth_array[idx] = np.nanmean(depth_map)
+/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  10%|▉         | 2/21 [08:48<1:25:03, 268.60s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  14%|█▍        | 3/21 [16:24<1:46:15, 354.17s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_core/depth_map_plotter.py:481: RuntimeWarning: All-NaN slice encountered
+  max_depth_array[idx] = np.nanmax(depth_map)
+/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_core/depth_map_plotter.py:482: RuntimeWarning: Mean of empty slice
+  avg_depth_array[idx] = np.nanmean(depth_map)
+/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  19%|█▉        | 4/21 [18:34<1:15:14, 265.55s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  24%|██▍       | 5/21 [21:55<1:04:39, 242.46s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  29%|██▊       | 6/21 [25:17<57:09, 228.61s/event]  /rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  33%|███▎      | 7/21 [28:54<52:29, 224.97s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_core/depth_map_plotter.py:481: RuntimeWarning: All-NaN slice encountered
+  max_depth_array[idx] = np.nanmax(depth_map)
+/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/poseidon/poseidon_core/depth_map_plotter.py:482: RuntimeWarning: Mean of empty slice
+  avg_depth_array[idx] = np.nanmean(depth_map)
+/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  38%|███▊      | 8/21 [30:33<40:04, 184.93s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  43%|████▎     | 9/21 [32:26<32:27, 162.32s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  48%|████▊     | 10/21 [35:31<31:02, 169.32s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  52%|█████▏    | 11/21 [38:21<28:16, 169.64s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  57%|█████▋    | 12/21 [42:16<28:24, 189.38s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  62%|██████▏   | 13/21 [44:54<23:58, 179.80s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  67%|██████▋   | 14/21 [48:25<22:05, 189.36s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  71%|███████▏  | 15/21 [53:16<21:59, 219.89s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  76%|███████▌  | 16/21 [57:59<19:54, 238.88s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  81%|████████  | 17/21 [1:02:29<16:33, 248.28s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  86%|████████▌ | 18/21 [1:11:57<17:13, 344.41s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  90%|█████████ | 19/21 [1:14:50<09:45, 292.93s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...:  95%|█████████▌| 20/21 [1:19:19<04:45, 285.58s/event]/rsstu/users/k/kanarde/NASA-Sunnyverse/rmccune/conda/poseidon/lib/python3.11/site-packages/zarr/core/dtype/npy/string.py:248: UnstableSpecificationWarning: The data type (FixedLengthUTF32(length=30, endianness='little')) does not have a Zarr V3 specification. That means that the representation of arrays saved with this data type may change without warning in a future version of Zarr Python. Arrays stored with this data type may be unreadable by other Zarr libraries. Use this data type at your own risk! Check https://github.com/zarr-developers/zarr-extensions/tree/main/data-types for the status of data type specifications for Zarr V3.
+  v3_unstable_dtype_warning(self)
+Preprocessing flood events for plotting...: 100%|██████████| 21/21 [1:23:33<00:00, 276.26s/event]Preprocessing flood events for plotting...: 100%|██████████| 21/21 [1:23:33<00:00, 238.74s/event]
+[2026-01-27 23:43:01] [Rank 0] --- Preprocessing Complete ---
+[2026-01-27 23:43:01] [Rank 0] --- Plotting Depth Maps (MPI) for stats: ['95_perc'] ---
+Rank 0 plotting events: 0event [00:00, ?event/s]Rank 0 plotting events: 0event [00:00, ?event/s]
+Rank 29 plotting events: 0event [00:00, ?event/s]Rank 29 plotting events: 0event [00:00, ?event/s]
+Rank 13 plotting events: 0event [00:00, ?event/s]Rank 13 plotting events: 0event [00:00, ?event/s]
+Rank 22 plotting events: 0event [00:00, ?event/s]Rank 22 plotting events: 0event [00:00, ?event/s]
+Rank 2 plotting events: 0event [00:00, ?event/s]Rank 2 plotting events: 0event [00:00, ?event/s]
+Rank 9 plotting events: 0event [00:00, ?event/s]Rank 9 plotting events: 0event [00:00, ?event/s]
+Rank 20 plotting events: 0event [00:00, ?event/s]Rank 20 plotting events: 0event [00:00, ?event/s]
+Rank 23 plotting events: 0event [00:00, ?event/s]Rank 23 plotting events: 0event [00:00, ?event/s]
+Rank 5 plotting events: 0event [00:00, ?event/s]Rank 5 plotting events: 0event [00:00, ?event/s]
+Rank 19 plotting events: 0event [00:00, ?event/s]Rank 19 plotting events: 0event [00:00, ?event/s]
+Rank 25 plotting events: 0event [00:00, ?event/s]Rank 25 plotting events: 0event [00:00, ?event/s]
+Rank 6 plotting events: 0event [00:00, ?event/s]Rank 6 plotting events: 0event [00:00, ?event/s]
+Rank 17 plotting events: 0event [00:00, ?event/s]Rank 17 plotting events: 0event [00:00, ?event/s]
+Rank 27 plotting events: 0event [00:00, ?event/s]Rank 27 plotting events: 0event [00:00, ?event/s]
+Rank 26 plotting events: 0event [00:00, ?event/s]Rank 26 plotting events: 0event [00:00, ?event/s]
+Rank 18 plotting events: 0event [00:00, ?event/s]Rank 18 plotting events: 0event [00:00, ?event/s]
+Rank 21 plotting events: 0event [00:00, ?event/s]Rank 21 plotting events: 0event [00:00, ?event/s]
+Rank 37 plotting events: 0event [00:00, ?event/s]Rank 37 plotting events: 0event [00:00, ?event/s]
+Rank 56 plotting events: 0event [00:00, ?event/s]Rank 56 plotting events: 0event [00:00, ?event/s]
+Rank 38 plotting events: 0event [00:00, ?event/s]Rank 38 plotting events: 0event [00:00, ?event/s]
+Rank 58 plotting events: 0event [00:00, ?event/s]Rank 58 plotting events: 0event [00:00, ?event/s]
+Rank 55 plotting events: 0event [00:00, ?event/s]Rank 55 plotting events: 0event [00:00, ?event/s]
+Rank 62 plotting events: 0event [00:00, ?event/s]Rank 62 plotting events: 0event [00:00, ?event/s]
+Rank 28 plotting events: 0event [00:00, ?event/s]Rank 28 plotting events: 0event [00:00, ?event/s]
+Rank 49 plotting events: 0event [00:00, ?event/s]Rank 49 plotting events: 0event [00:00, ?event/s]
+Rank 1 plotting events: 0event [00:00, ?event/s]Rank 40 plotting events: 0event [00:00, ?event/s]Rank 1 plotting events: 0event [00:00, ?event/s]
+Rank 48 plotting events: 0event [00:00, ?event/s]Rank 40 plotting events: 0event [00:00, ?event/s]
+Rank 48 plotting events: 0event [00:00, ?event/s]
+Rank 10 plotting events: 0event [00:00, ?event/s]Rank 10 plotting events: 0event [00:00, ?event/s]
+Rank 63 plotting events:   0%|          | 0/21 [00:00<?, ?event/s]Rank 61 plotting events: 0event [00:00, ?event/s]Rank 61 plotting events: 0event [00:00, ?event/s]
+Rank 15 plotting events: 0event [00:00, ?event/s]Rank 15 plotting events: 0event [00:00, ?event/s]
+Rank 7 plotting events: 0event [00:00, ?event/s]Rank 7 plotting events: 0event [00:00, ?event/s]
+Rank 36 plotting events: 0event [00:00, ?event/s]Rank 36 plotting events: 0event [00:00, ?event/s]
+Rank 34 plotting events: 0event [00:00, ?event/s]Rank 34 plotting events: 0event [00:00, ?event/s]
+Rank 16 plotting events: 0event [00:00, ?event/s]Rank 16 plotting events: 0event [00:00, ?event/s]
+Rank 39 plotting events: 0event [00:00, ?event/s]Rank 39 plotting events: 0event [00:00, ?event/s]
+Rank 46 plotting events: 0event [00:00, ?event/s]Rank 46 plotting events: 0event [00:00, ?event/s]
+Rank 60 plotting events: 0event [00:00, ?event/s]Rank 60 plotting events: 0event [00:00, ?event/s]
+Rank 44 plotting events: 0event [00:00, ?event/s]Rank 44 plotting events: 0event [00:00, ?event/s]
+Rank 52 plotting events: 0event [00:00, ?event/s]Rank 52 plotting events: 0event [00:00, ?event/s]
+Rank 47 plotting events: 0event [00:00, ?event/s]Rank 47 plotting events: 0event [00:00, ?event/s]
+Rank 51 plotting events: 0event [00:00, ?event/s]Rank 51 plotting events: 0event [00:00, ?event/s]
+Rank 33 plotting events: 0event [00:00, ?event/s]Rank 33 plotting events: 0event [00:00, ?event/s]
+Rank 42 plotting events: 0event [00:00, ?event/s]Rank 42 plotting events: 0event [00:00, ?event/s]
+Rank 43 plotting events: 0event [00:00, ?event/s]Rank 43 plotting events: 0event [00:00, ?event/s]
+Rank 41 plotting events: 0event [00:00, ?event/s]Rank 45 plotting events: 0event [00:00, ?event/s]Rank 24 plotting events: 0event [00:00, ?event/s]Rank 41 plotting events: 0event [00:00, ?event/s]
+Rank 50 plotting events: 0event [00:00, ?event/s]Rank 24 plotting events: 0event [00:00, ?event/s]
+Rank 45 plotting events: 0event [00:00, ?event/s]
+Rank 50 plotting events: 0event [00:00, ?event/s]
+Rank 54 plotting events: 0event [00:00, ?event/s]Rank 59 plotting events: 0event [00:00, ?event/s]Rank 54 plotting events: 0event [00:00, ?event/s]
+Rank 59 plotting events: 0event [00:00, ?event/s]
+Rank 8 plotting events: 0event [00:00, ?event/s]Rank 8 plotting events: 0event [00:00, ?event/s]
+Rank 14 plotting events: 0event [00:00, ?event/s]Rank 14 plotting events: 0event [00:00, ?event/s]
+Rank 12 plotting events: 0event [00:00, ?event/s]Rank 12 plotting events: 0event [00:00, ?event/s]
+Rank 31 plotting events: 0event [00:00, ?event/s]Rank 31 plotting events: 0event [00:00, ?event/s]
+Rank 30 plotting events: 0event [00:00, ?event/s]Rank 30 plotting events: 0event [00:00, ?event/s]
+Rank 11 plotting events: 0event [00:00, ?event/s]Rank 11 plotting events: 0event [00:00, ?event/s]
+Rank 32 plotting events: 0event [00:00, ?event/s]Rank 32 plotting events: 0event [00:00, ?event/s]
+Rank 4 plotting events: 0event [00:00, ?event/s]Rank 4 plotting events: 0event [00:00, ?event/s]
+Rank 35 plotting events: 0event [00:00, ?event/s]Rank 35 plotting events: 0event [00:00, ?event/s]
+Rank 57 plotting events: 0event [00:00, ?event/s]Rank 57 plotting events: 0event [00:00, ?event/s]
+Rank 53 plotting events: 0event [00:00, ?event/s]Rank 53 plotting events: 0event [00:00, ?event/s]
+Rank 3 plotting events: 0event [00:00, ?event/s]Rank 3 plotting events: 0event [00:00, ?event/s]
+[2026-01-27 23:46:48] [Rank 63] GDAL signalled an error: err_no=1, msg='PROJ: Cannot open https://cdn.proj.org/us_noaa_nchpgn.tif: Failed to connect to cdn.proj.org port 443 after 133612 ms: Could not connect to server'
+[2026-01-27 23:46:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:46:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:46:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:46:53] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:46:53] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:46:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:46:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:53] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:47:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:36] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:36] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:48:59] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:50] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:50] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:49:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:47] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:50:59] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:51:59] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:45] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:52:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:36] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:53:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:54:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:55:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:47] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:56:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:47] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:57:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:36] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:45] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:58:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-27 23:59:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:00:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:01:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:50] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:02:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:03:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:04:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:08] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:45] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:05:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:06:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:37] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:07:59] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:50] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:53] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:08:59] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:02] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:47] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:09:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:05] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:13] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:35] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:54] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:10:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:11] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:19] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:20] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:47] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:50] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:11:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:03] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:26] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:29] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:36] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:50] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:12:58] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:18] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:31] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:39] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:48] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:13:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:07] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:16] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:27] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:28] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:33] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:36] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:42] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:51] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:56] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:14:59] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:14] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:21] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:22] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:38] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:46] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:55] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:15:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:01] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:04] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:10] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:12] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:25] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:32] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:40] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:43] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:49] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:52] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:16:57] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:00] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:06] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:09] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:15] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:17] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:23] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:24] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:30] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:34] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:41] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+[2026-01-28 00:17:44] [Rank 63] GDAL signalled an error: err_no=1, msg='Too many points (841 out of 841) failed to transform, unable to compute output bounds.'
+User defined signal 2
+--------------------------------------------------------------------------
+prterun noticed that process rank 10 with PID 4095529 on node gpu15 exited on
+signal 12 (User defined signal 2).
+--------------------------------------------------------------------------

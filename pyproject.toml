@@ -13,3 +13,4 @@ description = "POSEIDON is a Python-based scientific tool for automated flood-le
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["poseidon_*"]
+exclude = ["data*"]

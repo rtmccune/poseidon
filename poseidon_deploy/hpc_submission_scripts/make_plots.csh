@@ -14,6 +14,7 @@
 source ~/.bashrc
 
 export MPI4PY_RC_INITIALIZE=False
+export TMPDIR=/tmp
 
 SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
 ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
@@ -30,7 +31,7 @@ conda activate $POSEIDON_ENV
 
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_plotter.py"
-EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
+EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
 
 echo "Starting plotter Python script with MPI..."
 
