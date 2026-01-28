@@ -1,8 +1,8 @@
 #! /bin/bash
 
 #BSUB -J plot_depths
-#BSUB -W 240
-#BSUB -n 64
+#BSUB -W 120
+#BSUB -n 32
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=16G]"
 #BSUB -gpu "num=1:mode=shared"
@@ -31,8 +31,8 @@ conda activate $POSEIDON_ENV
 
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_plotter.py"
-EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
-BASEMAP_FILE="/share/jcdietri/rmccune/poseidon/data/basemaps/DE_01_basemap.tif"
+EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
+BASEMAP_FILE="/share/jcdietri/rmccune/poseidon/data/basemaps/CB_03_basemap.tif"
 
 echo "Starting plotter Python script with MPI..."
 
@@ -40,12 +40,12 @@ echo "Starting plotter Python script with MPI..."
 # Change --location to "DE_01" and update extents if running for Down East
 mpirun python -u $RUNNER_SCRIPT \
     --event_dir $EVENT_DIR \
-    --location "DE_01" \
+    --location "CB_03" \
     --basemap $BASEMAP_FILE \
-    --min_x 847809.694 \
-    --max_x 847973.874 \
-    --min_y 127254.634 \
-    --max_y 127450.141 \
+    --min_x 712160 \
+    --max_x 712230 \
+    --min_y 33100 \
+    --max_y 33170 \
     --bbox_crs "EPSG:32119" \
     --resolution 0.05 \
     --stats "95_perc"

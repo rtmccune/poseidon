@@ -1,10 +1,10 @@
 #! /bin/bash
 
 #BSUB -J roadway_calc
-#BSUB -W 60
+#BSUB -W 20
 #BSUB -n 32
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=8G]"
+#BSUB -R "rusage[mem=24G]"
 #BSUB -R "select[a100 || l40 || l40s || h100]"
 #BSUB -gpu "num=1:mode=shared"
 #BSUB -q gpu 
@@ -33,20 +33,18 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_roadway_analyzer.py"
 
 # Point to data on /rsstu
-EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
+EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
 
 # Define your LabelMe JSON file location
 # (Upload this file to /share or /rsstu before running)
-JSON_FILE="$REPO_ROOT/data/transects/canal_dr_transect.json"
-
-echo "Activating conda environment..."
-conda activate $POSEIDON_ENV
+JSON_FILE="$REPO_ROOT/data/transects/shellhill_rd_transect.json"
 
 echo "Starting Roadway Analysis..."
 mpirun python -u $RUNNER_SCRIPT \
     --event_dir $EVENT_DIR \
     --json_path $JSON_FILE \
     --label "roadway" \
-    --step_size 1.0
+    --step_size 1.0 \
+    --statistic "95_perc"
 
 echo "Job Finished"

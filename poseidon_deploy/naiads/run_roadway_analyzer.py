@@ -25,7 +25,7 @@ def main():
         main_dir=args.event_dir,
         labelme_json_path=args.json_path,
         line_label=args.label,
-        step_size=args.step_size
+        step_size=args.step_size,
         statistic=args.statistic
     )
 

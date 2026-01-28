@@ -20,7 +20,7 @@ def _log(message):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
 
 class RoadwayAnalyzer:
-    def __init__(self, main_dir, labelme_json_path, line_label="roadway", step_size=1.0):
+    def __init__(self, main_dir, labelme_json_path, line_label="roadway", step_size=1.0, statistic="95_perc"):
         """
         initializes the analyzer.
 
