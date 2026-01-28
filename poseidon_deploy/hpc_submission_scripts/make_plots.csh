@@ -14,6 +14,7 @@
 source ~/.bashrc
 
 export MPI4PY_RC_INITIALIZE=False
+export PROJ_NETWORK=OFF
 
 SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
 ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
@@ -30,7 +31,8 @@ conda activate $POSEIDON_ENV
 
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_plotter.py"
-EVENT_DIR="$REPO_ROOT/data/down_east/flood_events"
+EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
+BASEMAP_FILE="/share/jcdietri/rmccune/poseidon/data/basemaps/CB_03_basemap.tif"
 
 echo "Starting plotter Python script with MPI..."
 
@@ -39,6 +41,7 @@ echo "Starting plotter Python script with MPI..."
 mpirun python -u $RUNNER_SCRIPT \
     --event_dir $EVENT_DIR \
     --location "CB_03" \
+    --basemap $BASEMAP_FILE \
     --min_x 712160 \
     --max_x 712230 \
     --min_y 33100 \

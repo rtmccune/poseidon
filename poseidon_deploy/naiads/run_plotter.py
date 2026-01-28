@@ -130,6 +130,13 @@ def main():
         help="List of stats to plot (e.g., '95_perc' 'mean').",
     )
     
+    parser.add_argument(
+        "--basemap", 
+        type=str, 
+        default=None,
+        help="Path to the local GeoTIFF basemap file."
+    )
+    
     args = parser.parse_args()
 
     # --- Select Sensors ---
@@ -155,7 +162,8 @@ def main():
         resolution_m=args.resolution,
         bbox_crs=args.bbox_crs,
         virtual_sensor_locations=virtual_sensors,
-        plot_sensors=True 
+        plot_sensors=True,
+        basemap_path=args.basemap 
     )
 
     # --- Step 1: Preprocessing (Rank 0 Only) ---
