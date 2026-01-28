@@ -40,7 +40,7 @@ echo "Starting plotter Python script with MPI..."
 # Change --location to "DE_01" and update extents if running for Down East
 mpirun python -u $RUNNER_SCRIPT \
     --event_dir $EVENT_DIR \
-    --location "DE_03" \
+    --location "DE_01" \
     --basemap $BASEMAP_FILE \
     --min_x 847809.694 \
     --max_x 847973.874 \
