@@ -1,11 +1,13 @@
 #! /bin/bash
 
 #BSUB -J roadway_calc
-#BSUB -W 120
-#BSUB -n 24
+#BSUB -W 60
+#BSUB -n 32
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=8G]"
-#BSUB -q ccee
+#BSUB -R "select[a100 || l40 || l40s || h100]"
+#BSUB -gpu "num=1:mode=shared"
+#BSUB -q gpu 
 #BSUB -o roadway.%J.out
 #BSUB -e roadway.%J.err
 
