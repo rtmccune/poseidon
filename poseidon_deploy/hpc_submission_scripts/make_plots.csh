@@ -33,10 +33,7 @@ conda activate $POSEIDON_ENV
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_plotter.py"
 EVENT_DIR="$REPO_ROOT/data/carolina_beach/flood_events"
-<<<<<<< HEAD
-=======
 BASEMAP_FILE="/share/jcdietri/rmccune/poseidon/data/basemaps/CB_03_basemap.tif"
->>>>>>> 1f515a37b5e3bc753d20192416bfb2e646210042
 
 echo "Starting plotter Python script with MPI..."
 
