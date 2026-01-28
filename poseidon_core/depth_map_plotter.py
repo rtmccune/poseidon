@@ -18,6 +18,8 @@ import rioxarray
 import contextily as ctx
 import dask.array as da
 from datetime import timedelta
+import rasterio
+from rasterio.plot import show as rioshow
 
 
 def _log(message):
@@ -57,6 +59,7 @@ class DepthMapPlotter:
         bbox_crs="EPSG:32119",
         virtual_sensor_locations=None,
         plot_sensors=False,
+        basemap_path=None,
     ):
         """
         Initializes the plotter with spatial configuration.
@@ -100,6 +103,8 @@ class DepthMapPlotter:
         # Store sensor attributes
         self.virtual_sensor_loc = virtual_sensor_locations
         self.plot_sensors = plot_sensors
+        self.basemap_path = basemap_path
+        
         if self.plot_sensors:
             # Pre-create the custom marker if sensors will be plotted
             self.sensor_marker_path = self._create_sensor_marker()
@@ -863,19 +868,29 @@ class DepthMapPlotter:
         """
         # Get bounds and CRS from the reprojected mercator array
         minx, miny, maxx, maxy = geodata["mercator_array"].rio.bounds()
-        crs = geodata["mercator_array"].rio.crs
-
+        
         # Set map limits
         ax.set_xlim(minx, maxx)
         ax.set_ylim(miny, maxy)
 
-        # Add Esri World Imagery basemap
-        ctx.add_basemap(
-            ax,
-            crs=crs,
-            source=ctx.providers.Esri.WorldImagery,
-            zorder=1,
-        )
+        if self.basemap_path and os.path.exists(self.basemap_path):
+            try:
+                with rasterio.open(self.basemap_path) as src:
+                    # zorder=1 keeps it behind the data
+                    rioshow(src, ax=ax, zorder=1) 
+            except Exception as e:
+                _log(f"    -> WARNING: Failed to load local basemap: {e}")
+        else:
+            # Fallback for online usage (will fail on offline HPC, but good for local testing)
+            try:
+                ctx.add_basemap(
+                    ax,
+                    crs=geodata["mercator_array"].rio.crs,
+                    source=ctx.providers.Esri.WorldImagery,
+                    zorder=1,
+                )
+            except Exception as e:
+                _log(f"    -> WARNING: Could not fetch online basemap: {e}")
 
         # Use the pre-calculated spatial extent
         spatial_extent = geodata["spatial_extent"]
