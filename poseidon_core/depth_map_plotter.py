@@ -306,6 +306,7 @@ class DepthMapPlotter:
         # Rank 0 discovers the flood event folders
         if rank == 0:
             flood_event_folders = self._list_flood_event_folders()
+            _log(f"Found {len(flood_event_folders)} events to plot.")
         else:
             flood_event_folders = None
 
@@ -316,24 +317,31 @@ class DepthMapPlotter:
             if rank == 0:
                 _log("No flood event folders found.")
             return
+        
+        # Each rank takes every Nth folder.
+        # e.g., Rank 0 takes 0, 64, 128... Rank 1 takes 1, 65...
+        my_folders = [f for i, f in enumerate(flood_event_folders) if i % size == rank]
 
-        # Divide the work among the ranks
-        n_folders = len(flood_event_folders)
-        chunk_size = n_folders // size
-        start_index = rank * chunk_size
-        end_index = start_index + chunk_size if rank != size - 1 else n_folders
+        _log(f"Rank {rank}: Assigned {len(my_folders)} events for plotting.")
 
         # Each rank processes its assigned chunk of folders
         # Note: tqdm provides its own progress bar for this outer loop
         for flood_event in tqdm(
-            flood_event_folders[start_index:end_index],
-            desc=f"Rank {rank} plotting events",
+            my_folders,
+            desc=f"Rank {rank} plotting",
             unit="event",
+            disable=(len(my_folders) == 0) # Disable bar if no work
         ):
             # Pass the filter list to the single-event processor
             self.process_single_flood_event(
                 flood_event, stats_to_plot=stats_to_plot
             )
+            
+        # Wait for all ranks to finish before exiting to prevent "improper exit" errors
+        comm.Barrier()
+        
+        if rank == 0:
+            _log("All ranks finished plotting.")
 
     def plot_water_level_time_series(
         self,
