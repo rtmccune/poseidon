@@ -608,7 +608,7 @@ class DepthMapPlotter:
                 result = {
                     "image_filename": filename,
                     "closest_utc_time": closest_row["time_UTC"].values[0],
-                    "water_level": closest_row["water_level"].values[0]
+                    "water_level": closest_row["sensor_water_level"].values[0]
                     * 0.3048,  # + 0.9105,
                     # 'sensor_water_level': (closest_row['sensor_water_level_adj'].values[0] - 3.05) * 0.3048
                 }
