@@ -64,11 +64,15 @@ class RoadwayAnalyzer:
         # Find the shape with the matching label
         line_points = None
         for shape in data['shapes']:
-            if shape['label'] == self.line_label and shape['shape_type'] == 'linestrip':
+            # --- FIX: Accept both 'line' and 'linestrip' ---
+            if shape['label'] == self.line_label and shape['shape_type'] in ['line', 'linestrip']:
                 line_points = np.array(shape['points'])
                 break
         
         if line_points is None:
+            # Add a debug print to see what labels ARE there if it fails
+            available_labels = [s.get('label', 'unknown') for s in data.get('shapes', [])]
+            _log(f"debug: Found labels in JSON: {available_labels}")
             return None
 
         # Interpolate points along the line
