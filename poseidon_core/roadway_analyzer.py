@@ -219,6 +219,7 @@ class RoadwayAnalyzer:
         if rank == 0:
             _log(f"Starting Roadway Analysis on {size} ranks.")
             flood_event_folders = self.list_flood_event_folders()
+            _log(f"Found {len(flood_event_folders)} events to process.")
         else:
             flood_event_folders = None
 
@@ -228,23 +229,31 @@ class RoadwayAnalyzer:
         if not flood_event_folders:
             return
 
-        # Distribute work
-        chunk_size = len(flood_event_folders) // size
-        start = rank * chunk_size
-        end = start + chunk_size if rank != size - 1 else len(flood_event_folders)
+        # --- FIX 1: Round-Robin Load Balancing ---
+        # Distribute events: Rank 0 gets index 0, 64, 128... Rank 1 gets 1, 65...
+        # This ensures every rank gets at most 1 event (since you have 21 events and 64 ranks)
+        my_folders = [f for i, f in enumerate(flood_event_folders) if i % size == rank]
         
-        my_folders = flood_event_folders[start:end]
-        
-        _log(f"Rank {rank} processing {len(my_folders)} events.")
+        if len(my_folders) > 0:
+            _log(f"Rank {rank} processing {len(my_folders)} events.")
 
         for i, flood_event in enumerate(my_folders):
-            # 1. Generate Zarr Data (Heavy lifting)
-            self.gen_transect_depths(flood_event, os.path.join(self.main_dir, flood_event))
-            
-            # 2. Process Statistics (Fast)
-            self.process_roadway_accessibility(flood_event)
-            
-            if i % 5 == 0:
-                _log(f"Rank {rank}: Completed {i+1}/{len(my_folders)} events.")
+            try:
+                # 1. Generate Zarr Data (Heavy lifting)
+                flood_path = os.path.join(self.main_dir, flood_event)
+                self.gen_transect_depths(flood_event, flood_path)
+                
+                # 2. Process Statistics (Fast)
+                self.process_roadway_accessibility(flood_event)
+                
+                _log(f"Rank {rank}: Finished {flood_event}")
+            except Exception as e:
+                _log(f"Rank {rank}: CRITICAL FAILURE on {flood_event}: {e}")
 
-        _log(f"Rank {rank} Finished.")
+        # --- FIX 2: Synchronization Barrier ---
+        # Force all ranks to wait here until everyone is finished.
+        # This prevents fast ranks from exiting and killing the job.
+        comm.Barrier()
+
+        if rank == 0:
+            _log("All ranks finished. Pipeline complete.")
