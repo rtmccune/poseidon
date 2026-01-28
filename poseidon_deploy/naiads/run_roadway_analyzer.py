@@ -14,6 +14,10 @@ def main():
     parser.add_argument("--label", type=str, default="roadway", help="Label name of the line in JSON (default: roadway)")
     parser.add_argument("--step_size", type=float, default=1.0, help="Interpolation step size in pixels (default: 1.0)")
 
+    parser.add_argument("--statistic", type=str, default="95_perc", 
+                        choices=["95_perc", "90_perc", "mean", "median"],
+                        help="Statistic to analyze (default: 95_perc)")
+    
     args = parser.parse_args()
 
     # Initialize
@@ -22,6 +26,7 @@ def main():
         labelme_json_path=args.json_path,
         line_label=args.label,
         step_size=args.step_size
+        statistic=args.statistic
     )
 
     # Run Pipeline

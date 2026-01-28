@@ -35,11 +35,14 @@ class RoadwayAnalyzer:
         step_size : float
             The spacing (in pixels) for interpolating points along the line.
             1.0 means every pixel along the line is sampled.
+        statistic : str
+            The statistic suffix to target (e.g., "95_perc", "mean", "median", "90_perc").
         """
         self.main_dir = main_dir
         self.labelme_json_path = labelme_json_path
         self.line_label = line_label
         self.step_size = step_size
+        self.statistic = statistic
         
         # Parse the JSON immediately to get the coordinates
         self.transect_coords = self._get_transect_from_labelme()
@@ -47,7 +50,7 @@ class RoadwayAnalyzer:
         if self.transect_coords is None:
             raise ValueError(f"Could not find a line labeled '{line_label}' in {labelme_json_path}")
             
-        _log(f"Initialized RoadwayAnalyzer. Transect length: {len(self.transect_coords)} points.")
+        _log(f"Initialized RoadwayAnalyzer for '{self.statistic}'. Transect length: {len(self.transect_coords)} points.")
 
     def _get_transect_from_labelme(self):
         """
@@ -113,10 +116,14 @@ class RoadwayAnalyzer:
 
         if not os.path.exists(depth_maps_zarr_dir):
             return
+        
+        # Construct the specific suffix we expect, e.g., "depth_map_95_perc"
+        target_suffix = f"depth_map_{self.statistic}"
 
         file_names = sorted([
             f for f in os.listdir(depth_maps_zarr_dir) 
-            if f.endswith("_95_perc") # Filter for specific statistic maps
+            if f.endswith(target_suffix)  # Strict end match
+            and "wse_map" not in f        # Explicitly exclude WSE just to be safe
         ])
         
         num_files = len(file_names)
