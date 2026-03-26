@@ -191,7 +191,7 @@ class ImageRectifier:
 
         # Open the ZipStore once before the loop
         try:
-            store_backend = zarr.ZipStore(zarr_zip_path, mode="a")
+            store_backend = zarr.storage.ZipStore(zarr_zip_path, mode="a")
             store = zarr.group(store=store_backend)
         except Exception as e:
             logger.error(f"  ERROR: Could not open ZipStore at {zarr_zip_path}. {e}")
@@ -234,8 +234,8 @@ class ImageRectifier:
                 # Port GPU array to CPU if needed
                 img_data = rectified_image.get() if self.use_gpu else rectified_image
                 
-                # create_dataset allows us to explicitly pass chunks=False
-                store.create_dataset(
+                # create_array allows us to explicitly pass chunks=False
+                store.create_array(
                     dataset_name, 
                     data=img_data, 
                     chunks=False, 
