@@ -178,51 +178,26 @@ class ImageRectifier:
             return np.array(rectified_image, dtype=np.uint8)
 
     def merge_rectify_folder(self, folder_path, zarr_store_path, labels=False):
-        """Merge and rectify all images in a specified folder and save
-        them to a Zarr store.
-
-        Parameters
-        ----------
-        folder_path : str
-            The path to the folder containing images to be rectified.
-        zarr_store_path : str
-            The path to the Zarr store where rectified images will be
-            saved.
-        labels : bool, optional
-            A flag indicating whether to load the image in grayscale
-            (True) or in color (False). Default is False.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This function iterates over all image files in the specified
-        folder, rectifies each image using the `merge_rectify` method,
-        and saves the resulting rectified images to the specified Zarr
-        store. The dataset names in the Zarr store are created by
-        appending '_rectified' to the original image names. The Zarr
-        store is opened in append mode before processing the images,
-        allowing for multiple images to be saved efficiently. CuPy is
-        utilized for GPU processing if `self.use_gpu` is set to True;
-        otherwise, standard arrays are used.
+        """
+        Merge and rectify all images in a specified folder and save
+        them to a single Zarr ZipStore to prevent inode bloat.
         """
         logger.info("\n=== Starting Batch Rectification ===")
         logger.info(f"  Source folder: {folder_path}")
-        logger.info(f"  Output Zarr store: {zarr_store_path}")
+        
+        # Ensure the output path ends in .zip
+        zarr_zip_path = f"{zarr_store_path}.zip"
+        logger.info(f"  Output Zarr store: {zarr_zip_path}")
 
-        # Open the Zarr store once before the loop
+        # Open the ZipStore once before the loop
         try:
-            store = zarr.open_group(zarr_store_path, mode="a")
+            store_backend = zarr.ZipStore(zarr_zip_path, mode="a")
+            store = zarr.group(store=store_backend)
         except Exception as e:
-            logger.error(
-                f"  ERROR: Could not open Zarr store at {zarr_store_path}. {e}"
-            )
+            logger.error(f"  ERROR: Could not open ZipStore at {zarr_zip_path}. {e}")
             logger.error("=== Batch Rectification Aborted ===")
             return
 
-        # Get a list of all images in the folder
         try:
             image_names = os.listdir(folder_path)
         except FileNotFoundError:
@@ -233,59 +208,46 @@ class ImageRectifier:
         total_images = len(image_names)
 
         if total_images == 0:
-            logger.warning(
-                "  WARNING: No images found in source folder. Nothing to do."
-            )
+            logger.warning("  WARNING: No images found in source folder. Nothing to do.")
             logger.warning("=== Batch Rectification Complete ===")
             return
 
         logger.info(f"  Found {total_images} images to process.")
-
-        # Determine report interval (print ~10 updates + first/last)
         report_interval = max(1, total_images // 10)
 
         for i, image_name in enumerate(image_names):
-            # Log progress periodically
-            if (
-                (i + 1) % report_interval == 0
-                or i == 0
-                or (i + 1) == total_images
-            ):
-                logger.info(
-                    f"  Processing image {i + 1}/{total_images}: {image_name}"
-                )
+            if ((i + 1) % report_interval == 0 or i == 0 or (i + 1) == total_images):
+                logger.info(f"  Processing image {i + 1}/{total_images}: {image_name}")
 
             image_path = os.path.join(folder_path, image_name)
 
             try:
-                rectified_image = self.merge_rectify(
-                    image_path, labels, verbose=False  # Keep this quiet
-                )
+                rectified_image = self.merge_rectify(image_path, labels, verbose=False)
             except Exception as e:
-                logger.error(
-                    f"  ERROR: Failed to rectify image {image_name}. {e}"
-                )
-                continue  # Skip to the next image
+                logger.error(f"  ERROR: Failed to rectify image {image_name}. {e}")
+                continue
 
-            # Create a dataset name by appending 'rectified' to the
-            # original image name
             dataset_name = f"{os.path.splitext(image_name)[0]}_rectified"
 
-            # Save the rectified image array to the Zarr store
+            # Save the rectified image array to the Zarr store with chunking disabled
             try:
-                if self.use_gpu:  # If GPU processing
-                    store[dataset_name] = (
-                        rectified_image.get()
-                    )  # Port GPU array to CPU and save
-                else:  # Else, save array
-                    store[dataset_name] = rectified_image
-            except Exception as e:
-                logger.error(
-                    f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}"
+                # Port GPU array to CPU if needed
+                img_data = rectified_image.get() if self.use_gpu else rectified_image
+                
+                # create_dataset allows us to explicitly pass chunks=False
+                store.create_dataset(
+                    dataset_name, 
+                    data=img_data, 
+                    chunks=False, 
+                    overwrite=True
                 )
+            except Exception as e:
+                logger.error(f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}")
 
-        # Print success message after all images are processed
         logger.info(f"  Successfully processed {total_images} images.")
+        
+        # CRITICAL: Close the ZipStore to properly write the archive directory
+        store_backend.close()
         logger.info("=== Batch Rectification Complete ===")
 
     def _load_image(self, image_path, labels):
