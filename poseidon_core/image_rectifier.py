@@ -238,7 +238,7 @@ class ImageRectifier:
                 store.create_array(
                     dataset_name, 
                     data=img_data, 
-                    chunks=False, 
+                    chunks=img_data.shape, 
                     overwrite=True
                 )
             except Exception as e:
