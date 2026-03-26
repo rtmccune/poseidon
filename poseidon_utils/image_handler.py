@@ -454,6 +454,107 @@ class ImageHandler:
         # "no tasks" case, and execute the copy.
         self._parallel_copy_files(tasks, max_workers, "Test set creation")
 
+    def copy_images_using_sun_position(
+        self,
+        image_dir,
+        destination_folder,
+        latitude=35.7796,
+        longitude=-78.6382,
+        max_workers=None,
+    ):
+        """
+        Copies images from a directory that were taken during daylight hours
+        (between sunrise and sunset) based on the sun's position.
+
+        Parameters
+        ----------
+        image_dir : str or os.PathLike
+            The source directory containing images to filter.
+        destination_folder : str or os.PathLike
+            The path to the folder where all images will be copied.
+        latitude : float, optional
+            The latitude of the camera location. Defaults to 35.7796.
+        longitude : float, optional
+            The longitude of the camera location. Defaults to -78.6382.
+        max_workers : int, optional
+            The maximum number of worker threads to use for copying.
+        """
+        tasks = []
+
+        _log(
+            f"Starting copy of daylight images based on solar position. "
+            f"Destination: {destination_folder} | Lat: {latitude}, Lon: {longitude}",
+            level="info",
+        )
+
+        # Create destination folder if it does not already exist
+        if not self._setup_destination_dir(destination_folder):
+            return
+
+        file_list = self._list_files_in_dir(image_dir)
+        
+        # Filter files using the sun position helper
+        filtered_files = self._filter_files_by_sun_position(
+            file_list, latitude, longitude
+        )
+
+        tasks.extend(filtered_files)
+
+        self._parallel_copy_files(tasks, max_workers, "Daylight image pull")
+
+    def _filter_files_by_sun_position(self, file_list, latitude, longitude):
+        """
+        Filters files to those taken between sunrise and sunset for their specific date.
+        """
+        try:
+            from astral import LocationInfo
+            from astral.sun import sun
+        except ImportError:
+            _log("FATAL: The 'astral' library is required for sun calculations. Run 'pip install astral'.", level="error")
+            return []
+
+        # Initialize the location object (name and region are arbitrary here)
+        loc = LocationInfo("Camera_Loc", "Region", "UTC", latitude, longitude)
+        
+        filtered_files = []
+        sun_cache = {} # Cache sunrise/sunset times per date to avoid redundant math
+
+        for file in file_list:
+            try:
+                file_name = os.path.basename(file)
+                file_timestamp_str = self._extract_timestamp(file_name)
+
+                if not file_timestamp_str:
+                    continue
+
+                # Localize the image timestamp to time-aware UTC
+                file_timestamp_naive = datetime.strptime(file_timestamp_str, "%Y%m%d%H%M%S")
+                file_timestamp_utc = file_timestamp_naive.replace(tzinfo=timezone.utc)
+
+                # Extract the date to check against the cache
+                date_key = file_timestamp_utc.date()
+
+                if date_key not in sun_cache:
+                    # Calculate sun events for this specific date
+                    # Astral returns these as timezone-aware UTC datetime objects
+                    s = sun(loc.observer, date=date_key)
+                    sun_cache[date_key] = (s['sunrise'], s['sunset'])
+
+                sunrise, sunset = sun_cache[date_key]
+
+                # Check if the image falls within daylight hours
+                if sunrise <= file_timestamp_utc <= sunset:
+                    filtered_files.append(file)
+
+            except (IndexError, ValueError, TypeError) as e:
+                _log(f"Skipping file: Could not parse timestamp for '{os.path.basename(file)}'. Error: {e}", level="info")
+                continue
+            except Exception as e:
+                _log(f"Error calculating solar position for '{os.path.basename(file)}': {e}", level="error")
+                continue
+
+        return filtered_files
+    
     def _format_abbreviated_events_for_pull(self, flood_event_csv_path):
         """
         Loads and formats flood event data from a CSV file.
