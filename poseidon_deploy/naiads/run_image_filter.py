@@ -23,6 +23,20 @@ def main():
         required=True,
         help="Destination folder for filtered images.",
     )
+    
+    parser.add_argument(
+        "--lat", 
+        type=float, 
+        default=35.7796, 
+        help="Latitude of the camera. Defaults to 35.7796 (Raleigh, NC)."
+    )
+    parser.add_argument(
+        "--lon", 
+        type=float, 
+        default=-78.6382, 
+        help="Longitude of the camera. Defaults to -78.6382 (Raleigh, NC)."
+    )
+    
     parser.add_argument(
         "--start", type=int, default=6, help="Start time (Eastern)."
     )
