@@ -51,7 +51,7 @@ def main():
 
     handler = poseidon_utils.ImageHandler(sdfp_image_drive=args.drive)
 
-    handler.copy_images_using_hour_window(
+    handler.copy_images_using_sun_position(
         image_dir=args.image_dir,
         destination_folder=args.dest,
         start_hour_east=args.start,
