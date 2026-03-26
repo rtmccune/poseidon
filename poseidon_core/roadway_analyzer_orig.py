@@ -6,9 +6,10 @@ import pandas as pd
 from datetime import datetime
 from mpi4py import MPI
 from scipy.interpolate import interp1d
+
+# Helper for timestamp extraction (mirrors your existing utils)
 import re
 
-# Helper for timestamp extraction
 def _extract_timestamp(filename):
     pattern = r"\d{14}"
     match = re.search(pattern, filename)
@@ -22,6 +23,20 @@ class RoadwayAnalyzer:
     def __init__(self, main_dir, labelme_json_path, line_label="roadway", step_size=1.0, statistic="95_perc"):
         """
         initializes the analyzer.
+
+        Parameters
+        ----------
+        main_dir : str
+            Path to the main directory containing flood events.
+        labelme_json_path : str
+            Path to the LabelMe JSON file defining the roadway line.
+        line_label : str
+            The label name given to the line in LabelMe (default: "roadway").
+        step_size : float
+            The spacing (in pixels) for interpolating points along the line.
+            1.0 means every pixel along the line is sampled.
+        statistic : str
+            The statistic suffix to target (e.g., "95_perc", "mean", "median", "90_perc").
         """
         self.main_dir = main_dir
         self.labelme_json_path = labelme_json_path
@@ -29,16 +44,13 @@ class RoadwayAnalyzer:
         self.step_size = step_size
         self.statistic = statistic
         
-        # Extract the JSON filename without the extension to use as a unique identifier
-        self.transect_name = os.path.splitext(os.path.basename(labelme_json_path))[0]
-        
         # Parse the JSON immediately to get the coordinates
         self.transect_coords = self._get_transect_from_labelme()
         
         if self.transect_coords is None:
             raise ValueError(f"Could not find a line labeled '{line_label}' in {labelme_json_path}")
             
-        _log(f"Initialized RoadwayAnalyzer for '{self.statistic}' using transect '{self.transect_name}'. Length: {len(self.transect_coords)} points.")
+        _log(f"Initialized RoadwayAnalyzer for '{self.statistic}'. Transect length: {len(self.transect_coords)} points.")
 
     def _get_transect_from_labelme(self):
         """
@@ -55,7 +67,7 @@ class RoadwayAnalyzer:
         # Find the shape with the matching label
         line_points = None
         for shape in data['shapes']:
-            # Accept both 'line' and 'linestrip'
+            # --- FIX: Accept both 'line' and 'linestrip' ---
             if shape['label'] == self.line_label and shape['shape_type'] in ['line', 'linestrip']:
                 line_points = np.array(shape['points'])
                 break
@@ -100,9 +112,7 @@ class RoadwayAnalyzer:
         Saves the result to a Zarr store.
         """
         depth_maps_zarr_dir = os.path.join(flood_event_path, "zarr", "depth_maps")
-        
-        # UPDATE: dynamically name the output zarr store using the transect name
-        output_zarr_store = os.path.join(flood_event_path, "zarr", f"{self.transect_name}_transect_depths")
+        output_zarr_store = os.path.join(flood_event_path, "zarr", "roadway_transect_depths")
 
         if not os.path.exists(depth_maps_zarr_dir):
             return
@@ -157,8 +167,7 @@ class RoadwayAnalyzer:
         try:
             root = zarr.open_group(output_zarr_store, mode="w")
             root.create_array("timestamps", data=datetimes)
-            # UPDATE: dynamically name the array inside the Zarr store
-            root.create_array(f"{self.transect_name}_depths", data=transect_depth_array)
+            root.create_array("roadway_transect_depths", data=transect_depth_array)
         except Exception as e:
             _log(f"Failed to save Zarr for {flood_event}: {e}")
 
@@ -167,9 +176,7 @@ class RoadwayAnalyzer:
         Loads the transect depths and calculates summary statistics (CSV).
         """
         flood_event_path = os.path.join(self.main_dir, flood_event)
-        
-        # UPDATE: point to the new dynamically named Zarr store
-        zarr_store_path = os.path.join(flood_event_path, "zarr", f"{self.transect_name}_transect_depths")
+        zarr_store_path = os.path.join(flood_event_path, "zarr", "roadway_transect_depths")
 
         if not os.path.exists(zarr_store_path):
             return
@@ -177,8 +184,7 @@ class RoadwayAnalyzer:
         try:
             root = zarr.open(zarr_store_path, mode="r")
             timestamps = root["timestamps"][:]
-            # UPDATE: reference the dynamically named array
-            transect_depths = root[f"{self.transect_name}_depths"][:]
+            transect_depths = root["roadway_transect_depths"][:]
             
             datetimes = pd.to_datetime(timestamps, utc=True)
             
@@ -201,8 +207,7 @@ class RoadwayAnalyzer:
                 "MinDepth": min_depths,
             }).sort_values(by="Time")
 
-            # UPDATE: rename the output CSV to match the transect as well
-            output_path = os.path.join(flood_event_path, f"{self.transect_name}_accessibility_time_series.csv")
+            output_path = os.path.join(flood_event_path, "roadway_accessibility_time_series.csv")
             stats_df.to_csv(output_path, index=False)
             
         except Exception as e:
