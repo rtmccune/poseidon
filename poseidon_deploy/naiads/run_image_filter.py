@@ -54,8 +54,10 @@ def main():
     handler.copy_images_using_sun_position(
         image_dir=args.image_dir,
         destination_folder=args.dest,
-        start_hour_east=args.start,
-        end_hour_east=args.end,
+        # start_hour_east=args.start,
+        # end_hour_east=args.end,
+        latitude=args.lat,
+        longitude=args.lon,
         max_workers=args.workers,
     )
     print("Image filtering complete.")
