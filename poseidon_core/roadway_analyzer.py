@@ -4,35 +4,27 @@ import zarr
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from mpi4py import MPI
 from scipy.interpolate import interp1d
 import re
 
-# Helper for timestamp extraction
 def _extract_timestamp(filename):
     pattern = r"\d{14}"
     match = re.search(pattern, filename)
     return match.group(0) if match else None
 
 def _log(message):
-    """Helper for clean HPC logging."""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
 
 class RoadwayAnalyzer:
-    def __init__(self, main_dir, labelme_json_path, line_label="roadway", step_size=1.0, statistic="95_perc"):
-        """
-        initializes the analyzer.
-        """
-        self.main_dir = main_dir
+    def __init__(self, target_event_dir, labelme_json_path, line_label="roadway", step_size=1.0, statistic="95_perc"):
+        self.event_path = target_event_dir
+        self.event_name = os.path.basename(target_event_dir)
         self.labelme_json_path = labelme_json_path
         self.line_label = line_label
         self.step_size = step_size
         self.statistic = statistic
         
-        # Extract the JSON filename without the extension to use as a unique identifier
         self.transect_name = os.path.splitext(os.path.basename(labelme_json_path))[0]
-        
-        # Parse the JSON immediately to get the coordinates
         self.transect_coords = self._get_transect_from_labelme()
         
         if self.transect_coords is None:
@@ -41,10 +33,6 @@ class RoadwayAnalyzer:
         _log(f"Initialized RoadwayAnalyzer for '{self.statistic}' using transect '{self.transect_name}'. Length: {len(self.transect_coords)} points.")
 
     def _get_transect_from_labelme(self):
-        """
-        Parses a LabelMe JSON file to extract coordinates along a polyline.
-        Interpolates points to ensure dense sampling along the line.
-        """
         try:
             with open(self.labelme_json_path, 'r') as f:
                 data = json.load(f)
@@ -52,145 +40,129 @@ class RoadwayAnalyzer:
             _log(f"Error reading LabelMe JSON: {e}")
             return None
 
-        # Find the shape with the matching label
         line_points = None
         for shape in data['shapes']:
-            # Accept both 'line' and 'linestrip'
             if shape['label'] == self.line_label and shape['shape_type'] in ['line', 'linestrip']:
                 line_points = np.array(shape['points'])
                 break
         
         if line_points is None:
-            # Add a debug print to see what labels ARE there if it fails
             available_labels = [s.get('label', 'unknown') for s in data.get('shapes', [])]
             _log(f"debug: Found labels in JSON: {available_labels}")
             return None
 
-        # Interpolate points along the line
-        # Calculate cumulative distance along the line
         dists = np.sqrt(np.sum(np.diff(line_points, axis=0)**2, axis=1))
         cumulative_dist = np.insert(np.cumsum(dists), 0, 0)
         
-        # Create interpolation functions for X and Y
         fx = interp1d(cumulative_dist, line_points[:, 0])
         fy = interp1d(cumulative_dist, line_points[:, 1])
         
-        # Generate new distances at the specified step size
         new_dists = np.arange(0, cumulative_dist[-1], self.step_size)
-        
-        # Generate new coordinates
         new_x = fx(new_dists)
         new_y = fy(new_dists)
         
-        # Stack and round to nearest integer indices (column, row) -> (x, y)
-        # Note: Arrays are indexed [row, col], so we need [y, x] for array indexing later
         coords = np.column_stack((np.round(new_y), np.round(new_x))).astype(int)
-        
         return coords
 
-    def list_flood_event_folders(self):
-        return sorted([
-            f for f in os.listdir(self.main_dir)
-            if os.path.isdir(os.path.join(self.main_dir, f))
-        ])
+    def process_single_event(self):
+        """Orchestrates the extraction and CSV generation for a single event."""
+        _log(f"--- Starting Roadway Analysis for {self.event_name} ---")
+        self._gen_transect_depths()
+        self._process_roadway_accessibility()
+        _log(f"--- Finished Roadway Analysis for {self.event_name} ---")
 
-    def gen_transect_depths(self, flood_event, flood_event_path):
-        """
-        Extracts depth values along the transect for every time step in a flood event.
-        Saves the result to a Zarr store.
-        """
-        depth_maps_zarr_dir = os.path.join(flood_event_path, "zarr", "depth_maps")
-        
-        # UPDATE: dynamically name the output zarr store using the transect name
-        output_zarr_store = os.path.join(flood_event_path, "zarr", f"{self.transect_name}_transect_depths")
+    def _gen_transect_depths(self):
+        in_zip_path = os.path.join(self.event_path, "zarr", "depth_maps.zip")
+        out_zip_path = os.path.join(self.event_path, "zarr", f"{self.transect_name}_transect_depths.zip")
 
-        if not os.path.exists(depth_maps_zarr_dir):
+        if not os.path.exists(in_zip_path):
+            _log(f"Source depth maps not found: {in_zip_path}")
             return
-        
-        # Construct the specific suffix we expect, e.g., "depth_map_95_perc"
-        target_suffix = f"depth_map_{self.statistic}"
 
+        # 1. Open Source ZipStore
+        in_backend = zarr.storage.ZipStore(in_zip_path, mode="r")
+        in_root = zarr.open_group(store=in_backend, mode="r")
+        
+        target_suffix = f"depth_map_{self.statistic}"
+        
+        # Filter for the specific statistic, explicitly excluding WSE maps
         file_names = sorted([
-            f for f in os.listdir(depth_maps_zarr_dir) 
-            if f.endswith(target_suffix)  # Strict end match
-            and "wse_map" not in f        # Explicitly exclude WSE just to be safe
+            f for f in in_root.keys() 
+            if f.endswith(target_suffix) and "wse_map" not in f
         ])
         
         num_files = len(file_names)
         if num_files == 0:
+            _log(f"No depth maps found matching suffix '{target_suffix}'")
+            in_backend.close()
             return
 
-        # Preallocate array: [Time, Transect_Points]
         transect_depth_array = np.empty((num_files, len(self.transect_coords)), dtype=np.float32)
         timestamp_list = []
 
+        # 2. Extract Data
         for idx, file_name in enumerate(file_names):
-            timestamp = _extract_timestamp(file_name)
-            timestamp_list.append(timestamp)
-
-            file_zarr_store = os.path.join(depth_maps_zarr_dir, file_name)
+            timestamp_list.append(_extract_timestamp(file_name))
             
             try:
-                img_store = zarr.open(file_zarr_store, mode="r")
-                depth_map = img_store[:] # Load into memory (it's usually small enough)
-
-                # Extract values using advanced indexing
-                # transect_coords is [N, 2] where col 0 is y (row), col 1 is x (col)
+                depth_map = in_root[file_name][:] 
+                
                 ys = self.transect_coords[:, 0]
                 xs = self.transect_coords[:, 1]
                 
-                # Check bounds
                 h, w = depth_map.shape
                 valid_mask = (ys >= 0) & (ys < h) & (xs >= 0) & (xs < w)
                 
-                # Fill invalid points with NaN, valid points with data
                 transect_depth_array[idx, :] = np.nan
                 transect_depth_array[idx, valid_mask] = depth_map[ys[valid_mask], xs[valid_mask]]
                 
             except Exception as e:
-                _log(f"Error processing {file_name} in {flood_event}: {e}")
+                _log(f"Error processing {file_name}: {e}")
                 transect_depth_array[idx, :] = np.nan
 
-        # Save to Zarr
+        # 3. Save to Output ZipStore
         datetimes = np.array(pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30")
         
         try:
-            root = zarr.open_group(output_zarr_store, mode="w")
-            root.create_array("timestamps", data=datetimes)
-            # UPDATE: dynamically name the array inside the Zarr store
-            root.create_array(f"{self.transect_name}_depths", data=transect_depth_array)
+            out_backend = zarr.storage.ZipStore(out_zip_path, mode="w")
+            out_root = zarr.open_group(store=out_backend, mode="w")
+            
+            # Using Zarr V3 chunks logic
+            out_root.create_array("timestamps", data=datetimes, chunks=datetimes.shape, overwrite=True)
+            out_root.create_array(f"{self.transect_name}_depths", data=transect_depth_array, chunks=transect_depth_array.shape, overwrite=True)
+            
+            out_backend.close()
+            _log(f"Successfully generated {out_zip_path}")
         except Exception as e:
-            _log(f"Failed to save Zarr for {flood_event}: {e}")
+            _log(f"Failed to save ZipStore: {e}")
+            
+        in_backend.close()
 
-    def process_roadway_accessibility(self, flood_event):
-        """
-        Loads the transect depths and calculates summary statistics (CSV).
-        """
-        flood_event_path = os.path.join(self.main_dir, flood_event)
-        
-        # UPDATE: point to the new dynamically named Zarr store
-        zarr_store_path = os.path.join(flood_event_path, "zarr", f"{self.transect_name}_transect_depths")
+    def _process_roadway_accessibility(self):
+        zip_store_path = os.path.join(self.event_path, "zarr", f"{self.transect_name}_transect_depths.zip")
 
-        if not os.path.exists(zarr_store_path):
+        if not os.path.exists(zip_store_path):
             return
 
         try:
-            root = zarr.open(zarr_store_path, mode="r")
+            # 1. Read from the ZipStore
+            backend = zarr.storage.ZipStore(zip_store_path, mode="r")
+            root = zarr.open_group(store=backend, mode="r")
+            
             timestamps = root["timestamps"][:]
-            # UPDATE: reference the dynamically named array
             transect_depths = root[f"{self.transect_name}_depths"][:]
+            backend.close()
             
             datetimes = pd.to_datetime(timestamps, utc=True)
             
-            # --- Statistics Calculation ---
-            # 1. Impassable: 1 if ANY point on the line > 0 (or a threshold like 0.1m)
+            # 2. Statistics Calculation
             impassable = np.any(transect_depths > 0.0, axis=1).astype(int)
             
-            # 2. Depth Stats across the line for each timestep
-            mean_depths = np.nanmean(transect_depths, axis=1)
-            median_depths = np.nanmedian(transect_depths, axis=1)
-            max_depths = np.nanmax(transect_depths, axis=1)
-            min_depths = np.nanmin(transect_depths, axis=1)
+            with np.errstate(all='ignore'): # Suppress warnings for all-NaN slices
+                mean_depths = np.nanmean(transect_depths, axis=1)
+                median_depths = np.nanmedian(transect_depths, axis=1)
+                max_depths = np.nanmax(transect_depths, axis=1)
+                min_depths = np.nanmin(transect_depths, axis=1)
 
             stats_df = pd.DataFrame({
                 "Time": datetimes,
@@ -201,61 +173,10 @@ class RoadwayAnalyzer:
                 "MinDepth": min_depths,
             }).sort_values(by="Time")
 
-            # UPDATE: rename the output CSV to match the transect as well
-            output_path = os.path.join(flood_event_path, f"{self.transect_name}_accessibility_time_series.csv")
+            # 3. Save CSV
+            output_path = os.path.join(self.event_path, f"{self.transect_name}_accessibility_time_series.csv")
             stats_df.to_csv(output_path, index=False)
+            _log(f"Accessibility CSV saved to {output_path}")
             
         except Exception as e:
-            _log(f"Error calculating stats for {flood_event}: {e}")
-
-    def run_hpc_pipeline(self):
-        """
-        MPI-enabled pipeline runner.
-        Rank 0 lists folders.
-        All ranks process their share of folders.
-        """
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        size = comm.Get_size()
-
-        if rank == 0:
-            _log(f"Starting Roadway Analysis on {size} ranks.")
-            flood_event_folders = self.list_flood_event_folders()
-            _log(f"Found {len(flood_event_folders)} events to process.")
-        else:
-            flood_event_folders = None
-
-        # Broadcast folders
-        flood_event_folders = comm.bcast(flood_event_folders, root=0)
-
-        if not flood_event_folders:
-            return
-
-        # --- FIX 1: Round-Robin Load Balancing ---
-        # Distribute events: Rank 0 gets index 0, 64, 128... Rank 1 gets 1, 65...
-        # This ensures every rank gets at most 1 event (since you have 21 events and 64 ranks)
-        my_folders = [f for i, f in enumerate(flood_event_folders) if i % size == rank]
-        
-        if len(my_folders) > 0:
-            _log(f"Rank {rank} processing {len(my_folders)} events.")
-
-        for i, flood_event in enumerate(my_folders):
-            try:
-                # 1. Generate Zarr Data (Heavy lifting)
-                flood_path = os.path.join(self.main_dir, flood_event)
-                self.gen_transect_depths(flood_event, flood_path)
-                
-                # 2. Process Statistics (Fast)
-                self.process_roadway_accessibility(flood_event)
-                
-                _log(f"Rank {rank}: Finished {flood_event}")
-            except Exception as e:
-                _log(f"Rank {rank}: CRITICAL FAILURE on {flood_event}: {e}")
-
-        # --- FIX 2: Synchronization Barrier ---
-        # Force all ranks to wait here until everyone is finished.
-        # This prevents fast ranks from exiting and killing the job.
-        comm.Barrier()
-
-        if rank == 0:
-            _log("All ranks finished. Pipeline complete.")
+            _log(f"Error calculating stats: {e}")
