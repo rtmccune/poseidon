@@ -55,7 +55,7 @@ class DepthMapProcessor:
         self.elev_grid_cp = cp.array(self.elev_grid)
         self.plot_edges = plot_edges
 
-    def process_single_depth_map(self, zarr_store_path, file_name):
+    def process_single_depth_map(self, array, file_name):
         """Processes a Zarr store and computes depth maps.
 
         Parameters
@@ -73,51 +73,27 @@ class DepthMapProcessor:
             - 'image_name' (str): The name of the processed depth map.
             - 'depth_map' (cp.ndarray): The computed depth map.
         """
-        img_store = zarr.open(zarr_store_path)
-        array = img_store[:]  # open image array
-
-        gpu_label_array = cp.array(
-            array
-        )  # convert to cupy array for GPU processing
-
-        # separate ponds
+        gpu_label_array = cp.array(array)
         labeled_data = self._label_ponds(gpu_label_array)
+        contour_pixels_per_pond, contour_values_per_pond = self._extract_contours(labeled_data, gpu_label_array)
 
-        contour_pixels_per_pond, contour_values_per_pond = (
-            self._extract_contours(labeled_data, gpu_label_array)
-        )  # extract elevations of pond edges
-
-        # Plotting is conditional and runs before the main depth
-        # calculation.
         if self.plot_edges:
-            self._plot_pond_edge_elevations(
-                labeled_data,
-                contour_values_per_pond,
-                file_name,
-            )
+            self._plot_pond_edge_elevations(labeled_data, contour_values_per_pond, file_name)
 
-        # Calculate all 8 depth/WSE maps (4 methods, 2 formats) in one
-        # pass.
-        all_maps = self._calculate_all_depths(
-            labeled_data, contour_values_per_pond
-        )
+        all_maps = self._calculate_all_depths(labeled_data, contour_values_per_pond)
 
-        # Format the output dictionary
         depth_data = []
         for map_name_suffix, map_array in all_maps.items():
-            depth_data.append(
-                {
-                    "image_name": f"{file_name}_{map_name_suffix}",
-                    "depth_map": map_array,
-                }
-            )
-
+            depth_data.append({
+                "image_name": f"{file_name}_{map_name_suffix}",
+                "depth_map": map_array,
+            })
         return depth_data
 
     def process_depth_maps(
         self,
-        labels_zarr_dir,
-        depth_map_zarr_dir,
+        labels_zarr_zip_path,
+        depth_map_zarr_zip_path,
         pond_edge_elev_plot_dir="data/edge_histograms",
     ):
         """Creates and saves depth maps as zarr arrays with logging.
@@ -144,98 +120,68 @@ class DepthMapProcessor:
         self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
 
         logger.info("\n=== Starting Depth Map Generation ===")
-        logger.info(f"  Source Zarr directory: {labels_zarr_dir}")
-        logger.info(f"  Output Zarr directory: {depth_map_zarr_dir}")
+        logger.info(f"  Source Zarr Zip: {labels_zarr_zip_path}")
+        logger.info(f"  Output Zarr Zip: {depth_map_zarr_zip_path}")
 
-        # Get a list of all files in the source directory
+        # 1. Open the Source ZipStore
         try:
-            all_files = os.listdir(labels_zarr_dir)
-        except FileNotFoundError:
-            logger.error(
-                f"  ERROR: Source directory not found at {labels_zarr_dir}."
-            )
-            logger.info("=== Depth Map Generation Aborted ===")
-            return
+            in_store = zarr.open(labels_zarr_zip_path, mode="r")
         except Exception as e:
-            logger.error(
-                f"  ERROR: Could not read directory {labels_zarr_dir}. {e}"
-            )
-            logger.info("=== Depth Map Generation Aborted ===")
+            logger.error(f"  ERROR: Could not read source ZipStore at {labels_zarr_zip_path}. {e}")
             return
 
-        # Filter for the files we actually need to process
-        files_to_process = [f for f in all_files if f.endswith("_rectified")]
+        # 2. Open the Output ZipStore
+        try:
+            out_store_backend = zarr.storage.ZipStore(depth_map_zarr_zip_path, mode="a")
+            out_store = zarr.group(store=out_store_backend)
+        except Exception as e:
+            logger.error(f"  ERROR: Could not create output ZipStore at {depth_map_zarr_zip_path}. {e}")
+            return
+
+        # Get list of datasets from the input zip
+        files_to_process = list(in_store.keys())
         total_files = len(files_to_process)
 
         if total_files == 0:
-            logger.warning(
-                f"  WARNING: No '_rectified' files found in {labels_zarr_dir}. "
-                f"Nothing to do."
-            )
-            logger.info("=== Depth Map Generation Complete ===")
+            logger.warning("  WARNING: No label datasets found in source ZipStore.")
+            out_store_backend.close()
             return
 
-        logger.info(f"  Found {total_files} rectified label arrays to process.")
-
-        # Determine report interval (print ~10 updates + first/last)
+        logger.info(f"  Found {total_files} label arrays to process.")
         report_interval = max(1, total_files // 10)
         processed_count = 0
 
         for i, file_name in enumerate(files_to_process):
-            # Log progress periodically
-            if (
-                (i + 1) % report_interval == 0
-                or i == 0
-                or (i + 1) == total_files
-            ):
-                logger.info(
-                    f"  Processing file {i + 1}/{total_files}: {file_name}"
-                )
+            if ((i + 1) % report_interval == 0 or i == 0 or (i + 1) == total_files):
+                logger.info(f"  Processing file {i + 1}/{total_files}: {file_name}")
 
-            rectified_label_path = os.path.join(labels_zarr_dir, file_name)
-
-            # Generate depth map
             try:
-                depth_data = self.process_single_depth_map(
-                    rectified_label_path, file_name
-                )
-            except Exception as e:
-                logger.error(
-                    f"  ERROR: Failed to process depth map for {file_name}. {e}"
-                )
-                continue  # Skip to the next file
-
-            # Create DataFrame
-            try:
-                depth_maps = pd.DataFrame(depth_data)
-                if depth_maps.empty:
-                    logger.warning(
-                        f"  WARNING: No depth data generated for {file_name}. "
-                        f"Skipping save."
+                # Load the label array into memory
+                label_array = in_store[file_name][:]
+                
+                # Compute the depths
+                depth_data = self.process_single_depth_map(label_array, file_name)
+                
+                # Save each map directly to the output ZipStore (No Pandas DF needed!)
+                for map_dict in depth_data:
+                    out_name = map_dict["image_name"]
+                    out_array = map_dict["depth_map"].get() # Port from GPU to CPU
+                    
+                    out_store.create_array(
+                        out_name, 
+                        data=out_array, 
+                        chunks=out_array.shape, # Zarr v3 shape requirement
+                        overwrite=True
                     )
-                    continue
+                processed_count += 1
             except Exception as e:
-                logger.error(
-                    f"  ERROR: Failed to create DataFrame for {file_name}. {e}"
-                )
-                continue  # Skip to the next file
+                logger.error(f"  ERROR: Failed to process or save depth map for {file_name}. {e}")
+                continue
 
-            # Save to Zarr
-            try:
-                self._save_depth_maps(depth_maps, depth_map_zarr_dir)
-            except Exception as e:
-                logger.error(
-                    f"  ERROR: Failed to save depth maps for {file_name} to "
-                    f"{depth_map_zarr_dir}. {e}"
-                )
-                continue  # Skip to the next file
+        # CRITICAL: Close the output zip archive
+        out_store_backend.close()
 
-            processed_count += 1
-
-        # Print success message after all images are processed
-        logger.info(
-            f"  Successfully processed {processed_count}/{total_files} files."
-        )
+        logger.info(f"  Successfully processed {processed_count}/{total_files} files.")
         logger.info("=== Depth Map Generation Complete ===")
 
     def _label_ponds(self, gpu_label_array):
@@ -548,31 +494,6 @@ class DepthMapProcessor:
             combined_map = cp.fmax(combined_map, current_map)
 
         return combined_map
-
-    def _save_depth_maps(self, depth_maps_dataframe, depth_map_zarr_dir):
-        """Saves depth maps from a DataFrame into a Zarr store.
-
-        Parameters
-        ----------
-        depth_maps_dataframe : pd.DataFrame
-            A DataFrame containing depth maps, where each row includes
-            an 'image_name' and a 'depth_map'.
-        depth_map_zarr_dir : str
-            Path to the directory where the depth maps will be stored
-            in a Zarr group.
-
-        Returns
-        -------
-        None
-        """
-        for _, row in depth_maps_dataframe.iterrows():
-            store = zarr.open_group(depth_map_zarr_dir, mode="a")
-
-            image_name = row["image_name"]
-
-            depth_map = row["depth_map"]
-
-            store[image_name] = depth_map.get()
 
     def _plot_pond_edge_elevations(
         self,
