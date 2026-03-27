@@ -422,7 +422,7 @@ class DepthMapPlotter:
             transformer = Transformer.from_crs(self.bbox_crs, "EPSG:3857", always_xy=True)
             mercator_x, mercator_y = [], []
 
-            for y_orig, x_orig in self.virtual_sensor_loc:
+            for x_orig, y_orig in self.virtual_sensor_loc:
                 y_flipped = (H - 1) - y_orig
                 x_flipped = x_orig 
                 if not (0 <= y_flipped < H and 0 <= x_flipped < W):
