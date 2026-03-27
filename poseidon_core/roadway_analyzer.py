@@ -180,6 +180,10 @@ class RoadwayAnalyzer:
             
             datetimes = pd.to_datetime(timestamps, utc=True)
             
+            # Count pixels > 0.0 to get the flooded area, and get the total polygon size
+            flooded_pixels = np.sum(roi_depths > 0.0, axis=1)
+            total_pixels = roi_depths.shape[1]
+            
             # 2. Statistics Calculation
             # NOTE: For a polygon, 'impassable' means ANY pixel inside the polygon is > 0.
             impassable = np.any(roi_depths > 0.0, axis=1).astype(int)
@@ -193,6 +197,8 @@ class RoadwayAnalyzer:
             stats_df = pd.DataFrame({
                 "Time": datetimes,
                 "Impassable": impassable,
+                "FloodedPixels": flooded_pixels,
+                "TotalPixels": total_pixels,
                 "MeanDepth": mean_depths,
                 "MedianDepth": median_depths,
                 "MaxDepth": max_depths,
