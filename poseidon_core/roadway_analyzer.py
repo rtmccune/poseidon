@@ -111,10 +111,15 @@ class RoadwayAnalyzer:
                 xs = self.transect_coords[:, 1]
                 
                 h, w = depth_map.shape
-                valid_mask = (ys >= 0) & (ys < h) & (xs >= 0) & (xs < w)
+                
+                # Flip the Y-axis to match the Zarr array's geographic orientation
+                ys_flipped = (h - 1) - ys
+                
+                valid_mask = (ys_flipped >= 0) & (ys_flipped < h) & (xs >= 0) & (xs < w)
                 
                 transect_depth_array[idx, :] = np.nan
-                transect_depth_array[idx, valid_mask] = depth_map[ys[valid_mask], xs[valid_mask]]
+                # Extract using the flipped Y coordinates
+                transect_depth_array[idx, valid_mask] = depth_map[ys_flipped[valid_mask], xs[valid_mask]]
                 
             except Exception as e:
                 _log(f"Error processing {file_name}: {e}")
