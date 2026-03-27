@@ -128,7 +128,7 @@ class DepthMapPlotter:
                 _log(f"  ERROR plotting time series for {filename}: {e}")
 
     def plot_water_level_time_series(self, file_name, plotting_folder):
-        datetimes, max_depths, avg_depths, vs_depths = self._load_virtual_sensor_depths()
+        datetimes, vs_wse, vs_depth = self._load_virtual_sensor_depths()
         datetimes = pd.to_datetime(datetimes)
 
         obs_to_img_matches = pd.read_csv(self.event_path / "wtr_lvl_obs_to_image_matches.csv")
@@ -137,12 +137,28 @@ class DepthMapPlotter:
         timestamp = _extract_timestamp(file_name)
         current_timestamp = pd.to_datetime(timestamp, utc=True)
 
+        # 1. Plot WSE
+        self._create_ts_plot(
+            datetimes, obs_to_img_matches, current_timestamp, file_name, plotting_folder,
+            obs_col="obs_wse_meters", vs_data=vs_wse, 
+            y_label="Water Surface Elevation (m NAVD88)", suffix="wse"
+        )
+
+        # 2. Plot Depth
+        self._create_ts_plot(
+            datetimes, obs_to_img_matches, current_timestamp, file_name, plotting_folder,
+            obs_col="obs_depth_meters", vs_data=vs_depth, 
+            y_label="Depth above Roadway (m)", suffix="depth"
+        )
+
+    def _create_ts_plot(self, datetimes, obs_df, current_timestamp, file_name, plotting_folder, obs_col, vs_data, y_label, suffix):
+        """Helper method to generate individual time series plots."""
         fig, ax = plt.subplots(figsize=(12, 6))
 
         ax.plot(
-            obs_to_img_matches["closest_utc_time"],
-            obs_to_img_matches["water_level"],
-            label="Observed Water Level",
+            obs_df["closest_utc_time"],
+            obs_df[obs_col],
+            label=f"Observed {suffix.upper()}",
             color=self.water_level_color,
         )
 
@@ -151,7 +167,7 @@ class DepthMapPlotter:
             colors = plt.cm.viridis(np.linspace(0, 1, num_sensors))
             for i in range(num_sensors):
                 ax.scatter(
-                    datetimes, vs_depths[:, i], label=f"Sensor {i+1} Depth",
+                    datetimes, vs_data[:, i], label=f"Sensor {i+1} {suffix.title()}",
                     marker=self.sensor_marker_path, color=colors[i], s=15, zorder=5,
                 )
 
@@ -159,19 +175,20 @@ class DepthMapPlotter:
         padding = timedelta(hours=1)
         ax.set_xlim(datetimes.min() - padding, datetimes.max() + padding)
         ax.tick_params(axis="x", rotation=45)
-        ax.set_ylabel("Water Surface Elevation (m NAVD88)")
+        ax.set_ylabel(y_label)
         ax.set_xlabel("Date and Time (UTC)")
         ax.grid(True, linestyle="--", alpha=0.6)
         ax.legend(loc="upper right")
 
         plt.tight_layout()
-        save_path = os.path.join(plotting_folder, f"{os.path.splitext(file_name)[0]}_time_series.png")
+        save_path = os.path.join(plotting_folder, f"{os.path.splitext(file_name)[0]}_{suffix}_time_series.png")
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=300)
         plt.close(fig)
-
+    
     def _gen_virtual_sensor_depths(self):
         zip_path = self.event_path / "zarr" / "depth_maps.zip"
-        output_zarr_store = self.event_path / "zarr" / "virtual_sensor_wses.zip"
+        # Renamed slightly so we generate a fresh zip file without conflicts
+        output_zarr_store = self.event_path / "zarr" / "virtual_sensor_data.zip"
 
         if not zip_path.exists():
             return
@@ -179,22 +196,25 @@ class DepthMapPlotter:
         in_backend = zarr.storage.ZipStore(zip_path, mode="r")
         in_root = zarr.open_group(store=in_backend, mode="r")
         
-        file_names = [f for f in in_root.keys() if f.endswith("depth_map_95_perc")]
-        num_files = len(file_names)
+        all_keys = list(in_root.keys())
+        wse_keys = sorted([k for k in all_keys if k.endswith("wse_map_95_perc")])
+        depth_keys = sorted([k for k in all_keys if k.endswith("depth_map_95_perc")])
+        
+        num_files = len(wse_keys)
 
-        max_depth_array = np.empty(num_files, dtype=np.float32)
-        avg_depth_array = np.empty(num_files, dtype=np.float32)
+        vs_wse_array = np.empty((num_files, len(self.virtual_sensor_loc)), dtype=np.float32)
         vs_depth_array = np.empty((num_files, len(self.virtual_sensor_loc)), dtype=np.float32)
         timestamp_list = []
 
-        for idx, file_name in enumerate(file_names):
-            timestamp_list.append(_extract_timestamp(file_name))
-            depth_map = in_root[file_name][:]
-
-            max_depth_array[idx] = np.nanmax(depth_map)
-            avg_depth_array[idx] = np.nanmean(depth_map)
+        # Iterate through both WSE and Depth maps simultaneously
+        for idx, (wse_k, dep_k) in enumerate(zip(wse_keys, depth_keys)):
+            timestamp_list.append(_extract_timestamp(wse_k))
+            
+            wse_map = in_root[wse_k][:]
+            depth_map = in_root[dep_k][:]
 
             for i, (x, y) in enumerate(self.virtual_sensor_loc):
+                vs_wse_array[idx, i] = wse_map[y, x]
                 vs_depth_array[idx, i] = depth_map[y, x]
 
         datetimes_np = np.array(pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30")
@@ -202,16 +222,16 @@ class DepthMapPlotter:
         out_backend = zarr.storage.ZipStore(output_zarr_store, mode="w")
         out_root = zarr.open_group(store=out_backend, mode="w")
         
-        out_root.create_array("timestamps", data=datetimes_np, chunks=datetimes_np.shape)
-        out_root.create_array("max_depths", data=max_depth_array, chunks=max_depth_array.shape)
-        out_root.create_array("avg_depths", data=avg_depth_array, chunks=avg_depth_array.shape)
-        out_root.create_array("vs_depths", data=vs_depth_array, chunks=vs_depth_array.shape)
+        # Save timestamps and both arrays
+        out_root.create_array("timestamps", data=datetimes_np, chunks=datetimes_np.shape, overwrite=True)
+        out_root.create_array("vs_wse", data=vs_wse_array, chunks=vs_wse_array.shape, overwrite=True)
+        out_root.create_array("vs_depth", data=vs_depth_array, chunks=vs_depth_array.shape, overwrite=True)
 
         in_backend.close()
         out_backend.close()
 
     def _load_virtual_sensor_depths(self):
-        zarr_store_path = self.event_path / "zarr" / "virtual_sensor_wses.zip"
+        zarr_store_path = self.event_path / "zarr" / "virtual_sensor_data.zip"
         if not zarr_store_path.exists():
             raise FileNotFoundError(f"Zip store not found: {zarr_store_path}")
 
@@ -219,13 +239,12 @@ class DepthMapPlotter:
         root = zarr.open_group(store=backend, mode="r")
 
         timestamps = root["timestamps"][:]
-        max_depths = root["max_depths"][:]
-        avg_depths = root["avg_depths"][:]
-        vs_depths = root["vs_depths"][:]
+        vs_wse = root["vs_wse"][:]
+        vs_depth = root["vs_depth"][:]
         backend.close()
 
         datetimes = pd.to_datetime(timestamps, utc=True)
-        return datetimes, max_depths, avg_depths, vs_depths
+        return datetimes, vs_wse, vs_depth
 
     def _match_measurements_to_images(self):
         csv_path = self.event_path / f"{self.event_name}.csv"
@@ -252,7 +271,9 @@ class DepthMapPlotter:
                 match.append({
                     "image_filename": filename,
                     "closest_utc_time": closest_row["time_UTC"].values[0],
-                    "water_level": closest_row["sensor_water_level"].values[0] * 0.3048,
+                    # Extract both values and convert from feet to meters
+                    "obs_wse_meters": closest_row["sensor_water_level"].values[0] * 0.3048,
+                    "obs_depth_meters": closest_row["road_water_level"].values[0] * 0.3048,
                 })
 
         pd.DataFrame(match).to_csv(self.event_path / "wtr_lvl_obs_to_image_matches.csv")
