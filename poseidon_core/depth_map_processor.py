@@ -127,7 +127,7 @@ class DepthMapProcessor:
         try:
             # Explicitly define the ZipStore backend for reading
             in_store_backend = zarr.storage.ZipStore(labels_zarr_zip_path, mode="r")
-            in_store = zarr.group(store=in_store_backend, mode="r")
+            in_store = zarr.open_group(store=in_store_backend, mode="r")
         except Exception as e:
             logger.error(f"  ERROR: Could not read source ZipStore at {labels_zarr_zip_path}. {e}")
             return
