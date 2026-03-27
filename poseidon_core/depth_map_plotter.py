@@ -316,23 +316,45 @@ class DepthMapPlotter:
 
     def _finalize_and_save_plot(self, fig, ax, im, geodata, cbar_label, output_folder, output_filename):
         minx, miny, maxx, maxy = geodata["mercator_array"].rio.bounds()
-        ax.set_xlim(minx, maxx)
-        ax.set_ylim(miny, maxy)
 
-        # --- FIX: REPROJECT BASEMAP ON THE FLY ---
+        # --- MORE ROBUST BASEMAP PLOTTING ---
         if self.basemap_path and os.path.exists(self.basemap_path):
             try:
-                # Open basemap and ensure it matches EPSG:3857 so it aligns with the data
+                # 1. Load and Reproject
                 basemap = rioxarray.open_rasterio(self.basemap_path)
                 basemap = basemap.rio.reproject("EPSG:3857")
                 
-                # Clip to data bounds to prevent massive memory usage when plotting
-                basemap = basemap.rio.clip_box(minx=minx, miny=miny, maxx=maxx, maxy=maxy)
+                # 2. Try to clip to save memory, but don't crash if bounds don't perfectly align
+                try:
+                    basemap = basemap.rio.clip_box(minx=minx, miny=miny, maxx=maxx, maxy=maxy)
+                except Exception as clip_err:
+                    _log(f"    -> Note: Could not clip basemap. Plotting full extent. ({clip_err})")
                 
-                # Plot basemap behind data (zorder=1)
-                basemap.plot.imshow(ax=ax, add_colorbar=False, add_labels=False, zorder=1)
+                # 3. Extract the physical bounds of the clipped basemap
+                bm_bounds = basemap.rio.bounds()
+                bm_extent = (bm_bounds[0], bm_bounds[2], bm_bounds[1], bm_bounds[3])
+                
+                # 4. Convert to a standard numpy array
+                bm_array = basemap.to_numpy()
+                
+                # 5. Fix RGB band ordering (GeoTIFFs are [Bands, Y, X], Matplotlib wants [Y, X, Bands])
+                if bm_array.ndim == 3:
+                    bm_array = np.moveaxis(bm_array, 0, -1)
+                    # Normalize to 0-1 if it's not a standard 8-bit image to prevent washed-out colors
+                    if bm_array.dtype != np.uint8 and np.max(bm_array) > 1.0:
+                        bm_array = (bm_array / np.max(bm_array)).astype(float)
+                
+                # 6. Plot using native matplotlib (highly reliable)
+                ax.imshow(bm_array, extent=bm_extent, zorder=1, origin='upper')
+                
             except Exception as e:
-                _log(f"    -> WARNING: Failed to load/reproject local basemap: {e}")
+                _log(f"    -> WARNING: Failed to plot basemap: {e}")
+        else:
+            _log(f"    -> Note: Basemap path not found or not provided: {self.basemap_path}")
+
+        # Set map limits explicitly so the flood data dictates the frame size
+        ax.set_xlim(minx, maxx)
+        ax.set_ylim(miny, maxy)
 
         spatial_extent = geodata["spatial_extent"]
         ax.text(
