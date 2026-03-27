@@ -15,6 +15,7 @@ from pyproj import Transformer
 import rioxarray
 import dask.array as da
 from datetime import timedelta
+from rasterio.enums import Resampling
 
 def _log(message):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
@@ -320,32 +321,40 @@ class DepthMapPlotter:
         # --- MORE ROBUST BASEMAP PLOTTING ---
         if self.basemap_path and os.path.exists(self.basemap_path):
             try:
-                # 1. Load and Reproject
+                # 1. Load and Reproject using BILINEAR resampling for smooth photos
                 basemap = rioxarray.open_rasterio(self.basemap_path)
-                basemap = basemap.rio.reproject("EPSG:3857")
+                basemap = basemap.rio.reproject(
+                    "EPSG:3857", 
+                    resampling=Resampling.bilinear  # <--- Smooths the reprojection stretch
+                )
                 
-                # 2. Try to clip to save memory, but don't crash if bounds don't perfectly align
+                # 2. Try to clip to save memory
                 try:
                     basemap = basemap.rio.clip_box(minx=minx, miny=miny, maxx=maxx, maxy=maxy)
                 except Exception as clip_err:
                     _log(f"    -> Note: Could not clip basemap. Plotting full extent. ({clip_err})")
                 
-                # 3. Extract the physical bounds of the clipped basemap
+                # 3. Extract bounds
                 bm_bounds = basemap.rio.bounds()
                 bm_extent = (bm_bounds[0], bm_bounds[2], bm_bounds[1], bm_bounds[3])
                 
-                # 4. Convert to a standard numpy array
+                # 4. Convert to numpy array
                 bm_array = basemap.to_numpy()
                 
-                # 5. Fix RGB band ordering (GeoTIFFs are [Bands, Y, X], Matplotlib wants [Y, X, Bands])
+                # 5. Fix RGB band ordering and normalize
                 if bm_array.ndim == 3:
                     bm_array = np.moveaxis(bm_array, 0, -1)
-                    # Normalize to 0-1 if it's not a standard 8-bit image to prevent washed-out colors
                     if bm_array.dtype != np.uint8 and np.max(bm_array) > 1.0:
                         bm_array = (bm_array / np.max(bm_array)).astype(float)
                 
-                # 6. Plot using native matplotlib (highly reliable)
-                ax.imshow(bm_array, extent=bm_extent, zorder=1, origin='upper')
+                # 6. Plot using matplotlib with BILINEAR interpolation for smooth rendering
+                ax.imshow(
+                    bm_array, 
+                    extent=bm_extent, 
+                    zorder=1, 
+                    origin='upper', 
+                    interpolation='bilinear'  # <--- Smooths the final visual output
+                )
                 
             except Exception as e:
                 _log(f"    -> WARNING: Failed to plot basemap: {e}")
