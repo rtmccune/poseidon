@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime
 from scipy.interpolate import interp1d
 import re
+from skimage.draw import polygon  # <--- Added for polygon interior masking
 
 def _extract_timestamp(filename):
     pattern = r"\d{14}"
@@ -20,19 +21,23 @@ class RoadwayAnalyzer:
         self.event_path = target_event_dir
         self.event_name = os.path.basename(target_event_dir)
         self.labelme_json_path = labelme_json_path
-        self.line_label = line_label
+        self.roi_label = line_label  # Can be a line or polygon label
         self.step_size = step_size
         self.statistic = statistic
         
-        self.transect_name = os.path.splitext(os.path.basename(labelme_json_path))[0]
-        self.transect_coords = self._get_transect_from_labelme()
+        # Base name derived from the JSON (e.g., 'canal_dr_transect' or 'canal_dr_polygon')
+        self.roi_name = os.path.splitext(os.path.basename(labelme_json_path))[0]
+        self.geom_type = None # Will be set during parsing
         
-        if self.transect_coords is None:
-            raise ValueError(f"Could not find a line labeled '{line_label}' in {labelme_json_path}")
+        self.roi_coords = self._get_coords_from_labelme()
+        
+        if self.roi_coords is None:
+            raise ValueError(f"Could not find a valid shape labeled '{self.roi_label}' in {labelme_json_path}")
             
-        _log(f"Initialized RoadwayAnalyzer for '{self.statistic}' using transect '{self.transect_name}'. Length: {len(self.transect_coords)} points.")
+        _log(f"Initialized RoadwayAnalyzer for '{self.statistic}' using {self.geom_type} '{self.roi_name}'. Area/Length: {len(self.roi_coords)} pixels.")
 
-    def _get_transect_from_labelme(self):
+    def _get_coords_from_labelme(self):
+        """Auto-detects lines vs polygons and extracts the correct pixel coordinates."""
         try:
             with open(self.labelme_json_path, 'r') as f:
                 data = json.load(f)
@@ -40,40 +45,57 @@ class RoadwayAnalyzer:
             _log(f"Error reading LabelMe JSON: {e}")
             return None
 
-        line_points = None
+        points = None
+        shape_type = None
         for shape in data['shapes']:
-            if shape['label'] == self.line_label and shape['shape_type'] in ['line', 'linestrip']:
-                line_points = np.array(shape['points'])
+            if shape['label'] == self.roi_label:
+                points = np.array(shape['points'])
+                shape_type = shape['shape_type']
                 break
         
-        if line_points is None:
+        if points is None:
             available_labels = [s.get('label', 'unknown') for s in data.get('shapes', [])]
             _log(f"debug: Found labels in JSON: {available_labels}")
             return None
 
-        dists = np.sqrt(np.sum(np.diff(line_points, axis=0)**2, axis=1))
-        cumulative_dist = np.insert(np.cumsum(dists), 0, 0)
-        
-        fx = interp1d(cumulative_dist, line_points[:, 0])
-        fy = interp1d(cumulative_dist, line_points[:, 1])
-        
-        new_dists = np.arange(0, cumulative_dist[-1], self.step_size)
-        new_x = fx(new_dists)
-        new_y = fy(new_dists)
-        
-        coords = np.column_stack((np.round(new_y), np.round(new_x))).astype(int)
-        return coords
+        self.geom_type = shape_type
+
+        # --- LINE EXTRACTION ---
+        if shape_type in ['line', 'linestrip']:
+            dists = np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))
+            cumulative_dist = np.insert(np.cumsum(dists), 0, 0)
+            
+            fx = interp1d(cumulative_dist, points[:, 0])
+            fy = interp1d(cumulative_dist, points[:, 1])
+            
+            new_dists = np.arange(0, cumulative_dist[-1], self.step_size)
+            new_x = fx(new_dists)
+            new_y = fy(new_dists)
+            
+            coords = np.column_stack((np.round(new_y), np.round(new_x))).astype(int)
+            return coords
+
+        # --- POLYGON EXTRACTION ---
+        elif shape_type == 'polygon':
+            # polygon(r, c) takes Rows (Y) and Cols (X)
+            rr, cc = polygon(points[:, 1], points[:, 0])
+            coords = np.column_stack((rr, cc)).astype(int)
+            return coords
+            
+        else:
+            _log(f"Unsupported shape_type '{shape_type}' for label '{self.roi_label}'")
+            return None
 
     def process_single_event(self):
         """Orchestrates the extraction and CSV generation for a single event."""
-        _log(f"--- Starting Roadway Analysis for {self.event_name} ---")
-        self._gen_transect_depths()
+        _log(f"--- Starting Analysis for {self.event_name} ---")
+        self._gen_roi_depths()
         self._process_roadway_accessibility()
-        _log(f"--- Finished Roadway Analysis for {self.event_name} ---")
+        _log(f"--- Finished Analysis for {self.event_name} ---")
 
-    def _gen_transect_depths(self):
+    def _gen_roi_depths(self):
         in_zip_path = os.path.join(self.event_path, "zarr", "depth_maps.zip")
-        out_zip_path = os.path.join(self.event_path, "zarr", f"{self.transect_name}_transect_depths.zip")
+        out_zip_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_depths.zip")
 
         if not os.path.exists(in_zip_path):
             _log(f"Source depth maps not found: {in_zip_path}")
@@ -85,7 +107,6 @@ class RoadwayAnalyzer:
         
         target_suffix = f"depth_map_{self.statistic}"
         
-        # Filter for the specific statistic, explicitly excluding WSE maps
         file_names = sorted([
             f for f in in_root.keys() 
             if f.endswith(target_suffix) and "wse_map" not in f
@@ -97,7 +118,7 @@ class RoadwayAnalyzer:
             in_backend.close()
             return
 
-        transect_depth_array = np.empty((num_files, len(self.transect_coords)), dtype=np.float32)
+        roi_depth_array = np.empty((num_files, len(self.roi_coords)), dtype=np.float32)
         timestamp_list = []
 
         # 2. Extract Data
@@ -107,8 +128,8 @@ class RoadwayAnalyzer:
             try:
                 depth_map = in_root[file_name][:] 
                 
-                ys = self.transect_coords[:, 0]
-                xs = self.transect_coords[:, 1]
+                ys = self.roi_coords[:, 0]
+                xs = self.roi_coords[:, 1]
                 
                 h, w = depth_map.shape
                 
@@ -117,13 +138,12 @@ class RoadwayAnalyzer:
                 
                 valid_mask = (ys_flipped >= 0) & (ys_flipped < h) & (xs >= 0) & (xs < w)
                 
-                transect_depth_array[idx, :] = np.nan
-                # Extract using the flipped Y coordinates
-                transect_depth_array[idx, valid_mask] = depth_map[ys_flipped[valid_mask], xs[valid_mask]]
+                roi_depth_array[idx, :] = np.nan
+                roi_depth_array[idx, valid_mask] = depth_map[ys_flipped[valid_mask], xs[valid_mask]]
                 
             except Exception as e:
                 _log(f"Error processing {file_name}: {e}")
-                transect_depth_array[idx, :] = np.nan
+                roi_depth_array[idx, :] = np.nan
 
         # 3. Save to Output ZipStore
         datetimes = np.array(pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30")
@@ -132,9 +152,9 @@ class RoadwayAnalyzer:
             out_backend = zarr.storage.ZipStore(out_zip_path, mode="w")
             out_root = zarr.open_group(store=out_backend, mode="w")
             
-            # Using Zarr V3 chunks logic
+            # Save the extracted array using the dynamic ROI name
             out_root.create_array("timestamps", data=datetimes, chunks=datetimes.shape, overwrite=True)
-            out_root.create_array(f"{self.transect_name}_depths", data=transect_depth_array, chunks=transect_depth_array.shape, overwrite=True)
+            out_root.create_array(f"{self.roi_name}_depths", data=roi_depth_array, chunks=roi_depth_array.shape, overwrite=True)
             
             out_backend.close()
             _log(f"Successfully generated {out_zip_path}")
@@ -144,7 +164,7 @@ class RoadwayAnalyzer:
         in_backend.close()
 
     def _process_roadway_accessibility(self):
-        zip_store_path = os.path.join(self.event_path, "zarr", f"{self.transect_name}_transect_depths.zip")
+        zip_store_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_depths.zip")
 
         if not os.path.exists(zip_store_path):
             return
@@ -155,19 +175,20 @@ class RoadwayAnalyzer:
             root = zarr.open_group(store=backend, mode="r")
             
             timestamps = root["timestamps"][:]
-            transect_depths = root[f"{self.transect_name}_depths"][:]
+            roi_depths = root[f"{self.roi_name}_depths"][:]
             backend.close()
             
             datetimes = pd.to_datetime(timestamps, utc=True)
             
             # 2. Statistics Calculation
-            impassable = np.any(transect_depths > 0.0, axis=1).astype(int)
+            # NOTE: For a polygon, 'impassable' means ANY pixel inside the polygon is > 0.
+            impassable = np.any(roi_depths > 0.0, axis=1).astype(int)
             
-            with np.errstate(all='ignore'): # Suppress warnings for all-NaN slices
-                mean_depths = np.nanmean(transect_depths, axis=1)
-                median_depths = np.nanmedian(transect_depths, axis=1)
-                max_depths = np.nanmax(transect_depths, axis=1)
-                min_depths = np.nanmin(transect_depths, axis=1)
+            with np.errstate(all='ignore'):
+                mean_depths = np.nanmean(roi_depths, axis=1)
+                median_depths = np.nanmedian(roi_depths, axis=1)
+                max_depths = np.nanmax(roi_depths, axis=1)
+                min_depths = np.nanmin(roi_depths, axis=1)
 
             stats_df = pd.DataFrame({
                 "Time": datetimes,
@@ -179,7 +200,7 @@ class RoadwayAnalyzer:
             }).sort_values(by="Time")
 
             # 3. Save CSV
-            output_path = os.path.join(self.event_path, f"{self.transect_name}_accessibility_time_series.csv")
+            output_path = os.path.join(self.event_path, f"{self.roi_name}_accessibility_time_series.csv")
             stats_df.to_csv(output_path, index=False)
             _log(f"Accessibility CSV saved to {output_path}")
             
