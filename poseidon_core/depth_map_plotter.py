@@ -339,15 +339,12 @@ class DepthMapPlotter:
     def _finalize_and_save_plot(self, fig, ax, im, geodata, cbar_label, output_folder, output_filename):
         minx, miny, maxx, maxy = geodata["mercator_array"].rio.bounds()
 
-        # --- MORE ROBUST BASEMAP PLOTTING ---
+        # --- FAST BASEMAP PLOTTING (NO INTERPOLATION) ---
         if self.basemap_path and os.path.exists(self.basemap_path):
             try:
-                # 1. Load and Reproject using BILINEAR resampling for smooth photos
+                # 1. Load and Reproject (Defaults to nearest neighbor for speed)
                 basemap = rioxarray.open_rasterio(self.basemap_path)
-                basemap = basemap.rio.reproject(
-                    "EPSG:3857", 
-                    resampling=Resampling.bilinear  # <--- Smooths the reprojection stretch
-                )
+                basemap = basemap.rio.reproject("EPSG:3857")
                 
                 # 2. Try to clip to save memory
                 try:
@@ -368,13 +365,13 @@ class DepthMapPlotter:
                     if bm_array.dtype != np.uint8 and np.max(bm_array) > 1.0:
                         bm_array = (bm_array / np.max(bm_array)).astype(float)
                 
-                # 6. Plot using matplotlib with BILINEAR interpolation for smooth rendering
+                # 6. Plot using matplotlib (fast, raw pixels)
                 ax.imshow(
                     bm_array, 
                     extent=bm_extent, 
                     zorder=1, 
                     origin='upper', 
-                    interpolation='bilinear'  # <--- Smooths the final visual output
+                    interpolation='none'  # <--- Reverted to 'none' for speed and crispness
                 )
                 
             except Exception as e:
