@@ -201,10 +201,10 @@ class DepthMapPlotter:
         out_backend = zarr.storage.ZipStore(output_zarr_store, mode="w")
         out_root = zarr.open_group(store=out_backend, mode="w")
         
-        out_root.create_array("timestamps", data=datetimes_np, chunks=False)
-        out_root.create_array("max_depths", data=max_depth_array, chunks=False)
-        out_root.create_array("avg_depths", data=avg_depth_array, chunks=False)
-        out_root.create_array("vs_depths", data=vs_depth_array, chunks=False)
+        out_root.create_array("timestamps", data=datetimes_np, chunks=datetimes_np.shape)
+        out_root.create_array("max_depths", data=max_depth_array, chunks=max_depth_array.shape)
+        out_root.create_array("avg_depths", data=avg_depth_array, chunks=avg_depth_array.shape)
+        out_root.create_array("vs_depths", data=vs_depth_array, chunks=vs_depth_array.shape)
 
         in_backend.close()
         out_backend.close()
