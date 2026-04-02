@@ -1,7 +1,7 @@
 #! /bin/bash
 
 #BSUB -J gen_flood_folders
-#BSUB -W 60
+#BSUB -W 15
 #BSUB -n 1
 #BSUB -q ccee
 #BSUB -o gen_flood_folders.%J.out
@@ -30,13 +30,14 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 RUNNER_SCRIPT="$REPO_ROOT/poseidon_deploy/naiads/run_flood_event_setup.py"
 
-ABBR_EVENTS="$REPO_ROOT/data/down_east/abbr_flood_events.csv"
-FILT_ABBR_CSV="$REPO_ROOT/data/down_east/abbr_flood_events.csv"
-FLOOD_EVENTS_CSV="$REPO_ROOT/data/down_east/flood_events.csv"
+LOCATION_FOLDER="$REPO_ROOT/data/down_east"
+ABBR_EVENTS="$LOCATION_FOLDER/abbr_flood_events.csv"
+FILT_ABBR_CSV="$LOCATION_FOLDER/abbr_flood_events.csv"
+FLOOD_EVENTS_CSV="$LOCATION_FOLDER/flood_events.csv"
 
-IMAGE_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events"
-LABEL_DIR="$REPO_ROOT/data/down_east/images/daylight_all_events_labels"
-OUTPUT_DIR="$REPO_ROOT/data/down_east/flood_events"
+IMAGE_DIR="$LOCATION_FOLDER/images/daylight_all_events"
+LABEL_DIR="$LOCATION_FOLDER/images/daylight_all_events_labels"
+OUTPUT_DIR="$LOCATION_FOLDER/flood_events"
 
 echo "Starting image organizer Python script..."
 python -u $RUNNER_SCRIPT \
