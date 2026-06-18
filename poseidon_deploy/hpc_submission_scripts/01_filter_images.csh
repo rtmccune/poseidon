@@ -39,8 +39,8 @@ python -u $RUNNER_SCRIPT \
     --drive $IMAGE_DRIVE \
     --image_dir $IMAGE_DIR \
     --dest $OUTPUT_DIR \
-    --start 6 \
-    --end 19
+    --lat 34.0435 \
+    --lon -77.8894
 
 echo "Deactivating conda environment..."
 conda deactivate
