@@ -1,8 +1,8 @@
 #! /bin/bash
 
-#BSUB -J stitch_comparisons
+#BSUB -J stitch
 #BSUB -W 60                          # Bumped to 60 minutes for image I/O safety
-#BSUB -n 8                           # Increased to 8 cores for parallel processing
+#BSUB -n 16                           # Increased to 8 cores for parallel processing
 #BSUB -R "span[hosts=1]"             # CRITICAL: Ensures all 8 cores are on the same node
 #BSUB -R "rusage[mem=8G]"            # Increased memory for OpenCV image handling
 #BSUB -q ccee 
@@ -28,12 +28,12 @@ conda activate $POSEIDON_ENV
 REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 
 # Assuming you place the new Python script in your utils folder
-STITCH_SCRIPT="$REPO_ROOT/poseidon_utils/stitch_comparisons.py"
+STITCH_SCRIPT="$REPO_ROOT/poseidon_utils/image_stitcher.py"
 
 # UPDATE THESE to point to the actual folders holding your images
-ORIG_DIR="$REPO_ROOT/data/originals"
-OVERLAY_DIR="$REPO_ROOT/data/overlays"
-OUTPUT_DIR="$REPO_ROOT/data/stitched_comparisons"
+ORIG_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events"
+OVERLAY_DIR="$REPO_ROOT/data/carolina_beach/images/daylight_all_events_overlays"
+OUTPUT_DIR="$REPO_ROOT/data/carolina_beach/images/stitched_comparisons"
 
 echo "Starting parallel image stitching..."
 
