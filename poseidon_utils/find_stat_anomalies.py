@@ -9,7 +9,7 @@ base_dir = 'flood_events'
 csv_pattern = os.path.join(base_dir, '*', '*_accessibility_time_series.csv')
 csv_files = glob.glob(csv_pattern)
 
-LOCAL_Z_THRESHOLD = -2.0  
+LOCAL_Z_THRESHOLD = -1.0  
 RESIDUAL_THRESHOLD = -15.0 
 
 print(f"Found {len(csv_files)} CSV files. Grouping by polygon...")
@@ -68,7 +68,7 @@ for poly_name, files in polygon_files.items():
     global_df['Local_Z'] = global_df['Residual'] / global_df['Local_Std']
 
     # --- Flag Anomalies ---
-    mask = (global_df['Local_Z'] < LOCAL_Z_THRESHOLD) & (global_df['Residual'] < RESIDUAL_THRESHOLD)
+    mask = (global_df['Local_Z'] < LOCAL_Z_THRESHOLD) #& (global_df['Residual'] < RESIDUAL_THRESHOLD)
     anomalies = global_df[mask].copy()
     anomalies = anomalies.sort_values(by='Local_Z', ascending=True)
 
