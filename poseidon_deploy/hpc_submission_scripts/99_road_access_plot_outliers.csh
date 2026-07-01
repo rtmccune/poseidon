@@ -30,7 +30,7 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 PLOT_SCRIPT="$REPO_ROOT/poseidon_utils/find_stat_anomalies.py"
 
 # Target directory containing the 'flood_events' folder
-TARGET_DIR="$REPO_ROOT/data/down_east/"
+TARGET_DIR="$REPO_ROOT/data/carolina_beach/"
 
 echo "Navigating to data directory..."
 cd "$TARGET_DIR" || { echo "Failed to navigate to $TARGET_DIR"; exit 1; }

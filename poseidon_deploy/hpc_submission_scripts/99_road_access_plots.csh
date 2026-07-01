@@ -30,15 +30,17 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 PLOT_SCRIPT="$REPO_ROOT/poseidon_utils/access_plotter.py"
 
 # Update this path to point to the parent directory that CONTAINS the 'flood_events' folder
-# (Assuming it sits inside your carolina_beach data directory)
-TARGET_DIR="$REPO_ROOT/data/down_east/"
+TARGET_DIR="$REPO_ROOT/data/carolina_beach/"
+
+# Ensure this points to the exact location of the CSV you generated earlier
+LABELS_CSV="$TARGET_DIR/segmentation_labels.csv"
 
 echo "Navigating to data directory..."
 cd "$TARGET_DIR" || { echo "Failed to navigate to $TARGET_DIR"; exit 1; }
 
 echo "Starting POSEIDON visual generation..."
 
-# Run the plotting script
-python -u "$PLOT_SCRIPT"
+# Run the plotting script with the newly added labels argument
+python -u "$PLOT_SCRIPT" --labels "$LABELS_CSV"
 
 echo "Job finished. Check the 'plots' folder inside $TARGET_DIR."
