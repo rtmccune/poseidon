@@ -30,7 +30,7 @@ REPO_ROOT=$(cd $LS_SUBCWD/../.. && pwd)
 PLOT_SCRIPT="$REPO_ROOT/poseidon_utils/access_plotter.py"
 
 # Update this path to point to the parent directory that CONTAINS the 'flood_events' folder
-TARGET_DIR="$REPO_ROOT/data/carolina_beach/"
+TARGET_DIR="$REPO_ROOT/data/down_east/"
 
 # Ensure this points to the exact location of the CSV you generated earlier
 LABELS_CSV="$TARGET_DIR/segmentation_labels.csv"

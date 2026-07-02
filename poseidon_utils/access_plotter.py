@@ -11,19 +11,38 @@ from scipy.optimize import curve_fit, minimize
 # --- Define Mathematical Models ---
 def logistic_curve(x, L, k, x0):
     """
-    L: Maximum value (asymptote / max coverage)
-    k: Steepness of the curve
-    x0: The x-value of the sigmoid's midpoint
+    Forward Sigmoid: Predicts Coverage based on Depth.
     """
-    # Use np.clip to prevent RuntimeWarnings from overflow in exp
     exponent = np.clip(-k * (x - x0), -100, 100)
     return L / (1 + np.exp(exponent))
 
+def logit_curve(c, L, k, x0):
+    """
+    Inverse Sigmoid (Logit): Predicts Depth based on Coverage.
+    Used to calculate RMSE in meters.
+    """
+    epsilon = 1e-5
+    L_eff = np.maximum(L, np.max(c) + epsilon) 
+    c_clipped = np.clip(c, epsilon, L_eff - epsilon)
+    return x0 - (1 / k) * np.log((L_eff / c_clipped) - 1)
+
 def pinball_loss(params, x, y, q):
-    """Custom loss function for quantile regression on non-linear models."""
+    """Custom loss function for quantile regression."""
     y_pred = logistic_curve(x, *params)
     err = y - y_pred
     return np.sum(np.maximum(q * err, (q - 1) * err))
+
+def calculate_r2(y_true, y_pred):
+    """Calculates the R-squared value."""
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    if ss_tot == 0:
+        return 0.0
+    return 1 - (ss_res / ss_tot)
+
+def calculate_rmse(y_true, y_pred):
+    """Calculates the Root Mean Square Error."""
+    return np.sqrt(np.mean((y_true - y_pred) ** 2))
 
 # --- 1. Directory Configuration & Arguments ---
 parser = argparse.ArgumentParser(description="Plot POSEIDON accessibility time-series.")
@@ -35,7 +54,6 @@ base_dir = 'flood_events'
 out_dir = 'plots'
 os.makedirs(out_dir, exist_ok=True)
 
-# Load the good segmentations and extract their timestamps
 good_timestamps = set()
 if args.labels and os.path.exists(args.labels):
     print(f"Loading segmentation labels from: {args.labels}")
@@ -51,7 +69,6 @@ if args.labels and os.path.exists(args.labels):
 else:
     print("No valid segmentation labels provided. Using default colors.")
 
-# Find all time-series CSVs
 csv_pattern = os.path.join(base_dir, '*', '*_accessibility_time_series.csv')
 csv_files = glob.glob(csv_pattern)
 
@@ -64,6 +81,13 @@ for file_path in csv_files:
     polygon_files[poly_name].append(file_path)
 
 metrics = ['MaxDepth', 'MeanDepth', 'MedianDepth']
+
+# Okabe-Ito Color Palette for Research Figures
+OI_BLACK = '#000000'
+OI_ORANGE = '#E69F00'
+OI_DARKBLUE = '#0072B2'
+OI_PURPLE = '#CC79A7'
+OI_GRAY = '#999999'
 
 # --- 2. Data Processing and Plotting ---
 for poly_name, files in polygon_files.items():
@@ -113,10 +137,6 @@ for poly_name, files in polygon_files.items():
     custom_lines = [Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=8),
                     Line2D([0], [0], marker='o', color='w', markerfacecolor='blue', markersize=8)]
     
-    quantiles = [0.1, 0.5, 0.9]
-    linestyles = [':', '--', ':']
-    colors_q = ['red', 'purple', 'red']
-    
     for metric in metrics:
         if metric not in combined_df.columns:
             print(f"Column '{metric}' not found for {poly_name}. Skipping this metric.")
@@ -147,30 +167,44 @@ for poly_name, files in polygon_files.items():
         
         if len(fit_df) > 3:
             x_plot_depth = np.linspace(fit_df[metric].min(), fit_df[metric].max(), 200)
-            
-            # Initial guess: L=Max Coverage, k=10 (arbitrary steepness), x0=Median Depth
             p0 = [fit_df['Coverage'].max(), 10, fit_df[metric].median()]
             
             try:
-                # 1. Main Logistic Fit (Non-linear Least Squares)
+                # 1. Main Logistic Fit
                 popt, _ = curve_fit(logistic_curve, fit_df[metric], fit_df['Coverage'], p0=p0, maxfev=5000)
                 y_pred_cov = logistic_curve(x_plot_depth, *popt)
-                ax1b.plot(y_pred_cov, x_plot_depth, color='black', linewidth=2, label='Logistic S-Curve Fit')
                 
-                # 2. Logistic Quantile Regression (Using Pinball Loss Custom Minimizer)
-                for q, ls, qc in zip(quantiles, linestyles, colors_q):
-                    # Use the main fit's parameters as the starting point for the quantile minimizer
+                # R2 calculated in Coverage Space (to match optimization goal)
+                y_pred_cov_actual = logistic_curve(fit_df[metric], *popt)
+                r2 = calculate_r2(fit_df['Coverage'], y_pred_cov_actual)
+                
+                # RMSE calculated in Depth Space (Meters)
+                y_pred_depth_actual = logit_curve(fit_df['Coverage'], *popt)
+                rmse = calculate_rmse(fit_df[metric], y_pred_depth_actual)
+                
+                ax1b.plot(y_pred_cov, x_plot_depth, color='black', linewidth=2, label=f'Logistic Fit ($R^2$={r2:.2f}, RMSE={rmse:.2f}m)')
+                
+                # 2. Quantiles
+                q_preds = {}
+                for q in [0.1, 0.5, 0.9]:
                     res = minimize(pinball_loss, popt, args=(fit_df[metric].values, fit_df['Coverage'].values, q), method='Nelder-Mead')
                     if res.success:
-                        y_pred_cov_q = logistic_curve(x_plot_depth, *res.x)
-                        ax1b.plot(y_pred_cov_q, x_plot_depth, linestyle=ls, color=qc, linewidth=2, label=f'Quantile {q}')
+                        q_preds[q] = logistic_curve(x_plot_depth, *res.x)
+                
+                if 0.1 in q_preds and 0.9 in q_preds:
+                    ax1b.fill_betweenx(x_plot_depth, q_preds[0.1], q_preds[0.9], color='red', alpha=0.15, label='80% Prediction Interval')
+                if 0.5 in q_preds:
+                    ax1b.plot(q_preds[0.5], x_plot_depth, linestyle='--', color='purple', linewidth=2, label='Median (0.5 Quantile)')
+                    
             except Exception as e:
                 print(f"Logistic fit failed for {metric} (All): {e}")
 
+        # Updated Car Floatation Line Styling
+        ax1b.axhline(y=0.38, color=OI_ORANGE, linestyle='-', linewidth=1, alpha=0.7, label='Car Floatation (38 cm)')
         ax1b.set_xlabel('Roadway Percentage Covered (%)')
         ax1b.set_ylabel(f'{metric} (m)')
         ax1b.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - All Data)\n({poly_name})')
-        ax1b.grid(True, linestyle='--', alpha=0.7)
+        ax1b.grid(False)
         
         handles, labels = ax1b.get_legend_handles_labels()
         if len(good_timestamps) > 0:
@@ -182,13 +216,14 @@ for poly_name, files in polygon_files.items():
         fig1b.savefig(os.path.join(out_dir, f'{poly_name}_{metric}_1b_reversed_fit.jpg'))
         plt.close(fig1b)
 
-        # --- Plot 1c: Reversed Axes with Logistic Fit (Good Segmentations Only) ---
+        # --- Plot 1c: Reversed Axes (Good Segmentations Only) with Okabe-Ito Palette ---
         good_df = fit_df[fit_df['PointColor'] == 'green'].copy()
         
         if not good_df.empty and len(good_df) > 3:
             fig1c, ax1c = plt.subplots(figsize=(10, 6), dpi=300)
             
-            ax1c.scatter(good_df['Coverage'], good_df[metric], alpha=0.6, c='green')
+            # Gray scatter for data points
+            ax1c.scatter(good_df['Coverage'], good_df[metric], alpha=0.6, c=OI_GRAY, edgecolors='none', label='Segmentation Data')
             
             x_plot_depth_good = np.linspace(good_df[metric].min(), good_df[metric].max(), 200)
             p0_good = [good_df['Coverage'].max(), 10, good_df[metric].median()]
@@ -197,27 +232,46 @@ for poly_name, files in polygon_files.items():
                 # 1. Main Logistic Fit for Good Data
                 popt_good, _ = curve_fit(logistic_curve, good_df[metric], good_df['Coverage'], p0=p0_good, maxfev=5000)
                 y_pred_cov_good = logistic_curve(x_plot_depth_good, *popt_good)
-                ax1c.plot(y_pred_cov_good, x_plot_depth_good, color='black', linewidth=2, label='Logistic S-Curve Fit')
+                
+                # R2 calculated in Coverage Space (to match optimization goal)
+                y_pred_cov_actual_good = logistic_curve(good_df[metric], *popt_good)
+                r2_good = calculate_r2(good_df['Coverage'], y_pred_cov_actual_good)
+                
+                # RMSE calculated in Depth Space (Meters)
+                y_pred_depth_actual_good = logit_curve(good_df['Coverage'], *popt_good)
+                rmse_good = calculate_rmse(good_df[metric], y_pred_depth_actual_good)
+                
+                # Solid Black Line for fit
+                ax1c.plot(y_pred_cov_good, x_plot_depth_good, color=OI_BLACK, linewidth=2.5, label=f'Logistic Fit ($R^2$={r2_good:.2f}, RMSE={rmse_good:.2f}m)')
                 
                 # 2. Logistic Quantile Regression for Good Data
-                for q, ls, qc in zip(quantiles, linestyles, colors_q):
+                q_preds_good = {}
+                for q in [0.1, 0.5, 0.9]:
                     res_good = minimize(pinball_loss, popt_good, args=(good_df[metric].values, good_df['Coverage'].values, q), method='Nelder-Mead')
                     if res_good.success:
-                        y_pred_cov_q_good = logistic_curve(x_plot_depth_good, *res_good.x)
-                        ax1c.plot(y_pred_cov_q_good, x_plot_depth_good, linestyle=ls, color=qc, linewidth=2, label=f'Quantile {q}')
+                        q_preds_good[q] = logistic_curve(x_plot_depth_good, *res_good.x)
+                
+                # Updated Shading & Median Colors
+                if 0.1 in q_preds_good and 0.9 in q_preds_good:
+                    ax1c.fill_betweenx(x_plot_depth_good, q_preds_good[0.1], q_preds_good[0.9], color=OI_PURPLE, alpha=0.25, label='80% Prediction Interval')
+                if 0.5 in q_preds_good:
+                    ax1c.plot(q_preds_good[0.5], x_plot_depth_good, linestyle='--', color=OI_DARKBLUE, linewidth=2, label='Median (0.5 Quantile)')
+                    
             except Exception as e:
                 print(f"Logistic fit failed for {metric} (Good Only): {e}")
+
+            # Updated Car Floatation Line Styling
+            ax1c.axhline(y=0.38, color=OI_ORANGE, linestyle='-', linewidth=1, alpha=0.7, label='Car Floatation (38 cm)')
 
             ax1c.set_xlabel('Roadway Percentage Covered (%)')
             ax1c.set_ylabel(f'{metric} (m)')
             ax1c.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - Good Seg. Only)\n({poly_name})')
-            ax1c.grid(True, linestyle='--', alpha=0.7)
+            ax1c.grid(False)
             
+            # Clean up the legend to only use the explicit labels created above
             handles, labels = ax1c.get_legend_handles_labels()
-            good_line = Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=8)
-            handles = [good_line] + handles
-            labels = ['Good Seg.'] + labels
-            ax1c.legend(handles, labels)
+            by_label = dict(zip(labels, handles))
+            ax1c.legend(by_label.values(), by_label.keys())
 
             fig1c.tight_layout()
             fig1c.savefig(os.path.join(out_dir, f'{poly_name}_{metric}_1c_reversed_fit_good_only.jpg'))
