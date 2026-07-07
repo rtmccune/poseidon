@@ -48,12 +48,15 @@ def calculate_rmse(y_true, y_pred):
 parser = argparse.ArgumentParser(description="Plot POSEIDON accessibility time-series.")
 parser.add_argument('--labels', type=str, default=None, 
                     help="Path to the segmentation_labels.csv to color code the plots.")
+parser.add_argument('--sensor', type=str, default=None, 
+                    help="Path to the sensor_data.csv for 1:1 depth comparison.")
 args = parser.parse_args()
 
 base_dir = 'flood_events'
 out_dir = 'plots'
 os.makedirs(out_dir, exist_ok=True)
 
+# Load Segmentation Labels
 good_timestamps = set()
 if args.labels and os.path.exists(args.labels):
     print(f"Loading segmentation labels from: {args.labels}")
@@ -68,6 +71,28 @@ if args.labels and os.path.exists(args.labels):
     print(f"Found {len(good_timestamps)} 'good' timestamps to highlight.")
 else:
     print("No valid segmentation labels provided. Using default colors.")
+
+# Load Sensor Data for Nearest-Neighbor Matching
+sensor_df_clean = None
+if args.sensor and os.path.exists(args.sensor):
+    print(f"Loading sensor data from: {args.sensor}")
+    sensor_df = pd.read_csv(args.sensor)
+    
+    if 'road_water_level_adj' in sensor_df.columns:
+        # Convert depth from feet to meters for 1:1 plotting
+        sensor_df['SensorDepth_m'] = sensor_df['road_water_level_adj'] * 0.3048
+        
+        # Clamp negative sensor depths to 0.0 to match surface-only camera observations
+        #sensor_df['SensorDepth_m'] = sensor_df['SensorDepth_m'].clip(lower=0.0)
+        
+        # Parse datetime strictly as UTC to match image times safely
+        sensor_df['datetime_utc'] = pd.to_datetime(sensor_df['date'], errors='coerce', utc=True)
+        
+        # Drop NaNs and ensure the dataframe is sorted by time (required for merge_asof)
+        sensor_df_clean = sensor_df.dropna(subset=['datetime_utc', 'SensorDepth_m']).sort_values('datetime_utc')
+        print(f"Loaded {len(sensor_df_clean)} valid sensor readings.")
+    else:
+        print("Warning: 'road_water_level_adj' column not found in sensor data.")
 
 csv_pattern = os.path.join(base_dir, '*', '*_accessibility_time_series.csv')
 csv_files = glob.glob(csv_pattern)
@@ -109,12 +134,32 @@ for poly_name, files in polygon_files.items():
                 break
         
         if time_col and len(good_timestamps) > 0:
-            csv_times = pd.to_datetime(df[time_col], errors='coerce').dt.strftime('%Y%m%d%H%M%S')
+            # Parse CSV time to a true UTC datetime object
+            df['datetime_utc'] = pd.to_datetime(df[time_col], errors='coerce', utc=True)
+            
+            # Format back to string just for the filename matching logic
+            csv_times = df['datetime_utc'].dt.strftime('%Y%m%d%H%M%S')
             colors = np.where(csv_times.isin(good_timestamps), 'green', 'blue')
             event_has_good = 'green' in colors
+            
+            # Perform nearest-neighbor time alignment with sensor data
+            if sensor_df_clean is not None:
+                # Sort df by time (required for merge_asof)
+                df = df.sort_values('datetime_utc')
+                # Merge the nearest sensor reading within a 5-minute tolerance
+                df = pd.merge_asof(
+                    df, 
+                    sensor_df_clean[['datetime_utc', 'SensorDepth_m']],
+                    on='datetime_utc', 
+                    direction='nearest',
+                    tolerance=pd.Timedelta(minutes=5)
+                )
+            else:
+                df['SensorDepth_m'] = np.nan
         else:
             colors = 'blue'
             event_has_good = False
+            df['SensorDepth_m'] = np.nan
         
         df['PointColor'] = colors
         poly_dfs.append(df)
@@ -278,6 +323,58 @@ for poly_name, files in polygon_files.items():
             plt.close(fig1c)
         elif len(good_timestamps) > 0:
             print(f"Not enough 'good' segmentation points to generate plot 1c for {poly_name} - {metric}.")
+
+        # --- Plot 6: 1:1 Sensor vs Image Depth (Good Segmentations Only) ---
+        if sensor_df_clean is not None and 'SensorDepth_m' in combined_df.columns:
+            # Filter for green points, then drop any rows missing Depth, Sensor Depth, or Coverage
+            plot6_df = combined_df[combined_df['PointColor'] == 'green'].dropna(subset=[metric, 'SensorDepth_m', 'Coverage']).copy()
+            
+            if not plot6_df.empty:
+                fig6, ax6 = plt.subplots(figsize=(8, 8), dpi=300)
+                
+                img_depths = plot6_df[metric].values
+                sens_depths = plot6_df['SensorDepth_m'].values
+                cov = plot6_df['Coverage'].values
+                
+                # Scale sizes linearly: 0% coverage -> size 20, 100% coverage -> size 200
+                sizes = 20 + (cov / 100) * 180
+                
+                # Cividis colormap (colorblind friendly) scaled by Coverage. AXES SWAPPED: X=Sensor, Y=Image
+                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=sizes, cmap='cividis', alpha=0.8, edgecolors='k', linewidth=0.5)
+                
+                # Establish 1:1 square boundaries with a small buffer
+                min_val = min(img_depths.min(), sens_depths.min()) - 0.05
+                max_val = max(img_depths.max(), sens_depths.max()) + 0.05
+                
+                # 1:1 Line
+                ax6.plot([min_val, max_val], [min_val, max_val], color=OI_BLACK, linestyle='--', linewidth=2, label='1:1 Line')
+                
+                # Linear Trend Line (wrapped in a try-except block for ultimate safety)
+                if len(plot6_df) > 1:
+                    try:
+                        m, b = np.polyfit(sens_depths, img_depths, 1)
+                        trend_label = f'Linear Fit (y={m:.2f}x+{b:.2f})' if b > 0 else f'Linear Fit (y={m:.2f}x{b:.2f})'
+                        ax6.plot(np.array([min_val, max_val]), m * np.array([min_val, max_val]) + b, color=OI_VERMILION, linestyle='-', linewidth=2, label=trend_label)
+                    except Exception as e:
+                        print(f"Linear fit failed for {metric} 1:1 plot: {e}")
+                
+                ax6.set_xlim([min_val, max_val])
+                ax6.set_ylim([min_val, max_val])
+                ax6.set_aspect('equal', adjustable='box')
+                
+                ax6.set_xlabel('In-Situ Sensor Depth (m)')
+                ax6.set_ylabel(f'Image Derived {metric} (m)')
+                ax6.set_title(f'Image {metric} vs Sensor Depth\n({poly_name})')
+                ax6.grid(True, linestyle='--', alpha=0.7)
+                
+                # Add Colorbar for Coverage
+                cbar = fig6.colorbar(scatter, ax=ax6, fraction=0.046, pad=0.04)
+                cbar.set_label('Roadway Percentage Covered (%)')
+                
+                ax6.legend(loc='upper left')
+                fig6.tight_layout()
+                fig6.savefig(os.path.join(out_dir, f'{poly_name}_{metric}_6_sensor_1to1.jpg'))
+                plt.close(fig6)
 
         # --- Extract and sort Peaks for Event-Level Plots (2-5) ---
         m_max = f'{metric}_max'
