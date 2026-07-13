@@ -107,12 +107,21 @@ for file_path in csv_files:
 
 metrics = ['MaxDepth', 'MeanDepth', 'MedianDepth']
 
-# Okabe-Ito Color Palette for Research Figures
-OI_BLACK = '#000000'
-OI_ORANGE = '#E69F00'
-OI_DARKBLUE = '#0072B2'
-OI_PURPLE = '#CC79A7'
-OI_GRAY = '#999999'
+# # Okabe-Ito Color Palette for Research Figures
+# OI_BLACK = '#000000'
+# OI_ORANGE = '#E69F00'
+# OI_DARKBLUE = '#0072B2'
+# OI_PURPLE = '#CC79A7'
+# OI_GRAY = '#999999'
+
+# --- Coastal Convergence Palette ---
+coastal_colors = {
+    'oceanic_blue': {'light': '#7DA6C6', 'base': '#1E6091', 'dark': '#0F3048'},
+    'estuary_teal': {'light': '#81CFC6', 'base': '#2A9D8F', 'dark': '#154F48'},
+    'erosion_rust': {'light': '#F3B6A7', 'base': '#E76F51', 'dark': '#8E3621'},
+    'dune_gold':    {'light': '#F4E1B3', 'base': '#E9C46A', 'dark': '#9A7822'},
+    'concrete_slate':{'light': '#A3AEB4', 'base': '#5C6B73', 'dark': '#2D3539'}
+}
 
 # --- 2. Data Processing and Plotting ---
 for poly_name, files in polygon_files.items():
@@ -261,14 +270,15 @@ for poly_name, files in polygon_files.items():
         fig1b.savefig(os.path.join(out_dir, f'{poly_name}_{metric}_1b_reversed_fit.jpg'))
         plt.close(fig1b)
 
-        # --- Plot 1c: Reversed Axes (Good Segmentations Only) with Okabe-Ito Palette ---
+        # --- Plot 1c: Reversed Axes (Good Segmentations Only) with Coastal Convergence ---
         good_df = fit_df[fit_df['PointColor'] == 'green'].copy()
         
         if not good_df.empty and len(good_df) > 3:
             fig1c, ax1c = plt.subplots(figsize=(10, 6), dpi=300)
             
-            # Gray scatter for data points
-            ax1c.scatter(good_df['Coverage'], good_df[metric], alpha=0.6, c=OI_GRAY, edgecolors='none', label='Segmentation Data')
+            # Slate scatter for data points
+            ax1c.scatter(good_df['Coverage'], good_df[metric], alpha=0.6, 
+                         c=coastal_colors['concrete_slate']['light'], edgecolors='none', label='Segmentation Data')
             
             x_plot_depth_good = np.linspace(good_df[metric].min(), good_df[metric].max(), 200)
             p0_good = [good_df['Coverage'].max(), 10, good_df[metric].median()]
@@ -286,8 +296,9 @@ for poly_name, files in polygon_files.items():
                 y_pred_depth_actual_good = logit_curve(good_df['Coverage'], *popt_good)
                 rmse_good = calculate_rmse(good_df[metric], y_pred_depth_actual_good)
                 
-                # Solid Black Line for fit
-                ax1c.plot(y_pred_cov_good, x_plot_depth_good, color=OI_BLACK, linewidth=2.5, label=f'Logistic Fit ($R^2$={r2_good:.2f}, RMSE={rmse_good:.2f}m)')
+                # Solid Dark Blue Line for main fit
+                ax1c.plot(y_pred_cov_good, x_plot_depth_good, color=coastal_colors['oceanic_blue']['dark'], 
+                          linewidth=2.5, label=f'Logistic Fit ($R^2$={r2_good:.2f}, RMSE={rmse_good:.2f}m)')
                 
                 # 2. Logistic Quantile Regression for Good Data
                 q_preds_good = {}
@@ -296,24 +307,26 @@ for poly_name, files in polygon_files.items():
                     if res_good.success:
                         q_preds_good[q] = logistic_curve(x_plot_depth_good, *res_good.x)
                 
-                # Updated Shading & Median Colors
+                # Teal Shading & Median Line
                 if 0.1 in q_preds_good and 0.9 in q_preds_good:
-                    ax1c.fill_betweenx(x_plot_depth_good, q_preds_good[0.1], q_preds_good[0.9], color=OI_PURPLE, alpha=0.25, label='80% Prediction Interval')
+                    ax1c.fill_betweenx(x_plot_depth_good, q_preds_good[0.1], q_preds_good[0.9], 
+                                       color=coastal_colors['estuary_teal']['light'], alpha=0.35, label='80% Prediction Interval')
                 if 0.5 in q_preds_good:
-                    ax1c.plot(q_preds_good[0.5], x_plot_depth_good, linestyle='--', color=OI_DARKBLUE, linewidth=2, label='Median (0.5 Quantile)')
+                    ax1c.plot(q_preds_good[0.5], x_plot_depth_good, linestyle='--', 
+                              color=coastal_colors['estuary_teal']['base'], linewidth=2, label='Median (0.5 Quantile)')
                     
             except Exception as e:
                 print(f"Logistic fit failed for {metric} (Good Only): {e}")
 
-            # Updated Car Floatation Line Styling
-            ax1c.axhline(y=0.38, color=OI_ORANGE, linestyle='-', linewidth=1, alpha=0.7, label='Car Floatation (38 cm)')
+            # Warning Threshold: Car Floatation Line in Rust
+            ax1c.axhline(y=0.38, color=coastal_colors['erosion_rust']['base'], linestyle='-', linewidth=2, alpha=0.9, label='Car Floatation (38 cm)')
 
             ax1c.set_xlabel('Roadway Percentage Covered (%)')
             ax1c.set_ylabel(f'{metric} (m)')
             ax1c.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - Good Seg. Only)\n({poly_name})')
             ax1c.grid(False)
             
-            # Clean up the legend to only use the explicit labels created above
+            # Clean up the legend 
             handles, labels = ax1c.get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             ax1c.legend(by_label.values(), by_label.keys())
@@ -321,6 +334,7 @@ for poly_name, files in polygon_files.items():
             fig1c.tight_layout()
             fig1c.savefig(os.path.join(out_dir, f'{poly_name}_{metric}_1c_reversed_fit_good_only.jpg'))
             plt.close(fig1c)
+            
         elif len(good_timestamps) > 0:
             print(f"Not enough 'good' segmentation points to generate plot 1c for {poly_name} - {metric}.")
 
