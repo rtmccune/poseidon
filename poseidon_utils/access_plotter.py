@@ -108,11 +108,11 @@ for file_path in csv_files:
 metrics = ['MaxDepth', 'MeanDepth', 'MedianDepth']
 
 # # Okabe-Ito Color Palette for Research Figures
-# OI_BLACK = '#000000'
-# OI_ORANGE = '#E69F00'
-# OI_DARKBLUE = '#0072B2'
-# OI_PURPLE = '#CC79A7'
-# OI_GRAY = '#999999'
+OI_BLACK = '#000000'
+OI_ORANGE = '#E69F00'
+OI_DARKBLUE = '#0072B2'
+OI_PURPLE = '#CC79A7'
+OI_GRAY = '#999999'
 
 # --- Coastal Convergence Palette ---
 coastal_colors = {
