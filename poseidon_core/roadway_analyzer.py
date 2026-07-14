@@ -91,6 +91,11 @@ class RoadwayAnalyzer:
         _log(f"--- Starting Analysis for {self.event_name} ---")
         self._gen_roi_depths()
         self._process_roadway_accessibility()
+        
+        # --- NEW CALLS FOR WSE ---
+        self._gen_roi_wse()
+        self._process_roadway_wse()
+        
         _log(f"--- Finished Analysis for {self.event_name} ---")
 
     def _gen_roi_depths(self):
@@ -212,3 +217,97 @@ class RoadwayAnalyzer:
             
         except Exception as e:
             _log(f"Error calculating stats: {e}")
+            
+    def _gen_roi_wse(self):
+        """Extracts Water Surface Elevation (WSE) maps from the Zarr store."""
+        in_zip_path = os.path.join(self.event_path, "zarr", "depth_maps.zip")
+        out_zip_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_wse.zip")
+
+        if not os.path.exists(in_zip_path):
+            return
+
+        in_backend = zarr.storage.ZipStore(in_zip_path, mode="r")
+        in_root = zarr.open_group(store=in_backend, mode="r")
+        
+        target_suffix = f"depth_map_{self.statistic}"
+        
+        # Look specifically FOR the wse_map files
+        file_names = sorted([
+            f for f in in_root.keys() 
+            if f.endswith(target_suffix) and "wse_map" in f
+        ])
+        
+        num_files = len(file_names)
+        if num_files == 0:
+            in_backend.close()
+            return
+
+        roi_wse_array = np.empty((num_files, len(self.roi_coords)), dtype=np.float32)
+        timestamp_list = []
+
+        for idx, file_name in enumerate(file_names):
+            timestamp_list.append(_extract_timestamp(file_name))
+            try:
+                wse_map = in_root[file_name][:] 
+                ys = self.roi_coords[:, 0]
+                xs = self.roi_coords[:, 1]
+                h, w = wse_map.shape
+                ys_flipped = (h - 1) - ys
+                valid_mask = (ys_flipped >= 0) & (ys_flipped < h) & (xs >= 0) & (xs < w)
+                
+                roi_wse_array[idx, :] = np.nan
+                roi_wse_array[idx, valid_mask] = wse_map[ys_flipped[valid_mask], xs[valid_mask]]
+            except Exception as e:
+                roi_wse_array[idx, :] = np.nan
+
+        datetimes = np.array(pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30")
+        
+        try:
+            out_backend = zarr.storage.ZipStore(out_zip_path, mode="w")
+            out_root = zarr.open_group(store=out_backend, mode="w")
+            out_root.create_array("timestamps", data=datetimes, chunks=datetimes.shape, overwrite=True)
+            out_root.create_array(f"{self.roi_name}_wse", data=roi_wse_array, chunks=roi_wse_array.shape, overwrite=True)
+            out_backend.close()
+        except Exception as e:
+            _log(f"Failed to save WSE ZipStore: {e}")
+            
+        in_backend.close()
+
+    def _process_roadway_wse(self):
+        """Calculates statistics for WSE and saves to a new CSV."""
+        zip_store_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_wse.zip")
+
+        if not os.path.exists(zip_store_path):
+            return
+
+        try:
+            backend = zarr.storage.ZipStore(zip_store_path, mode="r")
+            root = zarr.open_group(store=backend, mode="r")
+            timestamps = root["timestamps"][:]
+            roi_wse = root[f"{self.roi_name}_wse"][:]
+            backend.close()
+            
+            datetimes = pd.to_datetime(timestamps, utc=True)
+            
+            # For WSE, 0.0 often means dry/no data depending on your datum. 
+            # We replace 0.0 with NaN so we only average actual water elevations.
+            roi_wse_masked = np.where(roi_wse == 0.0, np.nan, roi_wse)
+            
+            with np.errstate(all='ignore'):
+                mean_wse = np.nanmean(roi_wse_masked, axis=1)
+                median_wse = np.nanmedian(roi_wse_masked, axis=1)
+                max_wse = np.nanmax(roi_wse_masked, axis=1)
+
+            stats_df = pd.DataFrame({
+                "Time": datetimes,
+                "MeanWSE": mean_wse,
+                "MedianWSE": median_wse,
+                "MaxWSE": max_wse,
+            }).sort_values(by="Time")
+
+            output_path = os.path.join(self.event_path, f"{self.roi_name}_wse_time_series.csv")
+            stats_df.to_csv(output_path, index=False)
+            _log(f"WSE CSV saved to {output_path}")
+            
+        except Exception as e:
+            _log(f"Error calculating WSE stats: {e}")
