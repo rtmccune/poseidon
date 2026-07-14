@@ -274,7 +274,7 @@ for poly_name, files in polygon_files.items():
                 print(f"Logistic fit failed for {metric} (All): {e}")
 
         # Updated Car Floatation Line Styling
-        ax1b.axhline(y=0.38, color=OI_ORANGE, linestyle='-', linewidth=1, alpha=0.7, label='Car Floatation (38 cm)')
+        # ax1b.axhline(y=0.38, color=OI_ORANGE, linestyle='-', linewidth=1, alpha=0.7, label='Car Floatation (38 cm)')
         ax1b.set_xlabel('Roadway Percentage Covered (%)')
         ax1b.set_ylabel(f'{metric} (m)')
         ax1b.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - All Data)\n({poly_name})')
