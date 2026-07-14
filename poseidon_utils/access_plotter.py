@@ -83,7 +83,7 @@ if args.sensor and os.path.exists(args.sensor):
         sensor_df['SensorDepth_m'] = sensor_df['road_water_level_adj'] * 0.3048
         
         # Clamp negative sensor depths to 0.0 to match surface-only camera observations
-        #sensor_df['SensorDepth_m'] = sensor_df['SensorDepth_m'].clip(lower=0.0)
+        sensor_df['SensorDepth_m'] = sensor_df['SensorDepth_m'].clip(lower=0.0)
         
         # Parse datetime strictly as UTC to match image times safely
         sensor_df['datetime_utc'] = pd.to_datetime(sensor_df['date'], errors='coerce', utc=True)
@@ -322,8 +322,8 @@ for poly_name, files in polygon_files.items():
             ax1c.axhline(y=0.38, color=coastal_colors['erosion_rust']['base'], linestyle='-', linewidth=2, alpha=0.9, label='Car Floatation (38 cm)')
 
             ax1c.set_xlabel('Roadway Percentage Covered (%)')
-            ax1c.set_ylabel(f'{metric} (m)')
-            ax1c.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - Good Seg. Only)\n({poly_name})')
+            ax1c.set_ylabel(f'Maximum Depth on Roadway (m)')
+            # ax1c.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - Good Seg. Only)\n({poly_name})')
             ax1c.grid(False)
             
             # Clean up the legend 
