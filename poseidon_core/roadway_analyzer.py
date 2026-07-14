@@ -229,19 +229,20 @@ class RoadwayAnalyzer:
         in_backend = zarr.storage.ZipStore(in_zip_path, mode="r")
         in_root = zarr.open_group(store=in_backend, mode="r")
         
-        target_suffix = f"depth_map_{self.statistic}"
+        target_suffix = f"wse_map_{self.statistic}"
         
         # Look specifically FOR the wse_map files
         file_names = sorted([
             f for f in in_root.keys() 
-            if f.endswith(target_suffix) and "wse_map" in f
+            if f.endswith(target_suffix)
         ])
         
         num_files = len(file_names)
         if num_files == 0:
+            _log(f"No WSE maps found matching suffix '{target_suffix}'")
             in_backend.close()
             return
-
+        
         roi_wse_array = np.empty((num_files, len(self.roi_coords)), dtype=np.float32)
         timestamp_list = []
 
