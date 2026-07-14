@@ -427,7 +427,8 @@ for poly_name, files in polygon_files.items():
                     
                     img_wse = plot7_df[wse_metric].values
                     # Clip the sensor WSE at a lower bound of 0.92m
-                    sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.49).values
+                    sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.92).values # CB
+                    # sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.49).values # DE
                     cov = plot7_df['Coverage'].values
                     
                     # Less extreme size scaling
