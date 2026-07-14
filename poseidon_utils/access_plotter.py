@@ -8,6 +8,7 @@ import re
 from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit, minimize
 from matplotlib.colors import LinearSegmentedColormap
+import cmocean
 
 # --- Define Mathematical Models ---
 def logistic_curve(x, L, k, x0):
@@ -377,8 +378,8 @@ for poly_name, files in polygon_files.items():
                 # Less extreme size scaling
                 sizes = 40 + (cov / 100) * 100
                 
-                # Dynamic size, custom blue colormap
-                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=sizes, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
+                # Dynamic size, cmocean deep colormap
+                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=sizes, cmap=cmocean.cm.deep, alpha=0.8, edgecolors='k', linewidth=0.5)
                 
                 # Establish boundaries with a small buffer
                 min_val = min(img_depths.min(), sens_depths.min()) - 0.05
@@ -432,8 +433,8 @@ for poly_name, files in polygon_files.items():
                     # Less extreme size scaling
                     sizes = 40 + (cov / 100) * 100
                     
-                    # Dynamic size, custom blue colormap
-                    scatter = ax7.scatter(sens_wse, img_wse, c=cov, s=sizes, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
+                    # Dynamic size, cmocean deep colormap
+                    scatter = ax7.scatter(sens_wse, img_wse, c=cov, s=sizes, cmap=cmocean.cm.deep, alpha=0.8, edgecolors='k', linewidth=0.5)
                     
                     min_val = min(img_wse.min(), sens_wse.min()) - 0.05
                     max_val = max(img_wse.max(), sens_wse.max()) + 0.05
