@@ -374,12 +374,18 @@ for poly_name, files in polygon_files.items():
                 sens_depths = plot6_df['SensorDepth_m'].values
                 cov = plot6_df['Coverage'].values
                 
-                # Constant size, custom blue colormap
-                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=60, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
+                # Less extreme size scaling
+                sizes = 40 + (cov / 100) * 100
+                
+                # Dynamic size, custom blue colormap
+                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=sizes, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
                 
                 # Establish boundaries with a small buffer
                 min_val = min(img_depths.min(), sens_depths.min()) - 0.05
                 max_val = max(img_depths.max(), sens_depths.max()) + 0.05
+                
+                # 1:1 Line
+                ax6.plot([min_val, max_val], [min_val, max_val], color=OI_BLACK, linestyle='--', linewidth=2, label='1:1 Line')
                 
                 # Linear Trend Line
                 if len(plot6_df) > 1:
@@ -423,11 +429,17 @@ for poly_name, files in polygon_files.items():
                     sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.92).values
                     cov = plot7_df['Coverage'].values
                     
-                    # Constant size, custom blue colormap
-                    scatter = ax7.scatter(sens_wse, img_wse, c=cov, s=60, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
+                    # Less extreme size scaling
+                    sizes = 40 + (cov / 100) * 100
+                    
+                    # Dynamic size, custom blue colormap
+                    scatter = ax7.scatter(sens_wse, img_wse, c=cov, s=sizes, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
                     
                     min_val = min(img_wse.min(), sens_wse.min()) - 0.05
                     max_val = max(img_wse.max(), sens_wse.max()) + 0.05
+                    
+                    # 1:1 Line
+                    ax7.plot([min_val, max_val], [min_val, max_val], color=OI_BLACK, linestyle='--', linewidth=2, label='1:1 Line')
                     
                     # Linear Trend Line
                     if len(plot7_df) > 1:
