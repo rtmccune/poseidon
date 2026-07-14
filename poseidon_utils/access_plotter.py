@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import re
 from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit, minimize
+from matplotlib.colors import LinearSegmentedColormap
 
 # --- Define Mathematical Models ---
 def logistic_curve(x, L, k, x0):
@@ -128,6 +129,11 @@ coastal_colors = {
     'dune_gold':    {'light': '#F4E1B3', 'base': '#E9C46A', 'dark': '#9A7822'},
     'concrete_slate':{'light': '#A3AEB4', 'base': '#5C6B73', 'dark': '#2D3539'}
 }
+
+blue_colors = [coastal_colors['oceanic_blue']['light'], 
+               coastal_colors['oceanic_blue']['base'], 
+               coastal_colors['oceanic_blue']['dark']]
+coastal_blues_cmap = LinearSegmentedColormap.from_list('coastal_blues', blue_colors)
 
 # --- 2. Data Processing and Plotting ---
 for poly_name, files in polygon_files.items():
@@ -351,6 +357,11 @@ for poly_name, files in polygon_files.items():
         elif len(good_timestamps) > 0:
             print(f"Not enough 'good' segmentation points to generate plot 1c for {poly_name} - {metric}.")
 
+        # --- Format Prettier Labels ---
+        pretty_metric = metric.replace('MaxDepth', 'Maximum Depth') \
+                              .replace('MeanDepth', 'Mean Depth') \
+                              .replace('MedianDepth', 'Median Depth')
+
         # --- Plot 6: 1:1 Sensor vs Image Depth (Good Segmentations Only) ---
         if sensor_df_clean is not None and 'SensorDepth_m' in combined_df.columns:
             # Filter for green points, then drop any rows missing Depth, Sensor Depth, or Coverage
@@ -363,20 +374,14 @@ for poly_name, files in polygon_files.items():
                 sens_depths = plot6_df['SensorDepth_m'].values
                 cov = plot6_df['Coverage'].values
                 
-                # Scale sizes linearly: 0% coverage -> size 20, 100% coverage -> size 200
-                sizes = 20 + (cov / 100) * 180
+                # Constant size, custom blue colormap
+                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=60, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
                 
-                # Cividis colormap (colorblind friendly) scaled by Coverage. AXES SWAPPED: X=Sensor, Y=Image
-                scatter = ax6.scatter(sens_depths, img_depths, c=cov, s=sizes, cmap='cividis', alpha=0.8, edgecolors='k', linewidth=0.5)
-                
-                # Establish 1:1 square boundaries with a small buffer
+                # Establish boundaries with a small buffer
                 min_val = min(img_depths.min(), sens_depths.min()) - 0.05
                 max_val = max(img_depths.max(), sens_depths.max()) + 0.05
                 
-                # 1:1 Line
-                ax6.plot([min_val, max_val], [min_val, max_val], color=OI_BLACK, linestyle='--', linewidth=2, label='1:1 Line')
-                
-                # Linear Trend Line (wrapped in a try-except block for ultimate safety)
+                # Linear Trend Line
                 if len(plot6_df) > 1:
                     try:
                         m, b = np.polyfit(sens_depths, img_depths, 1)
@@ -390,8 +395,7 @@ for poly_name, files in polygon_files.items():
                 ax6.set_aspect('equal', adjustable='box')
                 
                 ax6.set_xlabel('In-Situ Sensor Depth (m)')
-                ax6.set_ylabel(f'Image Derived {metric} (m)')
-                ax6.set_title(f'Image {metric} vs Sensor Depth\n({poly_name})')
+                ax6.set_ylabel(f'Image Derived {pretty_metric} (m)')
                 ax6.grid(True, linestyle='--', alpha=0.7)
                 
                 # Add Colorbar for Coverage
@@ -406,6 +410,7 @@ for poly_name, files in polygon_files.items():
         # --- Plot 7: 1:1 Sensor vs Image WSE (Good Segmentations Only) ---
         if sensor_df_clean is not None and 'SensorWSE_m' in combined_df.columns:
             wse_metric = metric.replace('Depth', 'WSE')
+            pretty_wse = pretty_metric.replace('Depth', 'WSE')
             
             if wse_metric in combined_df.columns:
                 plot7_df = combined_df[combined_df['PointColor'] == 'green'].dropna(subset=[wse_metric, 'SensorWSE_m', 'Coverage']).copy()
@@ -414,18 +419,17 @@ for poly_name, files in polygon_files.items():
                     fig7, ax7 = plt.subplots(figsize=(8, 8), dpi=300)
                     
                     img_wse = plot7_df[wse_metric].values
-                    sens_wse = plot7_df['SensorWSE_m'].values
+                    # Clip the sensor WSE at a lower bound of 0.92m
+                    sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.92).values
                     cov = plot7_df['Coverage'].values
                     
-                    sizes = 20 + (cov / 100) * 180
-                    
-                    scatter = ax7.scatter(sens_wse, img_wse, c=cov, s=sizes, cmap='viridis', alpha=0.8, edgecolors='k', linewidth=0.5)
+                    # Constant size, custom blue colormap
+                    scatter = ax7.scatter(sens_wse, img_wse, c=cov, s=60, cmap=coastal_blues_cmap, alpha=0.8, edgecolors='k', linewidth=0.5)
                     
                     min_val = min(img_wse.min(), sens_wse.min()) - 0.05
                     max_val = max(img_wse.max(), sens_wse.max()) + 0.05
                     
-                    ax7.plot([min_val, max_val], [min_val, max_val], color=OI_BLACK, linestyle='--', linewidth=2, label='1:1 Line')
-                    
+                    # Linear Trend Line
                     if len(plot7_df) > 1:
                         try:
                             m, b = np.polyfit(sens_wse, img_wse, 1)
@@ -439,8 +443,7 @@ for poly_name, files in polygon_files.items():
                     ax7.set_aspect('equal', adjustable='box')
                     
                     ax7.set_xlabel('In-Situ Sensor WSE (m)')
-                    ax7.set_ylabel(f'Image Derived {wse_metric} (m)')
-                    ax7.set_title(f'Image {wse_metric} vs Sensor WSE\n({poly_name})')
+                    ax7.set_ylabel(f'Image Derived {pretty_wse} (m)')
                     ax7.grid(True, linestyle='--', alpha=0.7)
                     
                     cbar = fig7.colorbar(scatter, ax=ax7, fraction=0.046, pad=0.04)
