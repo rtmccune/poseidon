@@ -88,14 +88,16 @@ if args.sensor and os.path.exists(args.sensor):
         # Parse datetime strictly as UTC to match image times safely
         sensor_df['datetime_utc'] = pd.to_datetime(sensor_df['date'], errors='coerce', utc=True)
         
+        # --- FIXED: Calculate WSE BEFORE creating sensor_df_clean ---
+        if 'sensor_water_level_adj' in sensor_df.columns: 
+            sensor_df['SensorWSE_m'] = sensor_df['sensor_water_level_adj'] * 0.3048
+        # ------------------------------------------------------------
+        
         # Drop NaNs and ensure the dataframe is sorted by time (required for merge_asof)
         sensor_df_clean = sensor_df.dropna(subset=['datetime_utc', 'SensorDepth_m']).sort_values('datetime_utc')
         print(f"Loaded {len(sensor_df_clean)} valid sensor readings.")
     else:
         print("Warning: 'road_water_level_adj' column not found in sensor data.")
-        
-    if 'sensor_water_level_adj' in sensor_df.columns: 
-        sensor_df['SensorWSE_m'] = sensor_df['sensor_water_level_adj'] * 0.3048
 
 csv_pattern = os.path.join(base_dir, '*', '*_accessibility_time_series.csv')
 csv_files = glob.glob(csv_pattern)
