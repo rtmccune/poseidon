@@ -339,7 +339,7 @@ for poly_name, files in polygon_files.items():
                 print(f"Logistic fit failed for {metric} (Good Only): {e}")
 
             # Warning Threshold: Car Floatation Line in Rust
-            ax1c.axhline(y=0.38, color=coastal_colors['erosion_rust']['base'], linestyle='-', linewidth=2, alpha=0.9, label='Car Floatation (38 cm)')
+            # ax1c.axhline(y=0.38, color=coastal_colors['erosion_rust']['base'], linestyle='-', linewidth=2, alpha=0.9, label='Car Floatation (38 cm)')
 
             ax1c.set_xlabel('Roadway Percentage Covered (%)')
             ax1c.set_ylabel(f'Maximum Depth on Roadway (m)')
@@ -427,8 +427,8 @@ for poly_name, files in polygon_files.items():
                     
                     img_wse = plot7_df[wse_metric].values
                     # Clip the sensor WSE at a lower bound of 0.92m
-                    sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.92).values # CB
-                    # sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.49).values # DE
+                    # sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.92).values # CB
+                    sens_wse = plot7_df['SensorWSE_m'].clip(lower=0.49).values # DE
                     cov = plot7_df['Coverage'].values
                     
                     # Less extreme size scaling
