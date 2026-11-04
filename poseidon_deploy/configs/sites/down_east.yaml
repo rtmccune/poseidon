@@ -1,0 +1,68 @@
+# Down East monitoring site (camera CAM_DE_01).
+#
+# Single source of truth for site-specific values used by the HPC
+# drivers in poseidon_deploy/naiads. Paths are relative to the
+# repository root unless absolute.
+
+name: down_east               # also the shared grid descriptor
+sensor_id: DE_01              # SDFP sensor ID; camera is CAM_DE_01
+crs: EPSG:32119               # NAD83 / North Carolina (meters)
+
+# Camera location (decimal degrees) for sun-position image filtering.
+# Not yet recorded for this site: set before running 01_filter_images,
+# or pass --lat/--lon to run_image_filter.py.
+latitude: null
+longitude: null
+
+# Rectification grid bounds (site CRS, meters) and spacing (meters).
+# These match the virtual sensor pixels below. A smaller clip
+# (847895-847960, 127352-127422) is being trialled in notebooks; if
+# adopted, the virtual sensor pixels must be recomputed for it.
+grid:
+  min_x: 847809.694
+  max_x: 847973.874
+  min_y: 127254.634
+  max_y: 127450.141
+  resolution: 0.05
+
+lidar_file: data/lidar/down_east.laz
+lidar_units: meters           # units of the LiDAR point coordinates
+basemap: data/basemaps/DE_01_basemap.tif
+
+# Roadway region of interest (LabelMe JSON drawn on a rectified image).
+roi_json: data/transects/shell_hill_rd_polygon.json
+
+# Lowest in-situ sensor WSE (m) shown in image/sensor comparison plots.
+sensor_wse_floor: 0.49
+
+# CIRN intrinsics for the SuDS camera model.
+intrinsics:
+  - 3040        # number of pixel columns (NU)
+  - 4056        # number of pixel rows (NV)
+  - 1503.0136   # principal point U (c0U)
+  - 2163.4301   # principal point V (c0V)
+  - 2330.4972   # focal length U (fx)
+  - 2334.0017   # focal length V (fy)
+  - -0.3587     # radial distortion d1
+  - 0.1388      # radial distortion d2
+  - -0.0266     # radial distortion d3
+  - -0.0046     # tangential distortion t1
+  - 0.0003      # tangential distortion t2
+
+# Camera pose in the site CRS (meters, radians).
+extrinsics:
+  - 847955.4296   # camera x
+  - 127408.728    # camera y
+  - 4.4922        # camera elevation
+  - 4.38504       # azimuth
+  - 1.14484       # tilt
+  - 0.01305       # swing (roll)
+
+# Virtual sensor locations as [column, row] grid pixels, row 0 at the
+# southern (minimum y) edge of the grid.
+virtual_sensors:
+  - [1610, 1847]
+  - [2682, 3176]
+  - [1756, 1990]
+  - [2120, 2414]
+  - [2556, 2928]

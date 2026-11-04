@@ -1,0 +1,44 @@
+# POSEIDON conda environment with GPU support (Linux + NVIDIA CUDA).
+# Create with: conda env create --file poseidon_deploy/environment/poseidon-env.yml
+name: poseidon
+channels:
+  - rapidsai
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  # Core numerics and image processing
+  - numpy
+  - scipy
+  - pandas
+  - scikit-image
+  - opencv
+  - zarr>=3
+  - pyyaml
+  # GPU acceleration (optional; POSEIDON falls back to the CPU)
+  - cudatoolkit=11.2
+  - cupy
+  - cucim
+  # LiDAR
+  - laspy
+  - lazrs-python   # .laz decompression backend for laspy
+  - pdal           # command-line point cloud preprocessing
+  # Geospatial plotting
+  - matplotlib
+  - cmocean
+  - rioxarray
+  - svgpath2mpl
+  - geopandas      # exploratory notebooks
+  - contextily     # exploratory notebooks
+  # Data access
+  - requests
+  - pyarrow        # Parquet cache of raw SDFP data
+  - astral         # sun position for daylight image filtering
+  # C++ executables (poseidon_utils/src)
+  - cxx-compiler
+  - c-compiler
+  # Notebooks and development
+  - jupyter
+  - pytest
+  - pytest-cov
+  - ruff

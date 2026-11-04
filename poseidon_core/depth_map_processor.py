@@ -1,665 +1,392 @@
-import os
-import logging
-import zarr
-import cupy as cp
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
-from cucim.skimage.measure import label
-from cucim.skimage.morphology import binary_closing
-from cucim.skimage.segmentation import find_boundaries
+"""Estimate water surface elevation and depth from rectified water masks.
 
+For each rectified label image, connected water regions ("ponds") are
+identified and their waterline is taken to be the pond's inner
+boundary: pond pixels that touch a non-pond neighbor. The water
+surface elevation (WSE) of a pond is a statistic (mean, median, 90th
+or 95th percentile) of the ground elevation along that waterline, and
+depth is the WSE minus the ground elevation inside the pond, floored
+at zero.
+
+Runs on the GPU with CuPy/cuCIM when available and falls back to
+NumPy/scikit-image otherwise.
+"""
+
+import logging
+import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from poseidon_utils.logging_utils import progress_interval, should_report
+from poseidon_utils.zarr_io import (
+    array_names,
+    open_zip_group,
+    write_array,
+    write_zip_group,
+)
+
+from .backend import get_xp, resolve_use_gpu, to_numpy
 
 logger = logging.getLogger(__name__)
+
+#: Waterline statistics computed for every pond, by map-name suffix.
+STATISTICS = {
+    "mean": np.mean,
+    "median": np.median,
+    "95_perc": lambda values: np.percentile(values, 95),
+    "90_perc": lambda values: np.percentile(values, 90),
+}
+
+
+def _image_ops(use_gpu):
+    """
+    Return the labeling and morphology functions for a backend.
+
+    Parameters
+    ----------
+    use_gpu : bool
+        True for cuCIM (GPU), False for scikit-image (CPU).
+
+    Returns
+    -------
+    label : callable
+        Connected-component labeling.
+    binary_closing : callable
+        Binary morphological closing.
+    find_boundaries : callable
+        Label boundary detection.
+    """
+    if use_gpu:
+        from cucim.skimage.measure import label
+        from cucim.skimage.morphology import binary_closing
+        from cucim.skimage.segmentation import find_boundaries
+    else:
+        from skimage.measure import label
+        from skimage.morphology import binary_closing
+        from skimage.segmentation import find_boundaries
+    return label, binary_closing, find_boundaries
 
 
 class DepthMapProcessor:
     """
-    A class for identifying, analyzing, and visualizing water depth.
+    Compute WSE and depth maps from rectified segmentation labels.
 
-    This class operates on a 2D elevation grid and uses binary flood
-    masks to identify pond regions. It performs labeling of connected
-    ponds, extracts edge contours and elevation data, computes pond
-    water depths, and visualizes edge elevation distributions.
+    Parameters
+    ----------
+    elevation_grid : array_like
+        2-D ground elevation grid (meters) matching the rectified
+        label images.
+    plot_edges : bool, optional
+        Save waterline elevation histograms for every image. Default
+        is True.
+    use_gpu : bool or None, optional
+        True for CuPy, False for NumPy, None to use the GPU when
+        available. Default is None.
+    min_pond_size : int, optional
+        Ponds smaller than this many pixels are discarded. Default 55.
+    water_class : int, optional
+        Label value that marks water. Default is 1.
+    pond_edge_elev_plot_dir : str, optional
+        Default output folder for histograms. Default is
+        ``"data/edge_histograms"``.
+    hist_range : tuple of float, optional
+        Elevation range (meters) of histogram bins and axes. Default
+        is ``(0, 2)``.
 
     Attributes
     ----------
-    elev_grid : numpy.ndarray
-        A 2D NumPy array representing elevation values across a spatial
-        grid.
-    elev_grid_cp : cupy.ndarray
-        A 2D CuPy array (GPU) of the elevation grid.
-    plot_edges : bool
-        Flag indicating whether to generate and save pond edge
-        elevation plots.
+    elev_grid : numpy.ndarray or cupy.ndarray
+        Elevation grid on the active backend.
     """
 
-    def __init__(
-        self,
-        elevation_grid,
-        plot_edges=True,
-    ):
-        """Initialize the object with an elevation grid.
-
-        Parameters
-        ----------
-        elevation_grid : numpy.ndarray
-            A 2D array representing elevation values, where each element
-            corresponds to an elevation at a specific grid point.
-        plot_edges : bool, optional
-            If True (default), plots of pond edge elevations will be
-            generated and saved.
+    def __init__(self, elevation_grid, plot_edges=True, use_gpu=None,
+                 min_pond_size=55, water_class=1,
+                 pond_edge_elev_plot_dir="data/edge_histograms",
+                 hist_range=(0, 2)):
         """
-        self.elev_grid = elevation_grid
-        self.elev_grid_cp = cp.array(self.elev_grid)
-        self.plot_edges = plot_edges
-        # Default histogram folder so single-image calls can plot too
-        self.pond_edge_elev_plot_dir = "data/edge_histograms"
-
-    def process_single_depth_map(self, array, file_name):
-        """Processes a Zarr store and computes depth maps.
+        Store the elevation grid and processing options.
 
         Parameters
         ----------
-        zarr_store_path : str
-            Path to the Zarr store containing the rectified image
-            label array.
+        elevation_grid : array_like
+            2-D ground elevation grid (meters).
+        plot_edges : bool, optional
+            Save waterline elevation histograms. Default is True.
+        use_gpu : bool or None, optional
+            Backend choice; see the class docstring. Default is None.
+        min_pond_size : int, optional
+            Minimum pond size in pixels. Default is 55.
+        water_class : int, optional
+            Label value that marks water. Default is 1.
+        pond_edge_elev_plot_dir : str, optional
+            Default histogram folder. Default ``"data/edge_histograms"``.
+        hist_range : tuple of float, optional
+            Histogram elevation range in meters. Default ``(0, 2)``.
+        """
+        self.use_gpu = resolve_use_gpu(use_gpu)
+        self.xp = get_xp(self.use_gpu)
+        self.elev_grid = self.xp.asarray(elevation_grid, dtype=float)
+        self.plot_edges = plot_edges
+        self.min_pond_size = min_pond_size
+        self.water_class = water_class
+        self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
+        self.hist_range = hist_range
+        self._label, self._closing, self._boundaries = _image_ops(
+            self.use_gpu)
+
+    def process_single_depth_map(self, label_array, file_name):
+        """
+        Compute every WSE and depth map for one rectified label image.
+
+        Parameters
+        ----------
+        label_array : array_like
+            Rectified labels, shape ``(rows, cols)`` or
+            ``(rows, cols, 1)``.
         file_name : str
-            Name of the file being processed.
+            Base name used for output map names and histogram files.
 
         Returns
         -------
-        list[dict]
-            A list of dictionaries, each containing:
-            - 'image_name' (str): The name of the processed depth map.
-            - 'depth_map' (cp.ndarray): The computed depth map.
+        dict of str to array
+            Maps named ``<file_name>_wse_map_<stat>`` and
+            ``<file_name>_depth_map_<stat>`` for each statistic in
+            :data:`STATISTICS`. Cells outside any pond are NaN.
         """
-        gpu_label_array = cp.array(array)
-        labeled_data = self._label_ponds(gpu_label_array)
-        contour_pixels_per_pond, contour_values_per_pond = self._extract_contours(labeled_data, gpu_label_array)
+        labels = self._label_ponds(self.xp.asarray(label_array))
+        edge_elevs = self._extract_edge_elevations(labels)
 
         if self.plot_edges:
-            self._plot_pond_edge_elevations(labeled_data, contour_values_per_pond, file_name)
+            self._plot_pond_edge_elevations(edge_elevs, file_name)
 
-        all_maps = self._calculate_all_depths(labeled_data, contour_values_per_pond)
+        maps = self._calculate_all_depths(labels, edge_elevs)
+        return {f"{file_name}_{suffix}": array
+                for suffix, array in maps.items()}
 
-        depth_data = []
-        for map_name_suffix, map_array in all_maps.items():
-            depth_data.append({
-                "image_name": f"{file_name}_{map_name_suffix}",
-                "depth_map": map_array,
-            })
-        return depth_data
-
-    def process_depth_maps(
-        self,
-        labels_zarr_zip_path,
-        depth_map_zarr_zip_path,
-        pond_edge_elev_plot_dir="data/edge_histograms",
-    ):
-        """Creates and saves depth maps as zarr arrays with logging.
-
-        Given a zarr directory containing rectified labels, this method
-        processes each file and saves the resulting depth maps to the
-        destination directory. Logs progress and errors.
+    def process_depth_maps(self, labels_zarr_zip_path,
+                           depth_map_zarr_zip_path,
+                           pond_edge_elev_plot_dir=None):
+        """
+        Compute depth maps for every label array in a ZIP Zarr store.
 
         Parameters
         ----------
-        labels_zarr_dir : str
-            Path to zarr directory containing rectified labels.
-        depth_map_zarr_dir : str
-            Path to the directory where processed depth maps will be
-            saved.
+        labels_zarr_zip_path : str or os.PathLike
+            Input store of rectified label arrays.
+        depth_map_zarr_zip_path : str or os.PathLike
+            Output store; replaced if it already exists.
         pond_edge_elev_plot_dir : str, optional
-            The base directory path to save plots. Defaults to
-            'data/edge_histograms'.
+            Histogram folder for this run. Default keeps the folder set
+            at initialization.
 
         Returns
         -------
-        None
+        int
+            Number of label arrays processed successfully.
         """
-        self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
+        if pond_edge_elev_plot_dir is not None:
+            self.pond_edge_elev_plot_dir = pond_edge_elev_plot_dir
 
-        logger.info("\n=== Starting Depth Map Generation ===")
-        logger.info(f"  Source Zarr Zip: {labels_zarr_zip_path}")
-        logger.info(f"  Output Zarr Zip: {depth_map_zarr_zip_path}")
+        if not os.path.exists(labels_zarr_zip_path):
+            logger.error("Label store not found: %s", labels_zarr_zip_path)
+            return 0
 
-        # 1. Open the Source ZipStore
-        try:
-            # Explicitly define the ZipStore backend for reading
-            in_store_backend = zarr.storage.ZipStore(labels_zarr_zip_path, mode="r")
-            in_store = zarr.open_group(store=in_store_backend, mode="r")
-        except Exception as e:
-            logger.error(f"  ERROR: Could not read source ZipStore at {labels_zarr_zip_path}. {e}")
-            return
+        logger.info("Computing depth maps: %s -> %s",
+                    labels_zarr_zip_path, depth_map_zarr_zip_path)
+        with open_zip_group(labels_zarr_zip_path) as in_group:
+            names = array_names(in_group)
+            if not names:
+                logger.warning("No label arrays in %s; nothing written.",
+                               labels_zarr_zip_path)
+                return 0
 
-        # 2. Open the Output ZipStore
-        try:
-            # mode="w" starts a fresh archive so reruns replace old maps
-            out_store_backend = zarr.storage.ZipStore(depth_map_zarr_zip_path, mode="w")
-            out_store = zarr.group(store=out_store_backend)
-        except Exception as e:
-            logger.error(f"  ERROR: Could not create output ZipStore at {depth_map_zarr_zip_path}. {e}")
-            return
+            total = len(names)
+            interval = progress_interval(total)
+            processed = 0
+            with write_zip_group(depth_map_zarr_zip_path) as out_group:
+                for i, name in enumerate(names):
+                    if should_report(i, total, interval):
+                        logger.info("  Label array %d/%d: %s",
+                                    i + 1, total, name)
+                    try:
+                        maps = self.process_single_depth_map(
+                            in_group[name][:], name)
+                    except Exception:  # noqa: BLE001 - keep the batch going
+                        logger.exception("  Failed on %s; skipping.", name)
+                        continue
+                    for map_name, array in maps.items():
+                        write_array(out_group, map_name, to_numpy(array))
+                    processed += 1
 
-        # Get list of datasets from the input zip
-        files_to_process = list(in_store.keys())
-        total_files = len(files_to_process)
+        logger.info("Processed %d/%d label arrays.", processed, total)
+        return processed
 
-        if total_files == 0:
-            logger.warning("  WARNING: No label datasets found in source ZipStore.")
-            out_store_backend.close()
-            return
+    def _label_ponds(self, label_array):
+        """
+        Label connected water regions and drop small ones.
 
-        logger.info(f"  Found {total_files} label arrays to process.")
-        report_interval = max(1, total_files // 10)
-        processed_count = 0
-
-        for i, file_name in enumerate(files_to_process):
-            if ((i + 1) % report_interval == 0 or i == 0 or (i + 1) == total_files):
-                logger.info(f"  Processing file {i + 1}/{total_files}: {file_name}")
-
-            try:
-                # Load the label array into memory
-                label_array = in_store[file_name][:]
-                
-                # Compute the depths
-                depth_data = self.process_single_depth_map(label_array, file_name)
-                
-                # Save each map directly to the output ZipStore (No Pandas DF needed!)
-                for map_dict in depth_data:
-                    out_name = map_dict["image_name"]
-                    out_array = map_dict["depth_map"].get() # Port from GPU to CPU
-                    
-                    out_store.create_array(
-                        out_name, 
-                        data=out_array, 
-                        chunks=out_array.shape, # Zarr v3 shape requirement
-                        overwrite=True
-                    )
-                processed_count += 1
-            except Exception as e:
-                logger.error(f"  ERROR: Failed to process or save depth map for {file_name}. {e}")
-                continue
-
-        # CRITICAL: Close the output zip archive
-        out_store_backend.close()
-        in_store_backend.close()
-
-        logger.info(f"  Successfully processed {processed_count}/{total_files} files.")
-        logger.info("=== Depth Map Generation Complete ===")
-
-    def _label_ponds(self, gpu_label_array):
-        """Labels and processes pond regions efficiently using a LUT.
-
-        This function takes a binary array indicating pond regions,
-        applies morphological operations, labels connected regions,
-        and removes small ponds below a size threshold.
-
-        It performs the filtering and relabeling in a single pass
-        using a lookup table (LUT) to avoid a second, expensive
-        call to `label()`.
+        A 3x3 binary closing joins water pixels split by thin gaps
+        before 8-connected labeling. Ponds below ``min_pond_size``
+        pixels are removed and the rest renumbered 1..N with a lookup
+        table, avoiding a second labeling pass.
 
         Parameters
         ----------
-        gpu_label_array : cp.ndarray
-            A CuPy array where pond regions are marked as 1.
+        label_array : numpy.ndarray or cupy.ndarray
+            Rectified labels on the active backend.
 
         Returns
         -------
-        cp.ndarray
-            A labeled CuPy array where each connected pond has a unique,
-            contiguous integer ID.
+        numpy.ndarray or cupy.ndarray
+            Integer pond IDs, 0 for background.
         """
-        labels_squeezed = gpu_label_array.squeeze()
-        water_mask = labels_squeezed == 1
-        masked_labels = water_mask.astype(cp.uint8)
+        xp = self.xp
+        water = label_array.squeeze() == self.water_class
+        closed = self._closing(water, footprint=xp.ones((3, 3), dtype=bool))
+        labeled, n_ponds = self._label(closed, return_num=True)
+        if n_ponds == 0:
+            return labeled
 
-        closed_data = binary_closing(
-            masked_labels, footprint=cp.ones((3, 3), dtype=cp.uint8)
-        )
+        sizes = xp.bincount(labeled.ravel(), minlength=n_ponds + 1)
+        all_ids = xp.arange(n_ponds + 1)
+        kept_ids = all_ids[(sizes >= self.min_pond_size) & (all_ids != 0)]
 
-        # First and only label call
-        labeled_data, num_features = label(closed_data, return_num=True)
+        # Map kept IDs to 1..N; small ponds and background map to 0
+        lookup = xp.zeros(n_ponds + 1, dtype=xp.int32)
+        lookup[kept_ids] = xp.arange(1, kept_ids.size + 1, dtype=xp.int32)
+        return lookup[labeled]
 
-        # Handle edge case where no ponds are found
-        if num_features == 0:
-            return labeled_data
+    def _extract_edge_elevations(self, labels):
+        """
+        Collect finite ground elevations along each pond's waterline.
 
-        # Use bincount (faster than unique)
-        # Get the size (pixel count) for each label ID.
-        # Note: labeled_data.ravel() is required as bincount needs a
-        # 1D array.
-        # We use minlength to ensure the counts array is large enough.
-        counts = cp.bincount(labeled_data.ravel(), minlength=num_features + 1)
-
-        # Identify large ponds
-        min_size = 55
-        # Find the *original* label IDs that we want to keep.
-        # We use cp.arange to get the label IDs and exclude label 0
-        # (background).
-        all_labels = cp.arange(num_features + 1, dtype=cp.int32)
-        large_ponds = all_labels[(counts >= min_size) & (all_labels != 0)]
-
-        # Create the Lookup Table (LUT)
-        # This array will map old labels to new, contiguous labels.
-        # Initialize a mapper array full of zeros.
-        # The size is (num_features + 1) to map all possible old labels.
-        lut = cp.zeros(num_features + 1, dtype=cp.int32)
-
-        # Create new, contiguous labels [1, 2, 3, ...]
-        new_labels = cp.arange(1, len(large_ponds) + 1, dtype=cp.int32)
-
-        # Populate the LUT: map old, large-pond IDs to the new labels.
-        # e.g., if large_ponds was [2, 5, 8], this maps:
-        # lut[2] = 1, lut[5] = 2, lut[8] = 3
-        # All other indices (like small ponds) will remain 0.
-        lut[large_ponds] = new_labels
-
-        # Apply the LUT
-        # This is a very fast GPU operation.
-        # Every pixel in labeled_data has its value "looked up" in the
-        # lut.
-        # This one step both removes small ponds and relabels
-        # contiguously.
-        relabeled_data = lut[labeled_data]
-
-        return relabeled_data
-
-    def _extract_contours(self, labeled_data, gpu_label_array):
-        """Collect waterline pixels and their elevations for each pond.
-
-        The waterline is each pond's inner boundary: pond pixels with a
-        4-connected neighbor outside the pond. Elevations are read from
-        the elevation grid, and NaN elevations are dropped.
+        The waterline is the pond's inner boundary: pond pixels with at
+        least one 4-connected neighbor outside the pond. Pixels on the
+        grid border are not treated as waterline.
 
         Parameters
         ----------
-        labeled_data : cp.ndarray
-            A CuPy array where each pond is labeled with a unique
-            integer ID.
-        gpu_label_array : cp.ndarray
-            The original labeled dataset (unused; kept for the API).
+        labels : numpy.ndarray or cupy.ndarray
+            Pond IDs from :meth:`_label_ponds`.
 
         Returns
         -------
-        contour_pixels_per_pond : dict[int, np.ndarray]
-            A dictionary mapping each pond ID to an (N, 2) array of its
-            waterline pixel coordinates.
-        contour_values_per_pond : dict[int, np.ndarray]
-            A dictionary mapping each pond ID to the finite elevations
-            at its waterline pixels.
+        dict of int to numpy.ndarray
+            Waterline elevations per pond ID. Ponds whose waterline
+            has no finite elevation are omitted.
         """
-        edges = find_boundaries(labeled_data, mode="inner") & (labeled_data > 0)
-        rows, cols = (cp.asnumpy(a) for a in cp.nonzero(edges))
-        pond_ids = cp.asnumpy(labeled_data[edges])
-        elevations = cp.asnumpy(self.elev_grid_cp[edges])
+        edges = self._boundaries(labels, mode="inner") & (labels > 0)
+        pond_ids = to_numpy(labels[edges])
+        elevations = to_numpy(self.elev_grid[edges])
+
         finite = np.isfinite(elevations)
+        pond_ids, elevations = pond_ids[finite], elevations[finite]
 
-        contour_pixels_per_pond = {}
-        contour_values_per_pond = {}
-        for pond_id in np.unique(pond_ids[finite]):
-            keep = finite & (pond_ids == pond_id)
-            contour_pixels_per_pond[pond_id] = np.column_stack(
-                (rows[keep], cols[keep]))
-            contour_values_per_pond[pond_id] = elevations[keep]
+        # Group elevations by pond with one sort instead of N masks
+        order = np.argsort(pond_ids, kind="stable")
+        pond_ids, elevations = pond_ids[order], elevations[order]
+        unique_ids, starts = np.unique(pond_ids, return_index=True)
+        groups = np.split(elevations, starts[1:])
+        return {int(pid): values for pid, values in zip(unique_ids, groups)}
 
-        return contour_pixels_per_pond, contour_values_per_pond
-
-    def _calculate_all_depths(self, labeled_data, contour_values_per_pond):
+    def _calculate_all_depths(self, labels, edge_elevs):
         """
-        Calculates all 8 depth/wse maps (4 methods, 2 formats) in one
-        pass.
-
-        This method loops through each pond ID *once*, computes all
-        required statistics (mean, median, 90/95th percentile) for its
-        contours, generates the 8 map fragments (4 stats * 2 formats)
-        for that pond, and collects them. Finally, it combines all
-        fragments into 8 complete maps.
+        Build WSE and depth maps for every statistic.
 
         Parameters
         ----------
-        labeled_data : cp.ndarray
-            A CuPy array where each pond is labeled with a unique
-            integer ID.
-        contour_values_per_pond : dict[int, np.ndarray]
-            A dictionary mapping each pond ID to an array of elevation
-            values at contour pixels.
+        labels : numpy.ndarray or cupy.ndarray
+            Pond IDs from :meth:`_label_ponds`.
+        edge_elevs : dict of int to numpy.ndarray
+            Waterline elevations per pond.
 
         Returns
         -------
-        dict[str, cp.ndarray]
-            A dictionary where keys are map name suffixes (e.g.,
-            'wse_map_mean', 'depth_map_95_perc') and values are the
-            corresponding combined CuPy depth maps.
+        dict of str to array
+            ``wse_map_<stat>`` and ``depth_map_<stat>`` arrays on the
+            active backend; NaN outside ponds with a valid waterline.
         """
-        # This will hold the map fragments, e.g.:
-        # { 'wse_map_mean': {1: pond_1_map, 2: pond_2_map}, ... }
-        pond_depth_collectors = {
-            "wse_map_mean": {},
-            "depth_map_mean": {},
-            "wse_map_95_perc": {},
-            "depth_map_95_perc": {},
-            "wse_map_90_perc": {},
-            "depth_map_90_perc": {},
-            "wse_map_median": {},
-            "depth_map_median": {},
-        }
+        xp = self.xp
+        n_ponds = int(labels.max()) if labels.size else 0
+        maps = {}
+        for suffix, statistic in STATISTICS.items():
+            # Per-pond WSE lookup; ID 0 (background) stays NaN
+            wse_by_id = np.full(n_ponds + 1, np.nan)
+            for pond_id, values in edge_elevs.items():
+                wse_by_id[pond_id] = statistic(values)
 
-        # --- GPU Data Prep ---
-        try:
-            gpu_contours = {
-                k: cp.array(v) for k, v in contour_values_per_pond.items()
-            }
-        except Exception as e:
-            logger.error(f"Error converting contour values to CuPy: {e}")
-            return {}  # Return empty on error
+            wse = xp.asarray(wse_by_id)[labels]
+            maps[f"wse_map_{suffix}"] = wse
+            maps[f"depth_map_{suffix}"] = xp.maximum(wse - self.elev_grid,
+                                                     0.0)
+        return maps
 
-        unique_pond_ids = cp.unique(labeled_data)
-
-        # Handle no ponds case
-        if len(unique_pond_ids) == 1 and unique_pond_ids[0] == 0:
-            final_maps = {}
-            empty_map = cp.full_like(self.elev_grid_cp, cp.nan)
-            for map_name in pond_depth_collectors.keys():
-                final_maps[map_name] = empty_map
-            return final_maps
-
-        unique_pond_ids_cpu = unique_pond_ids.get()
-
-        # --- SINGLE LOOP OVER PONDS ---
-        for pond_id_cpu in unique_pond_ids_cpu:
-            if pond_id_cpu == 0:  # Skip background
-                continue
-
-            if pond_id_cpu not in gpu_contours:
-                logger.warning(
-                    f"Warning: No contours found for pond_id {pond_id_cpu}. "
-                    f"Skipping depth calculation for this pond."
-                )
-                continue
-
-            pond_mask = labeled_data == pond_id_cpu
-            masked_elevations = cp.where(pond_mask, self.elev_grid_cp, cp.nan)
-            contour_vals_gpu = gpu_contours[pond_id_cpu]
-
-            # --- CALCULATE ALL 4 STATS AT ONCE ---
-            stats = {
-                "mean": cp.nanmean(contour_vals_gpu),
-                "median": cp.nanmedian(contour_vals_gpu),
-                "95_perc": cp.percentile(contour_vals_gpu, 95),
-                "90_perc": cp.percentile(contour_vals_gpu, 90),
-            }
-
-            # --- GENERATE ALL 8 MAP FRAGMENTS FOR THIS POND ---
-            for method, max_elevation in stats.items():
-                # WSE map
-                wse_map = cp.where(pond_mask, max_elevation, cp.nan)
-                pond_depth_collectors[f"wse_map_{method}"][
-                    pond_id_cpu
-                ] = wse_map
-
-                # Depth map
-                depth_map = masked_elevations - max_elevation
-                depth_map = cp.minimum(depth_map, 0)
-                depth_map = cp.abs(depth_map)
-                pond_depth_collectors[f"depth_map_{method}"][
-                    pond_id_cpu
-                ] = depth_map
-
-        # --- COMBINE ALL 8 MAPS ---
-        final_maps = {}
-        for map_name, pond_depths_dict in pond_depth_collectors.items():
-            final_maps[map_name] = self._combine_depth_maps(pond_depths_dict)
-
-        return final_maps
-
-    def _combine_depth_maps(self, pond_depths):
-        """Combines multiple pond depth maps into a single depth map.
+    def _plot_pond_edge_elevations(self, edge_elevs, file_name):
+        """
+        Save waterline elevation histograms per pond and combined.
 
         Parameters
         ----------
-        pond_depths : dict[int, cp.ndarray]
-            A dictionary where each key is a pond ID and the value is
-            the depth map for that pond.
-
-        Returns
-        -------
-        cp.ndarray
-            A combined depth map. Overlapping pond values are handled
-            using `cp.fmax` (the max value wins), and NaN values are
-            preserved in the background.
-        """
-        # Get a list of the actual map arrays from the dictionary
-        maps_to_combine = list(pond_depths.values())
-
-        # Handle the edge case where there are no ponds to combine
-        if not maps_to_combine:
-            # Return a grid full of NaNs with the same shape as the
-            # elevation grid
-            return cp.full_like(self.elev_grid_cp, cp.nan)
-
-        # Start with the first map in the list as the base
-        combined_map = maps_to_combine[0]
-
-        # Iterate through the rest of the maps in the list
-        for i in range(1, len(maps_to_combine)):
-            current_map = maps_to_combine[i]
-
-            # Use cp.fmax to combine. It handles NaNs nicely:
-            # - fmax(val, NaN) -> val
-            # - fmax(NaN, val) -> val
-            # - fmax(val1, val2) -> the larger value
-            combined_map = cp.fmax(combined_map, current_map)
-
-        return combined_map
-
-    def _plot_pond_edge_elevations(
-        self,
-        labeled_data,
-        contour_values_per_pond,
-        file_name,
-    ):
-        """
-        Orchestrates the plotting of edge elevation histograms.
-
-        This method prepares the data and directories, then calls
-        helper methods to plot histograms for individual ponds and
-        for all ponds combined.
-
-        Parameters
-        ----------
-        labeled_data : cp.ndarray
-            A CuPy array containing labeled pond segmentation data.
-        contour_values_per_pond : dict[int, np.ndarray]
-            A dictionary mapping pond IDs to NumPy arrays of
-            edge elevation values.
+        edge_elevs : dict of int to numpy.ndarray
+            Waterline elevations per pond.
         file_name : str
-            Base filename used for saving the plots.
-
-        Returns
-        -------
-        None
+            Base name for the saved figures.
         """
-        # Setup directories for all plots and individual pond plots
-        all_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "all_ponds")
-        ind_pond_dir = os.path.join(self.pond_edge_elev_plot_dir, "ind_ponds")
-        os.makedirs(all_pond_dir, exist_ok=True)
-        os.makedirs(ind_pond_dir, exist_ok=True)
-
-        bins = np.linspace(0, 2, 51)
-
-        # Extract and validate data
-        # We create a new dict of just the valid NumPy arrays
-        edge_elevs_by_pond = {}
-        unique_pond_ids = cp.unique(labeled_data).get()  # Get IDs on CPU
-
-        for pond_id in unique_pond_ids:
-            if pond_id == 0:  # Skip background
-                continue
-
-            pond_id_key = pond_id.item()
-            # Only add ponds that have corresponding contour data
-            if pond_id_key in contour_values_per_pond:
-                edge_elevs_by_pond[pond_id_key] = contour_values_per_pond[
-                    pond_id_key
-                ]
-            else:
-                logger.warning(
-                    f"Warning: No contours for pond_id {pond_id_key}. "
-                    f"Skipping plot."
-                )
-
-        # Check if there is anything to plot
-        if not edge_elevs_by_pond:
-            logger.warning(
-                f"No pond edge elevations found for {file_name}. "
-                f"Skipping all histograms."
-            )
+        if not edge_elevs:
+            logger.debug("No pond waterlines in %s; no histograms.",
+                         file_name)
             return
 
-        # Call helper to plot all individual ponds
-        self._plot_individual_histograms(
-            edge_elevs_by_pond, bins, ind_pond_dir, file_name
-        )
+        all_dir = os.path.join(self.pond_edge_elev_plot_dir, "all_ponds")
+        ind_dir = os.path.join(self.pond_edge_elev_plot_dir, "ind_ponds")
+        os.makedirs(all_dir, exist_ok=True)
+        os.makedirs(ind_dir, exist_ok=True)
+        bins = np.linspace(*self.hist_range, 51)
 
-        # Call helper to plot the single combined histogram
-        all_edge_elevs = np.concatenate(list(edge_elevs_by_pond.values()))
-        self._plot_combined_histogram(
-            all_edge_elevs, bins, all_pond_dir, file_name
-        )
+        for pond_id, values in edge_elevs.items():
+            self._plot_histogram(
+                values, bins, f"Elevation Histogram for Pond {pond_id}",
+                os.path.join(ind_dir, f"{file_name}_Pond_{pond_id}"),
+                color="lightblue")
 
-        return None
+        self._plot_histogram(
+            np.concatenate(list(edge_elevs.values())), bins,
+            "Elevation Histogram - All Ponds Combined",
+            os.path.join(all_dir, f"{file_name}_All_Ponds_Histogram"),
+            color="lightcoral")
 
-    def _plot_individual_histograms(
-        self, edge_elevs_by_pond, bins, output_dir, file_name_base
-    ):
+    def _plot_histogram(self, data, bins, title, save_path, color):
         """
-        Plots and saves one histogram for each pond.
+        Save one histogram with mean, median, and 95th percentile lines.
 
         Parameters
         ----------
-        edge_elevs_by_pond : dict[int, np.ndarray]
-            A dictionary mapping pond IDs to their edge elevation arrays.
-        bins : np.ndarray
-            The bins to use for the histogram.
-        output_dir : str
-            The directory path to save the plots.
-        file_name_base : str
-            The base name for the output plot files.
-        """
-        # Loop through each pond and call the generic plotting helper
-        for pond_id, elevs_np in edge_elevs_by_pond.items():
-            title = f"Elevation Histogram for Pond {pond_id}"
-            save_path = f"{output_dir}/{file_name_base}_Pond_{pond_id}"
-
-            self._plot_histogram_helper(
-                elevs_np, bins, title, save_path, color="lightblue"
-            )
-
-    def _plot_combined_histogram(
-        self, all_edge_elevs, bins, output_dir, file_name_base
-    ):
-        """
-        Plots and saves a single combined histogram for all ponds.
-
-        Parameters
-        ----------
-        all_edge_elevs : np.ndarray
-            A 1D array of all edge elevations from all ponds.
-        bins : np.ndarray
-            The bins to use for the histogram.
-        output_dir : str
-            The directory path to save the plot.
-        file_name_base : str
-            The base name for the output plot file.
-        """
-        # Create the title and save path for the combined plot
-        title = "Elevation Histogram - All Ponds Combined"
-        save_path = f"{output_dir}/{file_name_base}_All_Ponds_Histogram"
-
-        # Call the generic plotting helper with the combined data
-        self._plot_histogram_helper(
-            all_edge_elevs, bins, title, save_path, color="lightcoral"
-        )
-
-    def _plot_histogram_helper(self, data, bins, title, save_path, color):
-        """
-        Generic helper to create and save one histogram plot.
-
-        This method calculates statistics (mean, median, 95th percentile)
-        and plots the data with statistic lines.
-
-        Parameters
-        ----------
-        data : np.ndarray
-            The 1D array of data to plot.
-        bins : np.ndarray
-            The bins to use for the histogram.
+        data : numpy.ndarray
+            1-D elevations to plot.
+        bins : numpy.ndarray
+            Histogram bin edges.
         title : str
-            The title for the plot.
+            Figure title.
         save_path : str
-            The full file path to save the resulting plot.
+            Output path; matplotlib adds the ``.png`` extension.
         color : str
-            The color for the histogram bars.
+            Bar color.
         """
-        # Ensure there is data to prevent errors with empty arrays
-        if data.size == 0:
-            logger.warning(f"Warning: No data to plot for '{title}'. Skipping.")
-            return
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.hist(data, bins=bins, color=color, edgecolor="black", alpha=0.7)
+        for value, line_color, style, label in (
+                (np.mean(data), "red", "dashed", "Mean"),
+                (np.median(data), "green", "solid", "Median"),
+                (np.percentile(data, 95), "purple", "dashdot", "95th %ile")):
+            ax.axvline(value, color=line_color, linestyle=style,
+                       linewidth=2, label=f"{label}: {value:.2f}")
 
-        # Compute all required statistics
-        mean_val = np.mean(data)
-        median_val = np.median(data)
-        percentile_95 = np.percentile(data, 95)
-
-        # Initialize the plot figure
-        plt.figure(figsize=(8, 6))
-
-        # Plot the main histogram
-        plt.hist(
-            data,
-            bins=bins,
-            color=color,
-            edgecolor="black",
-            alpha=0.7,
-        )
-
-        # Overlay vertical lines for each statistic
-        plt.axvline(
-            mean_val,
-            color="red",
-            linestyle="dashed",
-            linewidth=2,
-            label=f"Mean: {mean_val:.2f}",
-        )
-        plt.axvline(
-            median_val,
-            color="green",
-            linestyle="solid",
-            linewidth=2,
-            label=f"Median: {median_val:.2f}",
-        )
-        plt.axvline(
-            percentile_95,
-            color="purple",
-            linestyle="dashdot",
-            linewidth=2,
-            label=f"95th %ile: {percentile_95:.2f}",
-        )
-
-        # Set plot limits
-        plt.xlim(0, 2)
-
-        # Add labels, title, and legend
-        plt.xlabel("Elevation")
-        plt.ylabel("Frequency")
-        plt.title(title)
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        # Save the plot to the specified file path and close the figure
-        # to free up memory
-        plt.savefig(save_path)
-        plt.close()
+        ax.set_xlim(*self.hist_range)
+        ax.set_xlabel("Elevation")
+        ax.set_ylabel("Frequency")
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True, linestyle="--", alpha=0.6)
+        fig.savefig(save_path)
+        plt.close(fig)

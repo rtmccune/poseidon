@@ -1,1184 +1,669 @@
+"""Find, filter, and copy images from the SDFP camera image archive.
+
+The archive is organized as
+``<drive>/<YYYY> Archive/<camera>/<YYYY-MM-DD>/<image>``, where dates
+and the timestamps in image filenames are UTC. :class:`ImageHandler`
+pulls the images that fall within flood events, filters folders of
+images by clock hours or by daylight, and builds labeled/unlabeled or
+random image sets for segmentation work.
+"""
+
 import concurrent.futures
+import functools
+import logging
 import os
 import random
-import re
 import shutil
-import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from .constants import EASTERN_TZ
+from .logging_utils import progress_interval, should_report
+from .naming import (
+    camera_from_sensor_id,
+    extract_camera_name,
+    extract_timestamp,
+    parse_timestamp,
+)
 
-def _log(message, level="info"):
+logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache(maxsize=4096)
+def sun_times(local_date, latitude, longitude, tz=EASTERN_TZ):
     """
-    Prints a timestamped message to stdout or stderr.
+    Compute sunrise and sunset for a local calendar date.
 
     Parameters
     ----------
-    message : str
-        The message to be logged.
-    level : str, optional
-        The log level. "info" (default) prints to stdout,
-        "error" prints to stderr.
+    local_date : datetime.date
+        Date in the site's local time zone.
+    latitude, longitude : float
+        Observer location in decimal degrees.
+    tz : datetime.tzinfo, optional
+        Site time zone. Default is US Eastern.
 
+    Returns
+    -------
+    sunrise, sunset : datetime.datetime
+        Timezone-aware event times.
+
+    Raises
+    ------
+    ImportError
+        If the ``astral`` package is not installed.
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    formatted_message = f"[{timestamp}] {level.upper()}: {message}"
+    from astral import Observer
+    from astral.sun import sun
 
-    if level.lower() == "error":
-        # Print to standard error
-        print(formatted_message, file=sys.stderr)
-    else:
-        # Print to standard output
-        print(formatted_message, file=sys.stdout)
+    events = sun(Observer(latitude, longitude), date=local_date, tzinfo=tz)
+    return events["sunrise"], events["sunset"]
+
+
+def is_daylight(timestamp, latitude, longitude, tz=EASTERN_TZ):
+    """
+    Test whether a time falls between local sunrise and sunset.
+
+    Sunrise and sunset are computed for the *local* calendar date of
+    `timestamp`. Using the UTC date instead returns the previous
+    evening's sunset whenever sunset falls after midnight UTC, which
+    for US East Coast sites rejects every image from spring to fall.
+
+    Parameters
+    ----------
+    timestamp : datetime.datetime
+        Timezone-aware time to test.
+    latitude, longitude : float
+        Observer location in decimal degrees.
+    tz : datetime.tzinfo, optional
+        Site time zone. Default is US Eastern.
+
+    Returns
+    -------
+    bool
+        True if ``sunrise <= timestamp <= sunset``.
+    """
+    local_date = timestamp.astimezone(tz).date()
+    sunrise, sunset = sun_times(local_date, latitude, longitude, tz)
+    return sunrise <= timestamp <= sunset
+
+
+def _copy_to(destination, file_path):
+    """
+    Copy one file into a folder, reporting success.
+
+    Parameters
+    ----------
+    destination : str or os.PathLike
+        Existing destination folder.
+    file_path : str or os.PathLike
+        File to copy.
+
+    Returns
+    -------
+    bool
+        True if the copy succeeded.
+    """
+    try:
+        shutil.copy(file_path, destination)
+        return True
+    except OSError as err:  # missing file, permissions, disk full, ...
+        logger.error("Could not copy %s: %s", file_path, err)
+        return False
 
 
 class ImageHandler:
     """
-    Handles the retrieval and copying of images from an archive
-    based on flood event data.
+    Pull and filter images from the SDFP camera archive.
 
     Parameters
     ----------
-    sdfp_image_drive : str or os.PathLike
-        The root file path to the image archive drive.
+    sdfp_image_drive : str or os.PathLike, optional
+        Root of the image archive. Only needed by methods that read
+        the archive (:meth:`pull_flood_event_images`,
+        :meth:`create_test_image_set`).
 
     Attributes
     ----------
-    drive : str
-        The root file path to the image archive drive.
-    copy_destination_dir : str
-        The destination folder path set by a public method call.
-        This is used by the internal `_copy_file` method.
-
+    drive : str or None
+        Root of the image archive.
     """
 
-    def __init__(self, sdfp_image_drive):
+    def __init__(self, sdfp_image_drive=None):
         """
-        Initializes the ImageHandler with the path to the image drive.
+        Store the archive root.
 
         Parameters
         ----------
-        sdfp_image_drive : str or os.PathLike
-            The root file path to the image archive drive.
+        sdfp_image_drive : str or os.PathLike, optional
+            Root of the image archive. Default is None.
         """
-        self.drive = sdfp_image_drive
-        _log(
-            f"Image Handler initialized. Image Drive: {self.drive}",
-            level="info",
-        )
+        self.drive = (None if sdfp_image_drive is None
+                      else os.fspath(sdfp_image_drive))
+        logger.info("ImageHandler initialized (archive: %s)", self.drive)
 
-    def pull_flood_event_images(
-        self,
-        destination_folder,
-        flood_event_csv_path="abbr_flood_events.csv",
-        time_buffer_hours=0,
-        max_workers=None,
-    ):
+    # ----- Public workflows --------------------------------------------------
+
+    def pull_flood_event_images(self, destination_folder,
+                                flood_event_csv_path="abbr_flood_events.csv",
+                                time_buffer_hours=0, max_workers=None):
         """
-        Pulls all images associated with flood events into a single
-        folder.
-
-        This is the main public method. It performs the following steps:
-        - Creates the destination folder.
-        - Loads and formats flood events from the provided CSV.
-        - Iterates through each event, spanning multiple days if
-          necessary.
-        - Applies an optional time buffer to the start and end of
-          each event.
-        - Lists all files in the relevant archive directories.
-        - Filters files to match the event's (buffered) time range.
-        - Compiles a unique list of all files to be copied.
-        - Uses a thread pool to copy all files to the destination
-          folder.
+        Copy every archived image taken during a flood event.
 
         Parameters
         ----------
         destination_folder : str or os.PathLike
-            The path to the folder where all images will be copied.
-            It will be created if it does not exist.
+            Folder receiving all images; created if needed.
         flood_event_csv_path : str or os.PathLike, optional
-            The file path to the CSV containing flood event data.
-            Defaults to 'abbr_flood_events.csv'.
-        time_buffer_hours : int or float, optional
-            The number of hours to add as a buffer *before* the
-            start_time and *after* the end_time of each event.
-            For example, a value of 1 will pull images from
-            1 hour before the event started until 1 hour after
-            it ended. Defaults to 0 (no buffer).
+            Abbreviated flood event CSV (``sensor_ID``,
+            ``start_time_UTC``, ``end_time_UTC``). Default
+            ``"abbr_flood_events.csv"``.
+        time_buffer_hours : float, optional
+            Hours added before each start and after each end. Default 0.
         max_workers : int, optional
-            The maximum number of worker threads to use for copying
-            files.
-            If None, the default for ThreadPoolExecutor is used.
+            Copy threads. Default lets the executor choose.
 
+        Returns
+        -------
+        int
+            Number of images copied.
         """
-        _log(
-            f"Starting flood event image pull. Destination: {destination_folder}",
-            level="info",
-        )
+        events = self._format_abbreviated_events_for_pull(
+            flood_event_csv_path)
+        buffer = timedelta(hours=time_buffer_hours)
+        logger.info("Pulling images for %d events (buffer %s h) into %s",
+                    len(events), time_buffer_hours, destination_folder)
 
-        if time_buffer_hours > 0:
-            _log(
-                f"Applying {time_buffer_hours}-hour buffer to all event times.",
-                level="info",
-            )
+        files = set()
+        total = len(events)
+        interval = progress_interval(total)
+        for i, event in enumerate(events.itertuples()):
+            if should_report(i, total, interval):
+                logger.info("  Event %d/%d: %s on %s", i + 1, total,
+                            event.camera_ID, event.start_time_UTC.date())
+            start = event.start_time_UTC - buffer
+            end = event.end_time_UTC + buffer
+            day = start.date()
+            while day <= end.date():  # events may span several dates
+                day_files = self._list_files_in_archive_date_dir(
+                    day, event.camera_ID)
+                files.update(self._filter_files_by_start_and_end_time(
+                    day_files, start, end))
+                day += timedelta(days=1)
 
-        # Create destination folder if it does not already exist
-        if not self._setup_destination_dir(destination_folder):
-            return
+        return self._parallel_copy_files(sorted(files), destination_folder,
+                                         max_workers, "Image pull")
 
-        try:
-            # Load flood events from abbreviated csv
-            flood_events = self._format_abbreviated_events_for_pull(
-                flood_event_csv_path
-            )
-            _log(
-                f"Loaded {len(flood_events)} flood events from {flood_event_csv_path}",
-                level="info",
-            )
-        except Exception as e:
-            _log(
-                f"FATAL: Failed to load/format flood events from {flood_event_csv_path}. Reason: {e}",
-                level="error",
-            )
-            return
-
-        if flood_events.empty:
-            _log("No flood events found to process.", level="info")
-            return
-
-        _log(
-            "Gathering file list for all events... (This may take a moment)",
-            level="info",
-        )
-        total_events = len(flood_events)
-        event_report_interval = max(1, total_events // 10)
-        tasks = []
-
-        for i, row in enumerate(flood_events.itertuples(name="Event")):
-            if (
-                i == 0
-                or (i + 1) == total_events
-                or (i + 1) % event_report_interval == 0
-            ):
-                try:
-                    # Try to log with details
-                    _log(
-                        f"  Processing event {i + 1}/{total_events}: Camera {row.camera_ID} @ {row.start_time_UTC.date()}",
-                        level="info",
-                    )
-                except Exception:
-                    # Failsafe log if row attributes are weird
-                    _log(
-                        f"  Processing event {i + 1}/{total_events}",
-                        level="info",
-                    )
-
-            try:
-                # Set the camera ID
-                camera_id = row.camera_ID
-
-                # Apply the time buffer, if any
-                buffer = timedelta(hours=time_buffer_hours)
-                start_time = row.start_time_UTC - buffer
-                end_time = row.end_time_UTC + buffer
-
-                # set the current time to begin iterating through folders
-                current_date = start_time.date()
-                # set the end date (possible that the flood event
-                # occurred over more than one date)
-                end_date = end_time.date()
-
-                while current_date <= end_date:
-                    # list the files in the current date iteration's
-                    # corresponding folder
-                    file_list = self._list_files_in_archive_date_dir(
-                        current_date, camera_id
-                    )
-
-                    # filter the file list to between the start and end
-                    # time (using end time rather than end date accounts
-                    # for multiday events)
-                    filtered_files = self._filter_files_by_start_and_end_time(
-                        file_list, start_time, end_time
-                    )
-
-                    # add the file paths to the task list to be copied
-                    tasks.extend(filtered_files)
-
-                    # continue to the next day
-                    current_date += timedelta(days=1)
-
-            except AttributeError as e:
-                _log(
-                    f"Skipping event row: Missing expected CSV column. Error: {e}",
-                    level="error",
-                )
-            except Exception as e:
-                _log(
-                    f"Skipping event row due to unexpected error: {e}",
-                    level="error",
-                )
-
-        _log(
-            f"Finished event processing. Found {len(tasks)} files (pre-deduplication).",
-            level="info",
-        )
-
-        # De-duplicate the list in case events overlapped and found the
-        # same file
-        tasks = sorted(list(set(tasks)))
-
-        # The helper will log the unique file count, handle the
-        # "no tasks" case, and execute the copy.
-        self._parallel_copy_files(tasks, max_workers, "Image pull")
-
-    def copy_images_using_hour_window(
-        self,
-        image_dir,
-        destination_folder,
-        start_hour_east=6,
-        end_hour_east=19,
-        max_workers=None,
-    ):
+    def copy_images_using_hour_window(self, image_dir, destination_folder,
+                                      start_hour_east=6, end_hour_east=19,
+                                      max_workers=None):
         """
-        Copies images from a directory that fall within an Eastern
-        Time hour window.
+        Copy images taken within an Eastern local-time hour window.
 
         Parameters
         ----------
         image_dir : str or os.PathLike
-            The source directory containing images to filter.
+            Folder of images to filter.
         destination_folder : str or os.PathLike
-            The path to the folder where all images will be copied.
-            It will be created if it does not exist.
-        start_hour_east : int, optional
-            The start hour in Eastern Time (inclusive, 0-23).
-            Defaults to 6.
-        end_hour_east : int, optional
-            The end hour in Eastern Time (inclusive, 0-23).
-            Defaults to 19.
+            Folder receiving matching images; created if needed.
+        start_hour_east, end_hour_east : int, optional
+            Inclusive hour range in US Eastern local time. Default 6-19.
         max_workers : int, optional
-            The maximum number of worker threads to use for copying
-            files.
-            If None, the default for ThreadPoolExecutor is used.
+            Copy threads. Default lets the executor choose.
 
+        Returns
+        -------
+        int
+            Number of images copied.
         """
-        tasks = []
+        files = self._filter_files_eastern_time_window(
+            self._list_files_in_dir(image_dir), start_hour_east,
+            end_hour_east)
+        return self._parallel_copy_files(files, destination_folder,
+                                         max_workers, "Hour-window copy")
 
-        _log(
-            f"Starting copy of images matching provided hour window (Eastern). Destination: {destination_folder} Hours: {start_hour_east} to {end_hour_east}",
-            level="info",
-        )
-
-        # Create destination folder if it does not already exist
-        if not self._setup_destination_dir(destination_folder):
-            return
-
-        file_list = self._list_files_in_dir(image_dir)
-        filtered_files = self._filter_files_eastern_time_window(
-            file_list, start_hour_east, end_hour_east
-        )
-
-        # add the file paths to the task list to be copied
-        tasks.extend(filtered_files)
-
-        # The helper will log the file count, handle the
-        # "no tasks" case, and execute the copy.
-        self._parallel_copy_files(tasks, max_workers, "Windowed image pull")
-
-    def generate_unlabeled_images_folder(
-        self, image_dir, labels_dir, destination_folder, max_workers=None
-    ):
+    def copy_images_using_sun_position(self, image_dir, destination_folder,
+                                       latitude, longitude, tz=EASTERN_TZ,
+                                       max_workers=None):
         """
-        Finds images in 'image_dir' that do NOT have a corresponding
-        label in 'labels_dir' and copies them to 'destination_folder'.
-
-        A match is determined by comparing the sensor ID
-        (e.g., CAM_XX_00) and the timestamp (YYYYMMDDHHMMSS) extracted
-        from the filenames.
+        Copy images taken between local sunrise and sunset.
 
         Parameters
         ----------
         image_dir : str or os.PathLike
-            The directory containing all images to check.
+            Folder of images to filter.
+        destination_folder : str or os.PathLike
+            Folder receiving daylight images; created if needed.
+        latitude, longitude : float
+            Camera location in decimal degrees.
+        tz : datetime.tzinfo, optional
+            Site time zone. Default is US Eastern.
+        max_workers : int, optional
+            Copy threads. Default lets the executor choose.
+
+        Returns
+        -------
+        int
+            Number of images copied.
+        """
+        files = self._filter_files_by_sun_position(
+            self._list_files_in_dir(image_dir), latitude, longitude, tz)
+        return self._parallel_copy_files(files, destination_folder,
+                                         max_workers, "Daylight copy")
+
+    def generate_unlabeled_images_folder(self, image_dir, labels_dir,
+                                         destination_folder,
+                                         max_workers=None):
+        """
+        Copy images that have no matching label file.
+
+        Images and labels match when they share a camera name and
+        timestamp.
+
+        Parameters
+        ----------
+        image_dir : str or os.PathLike
+            Folder of images.
         labels_dir : str or os.PathLike
-            The directory containing labeled images.
+            Folder of label images.
         destination_folder : str or os.PathLike
-            The path to the folder where all *unlabeled* images
-            will be copied. It will be created if it does not exist.
+            Folder receiving unlabeled images; created if needed.
         max_workers : int, optional
-            The maximum number of worker threads to use for copying.
-            If None, the default for ThreadPoolExecutor is used.
+            Copy threads. Default lets the executor choose.
+
+        Returns
+        -------
+        int
+            Number of images copied.
         """
-        self.images_folder = Path(image_dir)
+        labeled = {self._get_image_key(os.path.basename(path))
+                   for path in self._list_files_in_dir(labels_dir)}
+        labeled.discard(None)
 
-        _log(
-            f"Starting unlabeled image generation. Destination: {destination_folder}",
-            level="info",
-        )
+        unlabeled, unparsed = [], 0
+        for path in self._list_files_in_dir(image_dir):
+            key = self._get_image_key(os.path.basename(path))
+            if key is None:
+                unparsed += 1
+            elif key not in labeled:
+                unlabeled.append(path)
+        if unparsed:
+            logger.info("Ignored %d images without a camera name and "
+                        "timestamp.", unparsed)
+        logger.info("%d labeled keys; %d unlabeled images.", len(labeled),
+                    len(unlabeled))
+        return self._parallel_copy_files(unlabeled, destination_folder,
+                                         max_workers, "Unlabeled copy")
 
-        # Setup destination folder
-        if not self._setup_destination_dir(destination_folder):
-            return
-
-        # Get all files from both directories
-        _log(f"Scanning label directory: {labels_dir}", level="info")
-        label_files = self._list_files_in_dir(labels_dir)
-
-        _log(f"Scanning image directory: {image_dir}", level="info")
-        image_files = self._list_files_in_dir(image_dir)
-
-        if not image_files:
-            _log("No images found in the source directory.", level="info")
-            return
-
-        # Build the set of labeled keys (sensor_id, timestamp)
-        _log("Building key set from label files...", level="info")
-        labeled_keys = set()
-        for f_path in label_files:
-            key = self._get_image_key(os.path.basename(f_path))
-            if key:
-                labeled_keys.add(key)
-
-        _log(f"Found {len(labeled_keys)} unique label keys.", level="info")
-
-        # Find images that are NOT in the labeled set
-        _log(
-            "Finding unlabeled images... (This may take a moment)", level="info"
-        )
-        tasks = []  # This will be our list of files to copy
-
-        total_images = len(image_files)
-        report_interval = max(1, total_images // 10)
-
-        # Use a list to store files we couldn't parse, to log at the end
-        parse_failures = []
-
-        for i, f_path in enumerate(image_files):
-            key = self._get_image_key(
-                os.path.basename(f_path), log_failure=False
-            )
-
-            if key:
-                if key not in labeled_keys:
-                    tasks.append(f_path)
-            else:
-                parse_failures.append(os.path.basename(f_path))
-
-            if (
-                i == 0
-                or (i + 1) == total_images
-                or (i + 1) % report_interval == 0
-            ):
-                _log(
-                    f"  Scanning progress: {i + 1}/{total_images} images checked.",
-                    level="info",
-                )
-
-        if parse_failures:
-            _log(
-                f"Could not parse a key for {len(parse_failures)} image files (e.g., '{parse_failures[0]}').",
-                level="info",
-            )
-
-        # Copy the files
-        # The helper will log the file count, handle the
-        # "no tasks" case, and execute the copy.
-        self._parallel_copy_files(tasks, max_workers, "Unlabeled image copy")
-
-    def create_test_image_set(
-        self,
-        destination_folder,
-        camera_id,
-        num_images,
-        start_year=2023,
-        end_year=2024,
-        hour_window=None,
-        max_workers=None,
-    ):
+    def create_test_image_set(self, destination_folder, camera_id,
+                              num_images, start_year=2023, end_year=2024,
+                              hour_window=None, max_workers=None):
         """
-        Creates a test set of random images for a camera.
-
-        This method combines `_get_random_images` to find a list
-        of files and then uses parallel copy logic to move
-        them into the specified destination folder.
+        Copy a random sample of archived images for one camera.
 
         Parameters
         ----------
         destination_folder : str or os.PathLike
-            The path to the folder where all images will be copied.
-            It will be created if it does not exist.
+            Folder receiving the sample; created if needed.
         camera_id : str
-            The ID of the camera (e.g., "CAM_XX_00").
+            Camera name, e.g. ``"CAM_CB_03"``.
         num_images : int
-            The total number of images to try and retrieve.
-        start_year : int, optional
-            The starting year (inclusive) to search. Defaults to 2023.
-        end_year : int, optional
-            The ending year (inclusive) to search. Defaults to 2024.
-        hour_window : tuple(int, int), optional
-            A (start_hour, end_hour) tuple in Eastern Time.
-            Defaults to None (all hours).
+            Number of images wanted.
+        start_year, end_year : int, optional
+            Inclusive year range to sample. Default 2023-2024.
+        hour_window : tuple of int, optional
+            Inclusive ``(start, end)`` Eastern hours. Default all hours.
         max_workers : int, optional
-            The maximum number of worker threads to use for copying.
-            If None, the default for ThreadPoolExecutor is used.
+            Copy threads. Default lets the executor choose.
+
+        Returns
+        -------
+        int
+            Number of images copied.
         """
+        files = self._get_random_images(camera_id, start_year, end_year,
+                                        num_images, hour_window)
+        return self._parallel_copy_files(files, destination_folder,
+                                         max_workers, "Test set")
 
-        _log(
-            f"Starting test image set creation. Destination: {destination_folder}",
-            level="info",
-        )
+    # ----- Listing and filtering ---------------------------------------------
 
-        # Setup destination folder
-        if not self._setup_destination_dir(destination_folder):
-            return
-
-        # Get the list of random images
-        _log(
-            f"Selecting {num_images} random images for {camera_id}...",
-            level="info",
-        )
-        tasks = self._get_random_images(
-            camera_id,
-            start_year,
-            end_year,
-            num_images=num_images,
-            hour_window=hour_window,
-        )
-
-        # Copy files in parallel
-        # The helper will log the file count, handle the
-        # "no tasks" case, and execute the copy.
-        self._parallel_copy_files(tasks, max_workers, "Test set creation")
-
-    def copy_images_using_sun_position(
-        self,
-        image_dir,
-        destination_folder,
-        latitude=35.7796,
-        longitude=-78.6382,
-        max_workers=None,
-    ):
+    @staticmethod
+    def _format_abbreviated_events_for_pull(flood_event_csv_path):
         """
-        Copies images from a directory that were taken during daylight hours
-        (between sunrise and sunset) based on the sun's position.
-
-        Parameters
-        ----------
-        image_dir : str or os.PathLike
-            The source directory containing images to filter.
-        destination_folder : str or os.PathLike
-            The path to the folder where all images will be copied.
-        latitude : float, optional
-            The latitude of the camera location. Defaults to 35.7796.
-        longitude : float, optional
-            The longitude of the camera location. Defaults to -78.6382.
-        max_workers : int, optional
-            The maximum number of worker threads to use for copying.
-        """
-        tasks = []
-
-        _log(
-            f"Starting copy of daylight images based on solar position. "
-            f"Destination: {destination_folder} | Lat: {latitude}, Lon: {longitude}",
-            level="info",
-        )
-
-        # Create destination folder if it does not already exist
-        if not self._setup_destination_dir(destination_folder):
-            return
-
-        file_list = self._list_files_in_dir(image_dir)
-        
-        # Filter files using the sun position helper
-        filtered_files = self._filter_files_by_sun_position(
-            file_list, latitude, longitude
-        )
-
-        tasks.extend(filtered_files)
-
-        self._parallel_copy_files(tasks, max_workers, "Daylight image pull")
-
-    def _filter_files_by_sun_position(self, file_list, latitude, longitude):
-        """
-        Filters files to those taken between sunrise and sunset for their specific date.
-        """
-        try:
-            from astral import LocationInfo
-            from astral.sun import sun
-        except ImportError:
-            _log("FATAL: The 'astral' library is required for sun calculations. Run 'pip install astral'.", level="error")
-            return []
-
-        # Initialize the location object (name and region are arbitrary here)
-        loc = LocationInfo("Camera_Loc", "Region", "UTC", latitude, longitude)
-        # Sun times must use the local calendar date: on the UTC date the
-        # "sunset" is the previous evening's whenever it falls after
-        # midnight UTC, which rejected every summer image
-        local_tz = ZoneInfo("America/New_York")
-        
-        filtered_files = []
-        sun_cache = {} # Cache sunrise/sunset times per date to avoid redundant math
-
-        for file in file_list:
-            try:
-                file_name = os.path.basename(file)
-                file_timestamp_str = self._extract_timestamp(file_name)
-
-                if not file_timestamp_str:
-                    continue
-
-                # Localize the image timestamp to time-aware UTC
-                file_timestamp_naive = datetime.strptime(file_timestamp_str, "%Y%m%d%H%M%S")
-                file_timestamp_utc = file_timestamp_naive.replace(tzinfo=timezone.utc)
-
-                # Extract the local date to check against the cache
-                date_key = file_timestamp_utc.astimezone(local_tz).date()
-
-                if date_key not in sun_cache:
-                    # Calculate sun events for this local date
-                    s = sun(loc.observer, date=date_key, tzinfo=local_tz)
-                    sun_cache[date_key] = (s['sunrise'], s['sunset'])
-
-                sunrise, sunset = sun_cache[date_key]
-
-                # Check if the image falls within daylight hours
-                if sunrise <= file_timestamp_utc <= sunset:
-                    filtered_files.append(file)
-
-            except (IndexError, ValueError, TypeError) as e:
-                _log(f"Skipping file: Could not parse timestamp for '{os.path.basename(file)}'. Error: {e}", level="info")
-                continue
-            except Exception as e:
-                _log(f"Error calculating solar position for '{os.path.basename(file)}': {e}", level="error")
-                continue
-
-        return filtered_files
-    
-    def _format_abbreviated_events_for_pull(self, flood_event_csv_path):
-        """
-        Loads and formats flood event data from a CSV file.
-
-        Reads the specified CSV, keeps only necessary columns, converts
-        time strings to timezone-aware datetime objects, and creates
-        a 'camera_ID' column from the 'sensor_ID'.
+        Load event windows with camera names from the abbreviated CSV.
 
         Parameters
         ----------
         flood_event_csv_path : str or os.PathLike
-            The file path to the abbreviated flood events CSV.
+            Abbreviated flood event CSV.
 
         Returns
         -------
-        pd.DataFrame
-            A DataFrame with columns ['camera_ID', 'start_time_UTC',
-            'end_time_UTC'].
-
+        pandas.DataFrame
+            Columns ``camera_ID``, ``start_time_UTC``, ``end_time_UTC``
+            (aware UTC).
         """
-        columns_to_read = ["sensor_ID", "start_time_UTC", "end_time_UTC"]
-        final_columns = ["camera_ID", "start_time_UTC", "end_time_UTC"]
-        date_format = "%Y-%m-%d %H:%M:%S%z"
+        events = pd.read_csv(flood_event_csv_path,
+                             usecols=["sensor_ID", "start_time_UTC",
+                                      "end_time_UTC"])
+        return pd.DataFrame({
+            "camera_ID": events["sensor_ID"].astype(str).map(
+                camera_from_sensor_id),
+            "start_time_UTC": pd.to_datetime(events["start_time_UTC"],
+                                             utc=True),
+            "end_time_UTC": pd.to_datetime(events["end_time_UTC"], utc=True),
+        })
 
-        flood_events = (
-            # Read in necessary columns from abbr flood events csv
-            pd.read_csv(flood_event_csv_path, usecols=columns_to_read).assign(
-                # Convert times from strings to datetimes
-                start_time_UTC=lambda x: pd.to_datetime(
-                    x["start_time_UTC"], format=date_format
-                ),
-                end_time_UTC=lambda x: pd.to_datetime(
-                    x["end_time_UTC"], format=date_format
-                ),
-                # Create camera ID column because sensor images are
-                # stored with camera name
-                camera_ID=lambda x: "CAM_" + x["sensor_ID"].astype(str),
-            )
-        )
-
-        # Drop unnecessary sensor_id column from dataframe
-        return flood_events[final_columns]
-
-    def _list_files_in_archive_date_dir(self, date, camera_id):
+    def _archive_dir(self, day, camera_id):
         """
-        Lists all files in the archive directory for a specific date and
-        camera.
-
-        Constructs a directory path based on the archive structure
-        (e.g., .../<YYYY> Archive/<camera_id>/<YYYY-MM-DD>/)
-        and returns a list of all files within it.
+        Return the archive folder holding one camera's images for a day.
 
         Parameters
         ----------
-        date : datetime.date or datetime.datetime
-            The date for which to list files.
+        day : datetime.date
+            UTC date.
         camera_id : str
-            The ID of the camera.
+            Camera name.
 
         Returns
         -------
-        list[str]
-            A list of absolute file paths. Returns an empty list if the
-            directory does not exist or an error occurs.
+        pathlib.Path
+            ``<drive>/<YYYY> Archive/<camera>/<YYYY-MM-DD>``.
 
+        Raises
+        ------
+        ValueError
+            If no archive drive was configured.
         """
-        # Set directory to match provided date
-        directory = (
-            Path(self.drive)
-            / f"{date.year} Archive"
-            / camera_id
-            / date.strftime("%Y-%m-%d")
-        )
+        if self.drive is None:
+            raise ValueError("This operation needs sdfp_image_drive")
+        return (Path(self.drive) / f"{day.year} Archive" / camera_id
+                / day.strftime("%Y-%m-%d"))
 
-        if not os.path.isdir(directory):
-            # This is an informational message, not a critical failure
-            _log(
-                f"Directory not found (this may be expected): {directory}",
-                level="info",
-            )
-            return []
-
-        try:
-            # Re-check with Path object method
-            if not directory.is_dir():
-                return []
-
-            return [os.fspath(p) for p in directory.iterdir() if p.is_file()]
-
-        except OSError as e:
-            # e.g., if you lack read permissions on 'directory'
-            _log(
-                f"Error reading files from directory '{directory}'. Reason: {e}",
-                level="error",
-            )
-            return []  # Return an empty list on failure
-
-    def _list_files_in_dir(self, directory_path):
+    def _list_files_in_archive_date_dir(self, day, camera_id):
         """
-        Lists all files in a given directory.
+        List one camera's archived files for a day.
+
+        Parameters
+        ----------
+        day : datetime.date
+            UTC date.
+        camera_id : str
+            Camera name.
+
+        Returns
+        -------
+        list of str
+            File paths; empty if the folder does not exist.
+        """
+        return self._list_files_in_dir(self._archive_dir(day, camera_id),
+                                       missing_ok=True)
+
+    @staticmethod
+    def _list_files_in_dir(directory_path, missing_ok=False):
+        """
+        List the regular files in a folder.
 
         Parameters
         ----------
         directory_path : str or os.PathLike
-            The directory to scan.
+            Folder to scan.
+        missing_ok : bool, optional
+            Log a missing folder at debug rather than warning level.
+            Default is False.
 
         Returns
         -------
-        list[str]
-            A list of absolute file paths. Returns an empty list
-            if the directory is invalid or an error occurs.
+        list of str
+            Sorted file paths; empty if the folder is missing or
+            unreadable.
         """
         directory = Path(directory_path)
         if not directory.is_dir():
-            _log(f"Directory not found: {directory_path}", level="info")
+            log = logger.debug if missing_ok else logger.warning
+            log("Directory not found: %s", directory)
             return []
-
         try:
-            return [os.fspath(p) for p in directory.iterdir() if p.is_file()]
-        except OSError as e:
-            _log(
-                f"Error reading files from '{directory_path}'. Reason: {e}",
-                level="error",
-            )
+            return sorted(os.fspath(p) for p in directory.iterdir()
+                          if p.is_file())
+        except OSError as err:
+            logger.error("Could not read %s: %s", directory, err)
             return []
 
-    def _filter_files_by_condition(self, file_list, condition_func):
+    @staticmethod
+    def _filter_files_by_condition(file_list, condition_func):
         """
-        Filters files based on a timestamp-checking function.
-
-        Iterates a file list, parses the UTC timestamp from each
-        filename, and applies the `condition_func` to it.
+        Keep files whose filename timestamp satisfies a condition.
 
         Parameters
         ----------
-        file_list : list[str]
-            A list of file paths to filter.
+        file_list : list of str
+            File paths to filter.
         condition_func : callable
-            A function that accepts one argument (a timezone-aware
-            UTC datetime object) and returns True if the file
-            should be included in the list, False otherwise.
+            Called with each file's aware UTC timestamp; returns True
+            to keep the file.
 
         Returns
         -------
-        list[str]
-            The sub-list of file paths that satisfy the condition.
+        list of str
+            Files that passed. Files without a timestamp are dropped.
         """
-        filtered_files = []
+        kept = []
+        for path in file_list:
+            timestamp = parse_timestamp(os.path.basename(path))
+            if timestamp is None:
+                logger.debug("No timestamp in %s; skipped.", path)
+            elif condition_func(timestamp):
+                kept.append(path)
+        return kept
 
-        # For each file in provided list
-        for file in file_list:
-            try:
-                # strip timestamp from file name
-                file_name = os.path.basename(file)
-                file_timestamp_str = self._extract_timestamp(file_name)
-
-                # and localize to time aware UTC
-                file_timestamp_naive = datetime.strptime(
-                    file_timestamp_str, "%Y%m%d%H%M%S"
-                )
-                file_timestamp_utc = file_timestamp_naive.replace(
-                    tzinfo=timezone.utc
-                )
-
-                # Apply the provided condition function
-                if condition_func(file_timestamp_utc):
-                    filtered_files.append(file)
-            except (IndexError, ValueError, TypeError):
-                # Log the specific file that failed parsing, continue
-                _log(
-                    f"Skipping file: Could not parse timestamp from '{file_name}'.",
-                    level="info",
-                )
-                continue
-
-        return filtered_files
-
-    def _filter_files_by_start_and_end_time(
-        self, file_list, start_time, end_time
-    ):
+    def _filter_files_by_start_and_end_time(self, file_list, start_time,
+                                            end_time):
         """
-        Filters a file list to those within a specified time range.
-
-        Assumes filenames contain a UTC timestamp in the format
-        '..._YYYYMMDDHHMMSS.ext'. Both start_time and end_time must be
-        timezone-aware.
+        Keep files timestamped within an inclusive UTC window.
 
         Parameters
         ----------
-        file_list : list[str]
-            A list of file paths to filter.
-        start_time : datetime.datetime
-            The timezone-aware start of the time range (inclusive).
-        end_time : datetime.datetime
-            The timezone-aware end of the time range (inclusive).
+        file_list : list of str
+            File paths to filter.
+        start_time, end_time : datetime.datetime
+            Timezone-aware window bounds.
 
         Returns
         -------
-        list[str]
-            The sub-list of file paths that fall within the time range.
+        list of str
+            Files inside the window.
 
+        Raises
+        ------
+        ValueError
+            If either bound is timezone-naive.
         """
-        # Comparing aware and naive datetimes raises a TypeError.
-        # This check ensures the inputs are valid before starting the
-        # loop.
         if start_time.tzinfo is None or end_time.tzinfo is None:
-            _log(
-                "Cannot filter files: start_time and end_time must be timezone-aware.",
-                level="error",
-            )
-            return []
+            raise ValueError("start_time and end_time must be "
+                             "timezone-aware")
+        return self._filter_files_by_condition(
+            file_list, lambda ts: start_time <= ts <= end_time)
 
-        # Define the condition and pass it to the helper
-        condition = lambda ft_utc: start_time <= ft_utc <= end_time
-
-        return self._filter_files_by_condition(file_list, condition)
-
-    def _filter_files_eastern_time_window(
-        self, file_list, start_hour_east, end_hour_east
-    ):
+    def _filter_files_eastern_time_window(self, file_list, start_hour_east,
+                                          end_hour_east):
         """
-        Filters files to those between specific hours in Eastern Time.
+        Keep files taken within an inclusive Eastern hour range.
 
         Parameters
         ----------
-        file_list : list[str]
-            A list of file paths to filter.
-        start_hour_east : int
-            The start hour in Eastern Time (inclusive), e.g., 6.
-        end_hour_east : int
-            The end hour in Eastern Time (inclusive), e.g., 18.
+        file_list : list of str
+            File paths to filter.
+        start_hour_east, end_hour_east : int
+            Inclusive hour range in US Eastern local time.
 
         Returns
         -------
-        list[str]
-            The sub-list of file paths that fall within the time range.
+        list of str
+            Files inside the hour range.
         """
-        try:
-            # Define the timezone
-            eastern_tz = ZoneInfo("America/New_York")
-        except Exception as e:
-            _log(
-                f"Could not load timezone 'America/New_York'. Error: {e}",
-                level="error",
-            )
-            return []
+        return self._filter_files_by_condition(
+            file_list, lambda ts: (start_hour_east
+                                   <= ts.astimezone(EASTERN_TZ).hour
+                                   <= end_hour_east))
 
-        condition = lambda ft_utc: (
-            start_hour_east
-            <= ft_utc.astimezone(eastern_tz).hour
-            <= end_hour_east
-        )
-
-        return self._filter_files_by_condition(file_list, condition)
-
-    def _setup_destination_dir(self, destination_folder):
+    def _filter_files_by_sun_position(self, file_list, latitude, longitude,
+                                      tz=EASTERN_TZ):
         """
-        Ensures the destination folder exists and sets it as the
-        copy target.
-
-        This method creates the folder (including parent directories)
-        if it does not exist. It also sets the
-        `self.copy_destination_dir` attribute, which is required
-        by the `_copy_file` method.
+        Keep files taken between local sunrise and sunset.
 
         Parameters
         ----------
+        file_list : list of str
+            File paths to filter.
+        latitude, longitude : float
+            Camera location in decimal degrees.
+        tz : datetime.tzinfo, optional
+            Site time zone. Default is US Eastern.
+
+        Returns
+        -------
+        list of str
+            Daylight files.
+
+        Raises
+        ------
+        ImportError
+            If the ``astral`` package is not installed.
+        """
+        return self._filter_files_by_condition(
+            file_list, lambda ts: is_daylight(ts, latitude, longitude, tz))
+
+    # ----- Copying -----------------------------------------------------------
+
+    @staticmethod
+    def _parallel_copy_files(tasks, destination_folder, max_workers=None,
+                             task_name="File copy"):
+        """
+        Copy files into a folder using a thread pool.
+
+        Parameters
+        ----------
+        tasks : list of str
+            Files to copy.
         destination_folder : str or os.PathLike
-            The path to the folder to create.
-
-        Returns
-        -------
-        bool
-            True if the directory was created or already exists,
-            False if an OSError occurred.
-        """
-        try:
-            os.makedirs(destination_folder, exist_ok=True)
-            self.copy_destination_dir = destination_folder
-            _log(
-                f"Ensured destination folder exists: {destination_folder}",
-                level="info",
-            )
-            return True
-        except OSError as e:
-            _log(
-                f"FATAL: Could not create destination folder '{destination_folder}'. Reason: {e}",
-                level="error",
-            )
-            return False
-
-    def _parallel_copy_files(self, tasks, max_workers, task_name="File copy"):
-        """
-        Copies a list of files in parallel to the destination
-        directory.
-
-        Uses a ThreadPoolExecutor to copy all files from the
-        `tasks` list to the `self.copy_destination_dir`. It logs
-        progress and a final summary.
-
-        Parameters
-        ----------
-        tasks : list[str]
-            A list of absolute file paths to be copied.
-        max_workers : int or None
-            The maximum number of worker threads to use.
+            Destination folder; created if needed.
+        max_workers : int, optional
+            Copy threads. Default lets the executor choose.
         task_name : str, optional
-            A human-readable name for the task, used in log
-            messages. Defaults to "File copy".
-
-        """
-        total_files = len(tasks)
-        if total_files == 0:
-            _log(
-                f"No files found to copy for task: '{task_name}'.", level="info"
-            )
-            return
-
-        # Determine report interval for copying
-        copy_report_interval = max(1, total_files // 10)
-
-        _log(
-            f"Starting parallel copy of {total_files} files (max_workers={max_workers or 'default'})...",
-            level="info",
-        )
-        success_count = 0
-        fail_count = 0
-
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=max_workers
-        ) as executor:
-            # map() submits all tasks and returns an iterator of results
-            # in the order the tasks were submitted.
-            results = executor.map(self._copy_file, tasks)
-
-            # Iterate over results to count success/failure
-            for i, result in enumerate(results):
-                # _copy_file returns a truthy value on success
-                # and a falsy (False) on failure.
-                if result:
-                    # result is truthy, so it's a success
-                    success_count += 1
-                else:
-                    # result is falsy (False), so it's a failure
-                    fail_count += 1
-
-                if (
-                    i == 0
-                    or (i + 1) == total_files
-                    or (i + 1) % copy_report_interval == 0
-                ):
-                    _log(
-                        f"  Copy progress: {i + 1}/{total_files} files processed.",
-                        level="info",
-                    )
-
-        _log(
-            f"{task_name} complete. Copied: {success_count}, Failed: {fail_count}",
-            level="info",
-        )
-
-    def _copy_file(self, file_path):
-        """
-        Copies a single file to the class's destination folder.
-
-        Relies on `self.copy_destination_dir` being set by the
-        calling method. Logs errors and returns a status.
-
-        Parameters
-        ----------
-        file_path : str or os.PathLike
-            The path to the source file to be copied.
+            Label for log messages. Default ``"File copy"``.
 
         Returns
         -------
-        bool
-            True if the copy is successful, False otherwise.
-
+        int
+            Number of files copied successfully.
         """
-        # Check the destination folder has been set by the calling method
-        if not hasattr(self, "copy_destination_dir"):
-            _log(
-                "Cannot copy: self.copy_destination_dir is not set.",
-                level="error",
-            )
-            return False  # Return falsy on failure
+        if not tasks:
+            logger.info("%s: no files to copy.", task_name)
+            return 0
+        os.makedirs(destination_folder, exist_ok=True)
 
-        try:
-            # shutil.copy will copy the file and its permissions.
-            shutil.copy(file_path, self.copy_destination_dir)
+        total = len(tasks)
+        interval = progress_interval(total)
+        logger.info("%s: copying %d files to %s", task_name, total,
+                    destination_folder)
+        copy = functools.partial(_copy_to, destination_folder)
+        copied = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
+            for i, ok in enumerate(executor.map(copy, tasks)):
+                copied += ok
+                if should_report(i, total, interval):
+                    logger.info("  %d/%d files processed", i + 1, total)
+        logger.info("%s complete: %d copied, %d failed.", task_name, copied,
+                    total - copied)
+        return copied
 
-            return True  # Return truthy on success
+    # ----- Sampling ----------------------------------------------------------
 
-        except FileNotFoundError:
-            # This is a common, expected error
-            _log(f"File not found, could not copy: {file_path}", level="error")
-            return False  # Return falsy on failure
-
-        except shutil.Error as e:
-            # This catches specific shutil errors (e.g., "Disk Full")
-            _log(
-                f"shutil error copying {file_path}. Reason: {e}", level="error"
-            )
-            return False  # Return falsy on failure
-
-        except OSError as e:
-            # This catches lower-level OS errors (e.g., "Permission Denied")
-            _log(f"OS error copying {file_path}. Reason: {e}", level="error")
-            return False  # Return falsy on failure
-
-    def _get_random_images(
-        self, camera_id, start_year, end_year, num_images=10, hour_window=None
-    ):
+    def _get_random_images(self, camera_id, start_year, end_year,
+                           num_images=10, hour_window=None):
         """
-        Selects a random sample of images for a given camera.
+        Pick random archived images spread across random dates.
 
-        It searches within a year range, optionally filters for an
-        Eastern Time hour window, and attempts to pull a specified
-        number of images. The sampling is distributed by picking
-        random dates and taking a small, random number of images
-        from each date to ensure variety.
+        Dates are visited in random order and each contributes a random
+        1-15 % of `num_images`, so the sample spans many days.
 
         Parameters
         ----------
         camera_id : str
-            The ID of the camera (e.g., "CAM_XX_00").
-        start_year : int
-            The starting year (inclusive) to search for images.
-        end_year : int
-            The ending year (inclusive) to search for images.
+            Camera name.
+        start_year, end_year : int
+            Inclusive year range.
         num_images : int, optional
-            The total number of images to try and retrieve.
-            Defaults to 10.
-        hour_window : tuple(int, int), optional
-            A (start_hour, end_hour) tuple in Eastern Time.
-            If provided, only images within this window (inclusive)
-            will be selected. Defaults to None (all hours).
+            Images wanted. Default is 10.
+        hour_window : tuple of int, optional
+            Inclusive ``(start, end)`` Eastern hours. Default all hours.
 
         Returns
         -------
-        list[str]
-            A list of absolute file paths to the selected images.
-            May contain fewer images than `num_images` if not
-            enough were found.
+        list of str
+            Selected files; fewer than `num_images` if the archive runs
+            out.
         """
-        _log(
-            f"Starting random image selection for '{camera_id}' ({start_year}-{end_year})...",
-            level="info",
-        )
+        dates = self._generate_date_list(start_year, end_year)
+        random.shuffle(dates)
 
-        try:
-            date_list = self._generate_date_list(start_year, end_year)
-            random.shuffle(date_list)
-        except Exception as e:
-            _log(
-                f"FATAL: Failed to generate or shuffle date list. Reason: {e}",
-                level="error",
-            )
-            return []
-
-        selected_images = []
-
-        while len(selected_images) < num_images and date_list:
-            date = date_list.pop()
-
-            # Construct the directory path
-            date_dir = (
-                Path(self.drive)
-                / f"{date.year} Archive"
-                / camera_id
-                / date.strftime("%Y-%m-%d")
-            )
-
-            # _list_files_in_dir handles logging if dir not found
-            images = self._list_files_in_dir(date_dir)
-
-            if not images:
-                continue  # Skip this date if dir was empty or missing
-
-            # Apply hour window filter if provided
+        selected = []
+        while len(selected) < num_images and dates:
+            images = self._list_files_in_archive_date_dir(dates.pop(),
+                                                          camera_id)
             if hour_window:
-                try:
-                    start_hour_east, end_hour_east = hour_window
-                    filtered_images = self._filter_files_eastern_time_window(
-                        images, start_hour_east, end_hour_east
-                    )
-                except Exception as e:
-                    _log(
-                        f"Error applying time filter for {date_dir}: {e}",
-                        level="error",
-                    )
-                    continue  # Skip this day
-            else:
-                filtered_images = images  # Use all images
+                images = self._filter_files_eastern_time_window(
+                    images, *hour_window)
+            if not images:
+                continue
+            random.shuffle(images)
+            per_day = max(1, int(num_images * random.uniform(0.01, 0.15)))
+            selected.extend(images[:min(per_day,
+                                        num_images - len(selected))])
 
-            if not filtered_images:
-                continue  # Skip if filter produced no results
-
-            random.shuffle(filtered_images)
-
-            # This logic takes a random small chunk (1-15% of total
-            # requested) from the day to distribute the sample.
-            percentage = random.uniform(0.01, 0.15)
-            num_to_select = max(1, int(num_images * percentage))
-
-            # How many do we still need?
-            needed = num_images - len(selected_images)
-
-            # How many are available on this day?
-            available = len(filtered_images)
-
-            # Take the minimum of the number we want, need, and have
-            num_to_add = min(num_to_select, needed, available)
-
-            selected_images.extend(filtered_images[:num_to_add])
-
-        if len(selected_images) < num_images:
-            _log(
-                f"Selection complete. Warning: Only found {len(selected_images)} "
-                f"of {num_images} requested images.",
-                level="info",
-            )
-        else:
-            _log(
-                f"Successfully selected {len(selected_images)} random images.",
-                level="info",
-            )
-
-        return selected_images
+        if len(selected) < num_images:
+            logger.warning("Found only %d of %d requested images.",
+                           len(selected), num_images)
+        return selected
 
     @staticmethod
-    def _get_image_key(filename, log_failure=True):
+    def _get_image_key(filename):
         """
-        Extracts the (sensor, timestamp) key from a filename.
+        Return the ``(camera, timestamp)`` key identifying an image.
 
         Parameters
         ----------
         filename : str
-            The basename of the file.
-        log_failure : bool, optional
-            If True, logs a message if a key cannot be parsed.
-            Defaults to True.
+            Image filename.
 
         Returns
         -------
-        tuple (str, str) or None
-            A tuple of (sensor_id, timestamp) or None if either
-            part cannot be parsed.
+        tuple of str or None
+            ``(camera_name, timestamp)``, or None if either is absent.
         """
-        sensor_id = ImageHandler._extract_sensor_name(filename)
-        timestamp = ImageHandler._extract_timestamp(filename)
-
-        if sensor_id and timestamp:
-            return (sensor_id, timestamp)
-
-        if log_failure:
-            _log(
-                f"Skipping file: Could not parse key from '{filename}'.",
-                level="info",
-            )
-        return None
-
-    @staticmethod
-    def _extract_timestamp(filename):
-        """
-        Extracts UTC timestamp (YYYYMMDDHHMMSS) from a filename.
-
-        Parameters
-        ----------
-        filename : str
-            The basename of the file.
-
-        Returns
-        -------
-        str or None
-            The 14-digit timestamp string, or None if not found.
-        """
-        # Regular expression pattern to match the UTC timestamp
-        pattern = r"\d{14}"
-
-        match = re.search(pattern, filename)
-        return match.group(0) if match else None
-
-    @staticmethod
-    def _extract_sensor_name(filename):
-        """
-        Extracts sensor ID (CAM_XX_00) from a filename.
-
-        Parameters
-        ----------
-        filename : str
-            The basename of the file.
-
-        Returns
-        -------
-        str or None
-            The sensor ID string, or None if not found.
-        """
-        # Regular expression pattern to match the sensor name
-        pattern = r"CAM_[A-Z]{2}_[0-9]{2}"
-
-        match = re.search(pattern, filename)
-        return match.group(0) if match else None
+        camera, stamp = extract_camera_name(filename), extract_timestamp(
+            filename)
+        return (camera, stamp) if camera and stamp else None
 
     @staticmethod
     def _generate_date_list(start_year, end_year):
         """
-        Generates a list of all dates within a given year range.
+        List every date in an inclusive range of years.
 
         Parameters
         ----------
-        start_year : int
-            The starting year (inclusive).
-        end_year : int
-            The ending year (inclusive).
+        start_year, end_year : int
+            Inclusive year range.
 
         Returns
         -------
-        list[datetime.date]
-            A list of all dates from YYYY-01-01 to YYYY-12-31
-            for the specified year range.
+        list of datetime.date
+            Dates from January 1 of `start_year` to December 31 of
+            `end_year`.
 
         Raises
         ------
@@ -1187,19 +672,5 @@ class ImageHandler:
         """
         if end_year < start_year:
             raise ValueError("end_year cannot be before start_year")
-
-        _log(
-            f"Generating date list from {start_year} to {end_year}...",
-            level="info",
-        )
-        date_list = []
-        start_date = datetime(start_year, 1, 1).date()
-        end_date = datetime(end_year, 12, 31).date()
-
-        current_date = start_date
-        while current_date <= end_date:
-            date_list.append(current_date)
-            current_date += timedelta(days=1)
-
-        _log(f"Generated {len(date_list)} dates.", level="info")
-        return date_list
+        return list(pd.date_range(date(start_year, 1, 1),
+                                  date(end_year, 12, 31)).date)

@@ -1,53 +1,58 @@
-import argparse
-import sys
+"""Stage 06: build a site's rectification grid from LiDAR once.
+
+Interpolates the site's ground-classified LiDAR onto its grid extent
+and saves ``<grid_dir>/shared_grid_<site>.npz`` (arrays ``x``, ``y``,
+``z``) for the per-event rectification and depth jobs, plus Zarr
+copies of each grid.
+
+Example
+-------
+``python run_prep_grid.py --site carolina_beach --grid_dir data/grids``
+"""
+
 import os
-import logging
+
 import numpy as np
-import poseidon_core
 
-def main():
-    log_format = "[%(asctime)s] %(message)s"
-    logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
-    logger = logging.getLogger(__name__)
+from poseidon_core.grid_generator import GridGenerator
 
-    parser = argparse.ArgumentParser(description="Pre-compute grid for rectification array jobs.")
-    
-    parser.add_argument("--lidar_file", type=str, required=True)
-    parser.add_argument("--min_x", type=float, required=True)
-    parser.add_argument("--max_x", type=float, required=True)
-    parser.add_argument("--min_y", type=float, required=True)
-    parser.add_argument("--max_y", type=float, required=True)
-    parser.add_argument("--grid_dir", type=str, required=True)
-    parser.add_argument("--resolution", type=float, default=0.05)
-    parser.add_argument("--lidar_units", type=str, default="meters")
-    parser.add_argument("--grid_descr", type=str, required=True)
-    
-    args = parser.parse_args()
+import cli_common
 
-    os.makedirs(args.grid_dir, exist_ok=True)
-    out_file = os.path.join(args.grid_dir, f"shared_grid_{args.grid_descr}.npz")
 
-    if os.path.exists(out_file):
-        logger.warning(f"Grid file already exists at {out_file}. Overwriting...")
+def main(argv=None):
+    """
+    Generate and save a site's shared grid.
 
-    logger.info(f"Loading LiDAR data from: {args.lidar_file}")
-    grid_gen = poseidon_core.GridGenerator(
-        args.lidar_file, args.min_x, args.max_x, args.min_y, args.max_y,
-        extent_units="meters", lidar_units=args.lidar_units,
-    )
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments. Default reads ``sys.argv``.
+    """
+    parser = cli_common.make_parser(__doc__.splitlines()[0])
+    cli_common.add_site_argument(parser)
+    parser.add_argument("--grid_dir", required=True,
+                        help="Folder for the shared grid files.")
+    parser.add_argument("--lidar_file", default=None,
+                        help="LiDAR file; overrides the site config.")
+    args = cli_common.start(parser, argv)
+    site = cli_common.load_site(args)
 
-    logger.info("Creating point array from LiDAR data...")
-    pts_array = grid_gen.create_point_array()
+    lidar = args.lidar_file or site.resolve(site.lidar_file)
+    if lidar is None or not os.path.exists(lidar):
+        cli_common.fail(f"LiDAR file not found: {lidar}")
 
-    logger.info(f"Generating grid at {args.resolution}m resolution...")
-    grid_x, grid_y, grid_z = grid_gen.gen_grid(
-        args.resolution, pts_array, dir=args.grid_dir, grid_descriptor=args.grid_descr,
-    )
+    grid = site.grid
+    generator = GridGenerator(lidar, grid.min_x, grid.max_x, grid.min_y,
+                              grid.max_y, extent_units="meters",
+                              lidar_units=site.lidar_units)
+    grid_x, grid_y, grid_z = generator.gen_grid(
+        grid.resolution, generator.create_point_array(), dir=args.grid_dir,
+        grid_descriptor=site.name)
 
-    logger.info(f"Saving grid arrays to {out_file}...")
-    np.savez_compressed(out_file, x=grid_x, y=grid_y, z=grid_z)
-    
-    logger.info("Grid prep complete!")
+    out_path = cli_common.shared_grid_path(args.grid_dir, site)
+    np.savez_compressed(out_path, x=grid_x, y=grid_y, z=grid_z)
+    cli_common.logger.info("Saved shared grid %s", out_path)
+
 
 if __name__ == "__main__":
     main()

@@ -1,766 +1,432 @@
-import os
-import logging
-import cv2
-import zarr
-import numpy as np
-import cupy as cp
-from datetime import datetime
-from cupyx.scipy.interpolate import RegularGridInterpolator as reg_interp_gpu
-from scipy.interpolate import RegularGridInterpolator as reg_interp
+"""Rectify oblique camera images onto a real-world elevation grid.
 
+The camera model follows the CIRN (Coastal Imaging Research Network)
+conventions: an 11-element intrinsics vector (image size, principal
+point, focal lengths, radial and tangential distortion) and a 6-element
+extrinsics vector (camera position, azimuth, tilt, swing). Each grid
+cell's (X, Y, Z) world coordinate is projected once into distorted
+image pixel coordinates; every image is then rectified by sampling the
+pixel at each cell's projected location.
+"""
+
+import logging
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+from poseidon_utils.logging_utils import progress_interval, should_report
+from poseidon_utils.zarr_io import write_array, write_zip_group
+
+from .backend import get_xp, resolve_use_gpu, to_numpy
 
 logger = logging.getLogger(__name__)
+
+#: File extensions treated as images by :meth:`merge_rectify_folder`.
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".tif", ".tiff")
 
 
 class ImageRectifier:
     """
-    Manages image rectification and distortion correction.
-
-    This class uses intrinsic and extrinsic camera parameters, along
-    with a 3D real-world coordinate grid (X, Y, Z), to compute the
-    mapping from world coordinates to distorted image coords (U, V).
-
-    This mapping is then used to rectify raw images.
+    Project grid cells into a camera image and sample their pixels.
 
     Parameters
     ----------
-    intrinsics : np.ndarray or cp.ndarray
-        11-element array of camera intrinsic parameters, including focal
-        lengths and a principal point.
-    extrinsics : np.ndarray or cp.ndarray
-        6-element array of camera extrinsic parameters (rotation and
-        translation).
-    grid_x : np.ndarray or cp.ndarray
-        2D array representing the real-world X coordinates.
-    grid_y : np.ndarray or cp.ndarray
-        2D array representing the real-world Y coordinates.
-    grid_z : np.ndarray or cp.ndarray
-        2D array representing the real-world Z coordinates (elevation).
-    use_gpu : bool
-        If True, use CuPy for GPU-accelerated computations. If False,
-        use NumPy for CPU-based computation.
+    intrinsics : array_like
+        11-element CIRN intrinsics: ``[NU, NV, c0U, c0V, fx, fy, d1, d2,
+        d3, t1, t2]`` (image columns, image rows, principal point,
+        focal lengths, radial and tangential distortion).
+    extrinsics : array_like
+        6-element extrinsics: ``[x, y, z, azimuth, tilt, swing]`` in
+        the grid CRS (meters) and radians.
+    grid_x, grid_y, grid_z : array_like
+        2-D world coordinate grids of identical ``(rows, cols)`` shape.
+    use_gpu : bool or None, optional
+        True to run on the GPU with CuPy, False for NumPy, or None to
+        use the GPU only when available. Default is False.
 
     Attributes
     ----------
-    Ud : np.ndarray or cp.ndarray
-        The computed distorted U (column) coordinates, rounded for
-        indexing.
-    Vd : np.ndarray or cp.ndarray
-        The computed distorted V (row) coordinates, rounded for indexing.
-    azimuth : float
-        Azimuth angle (in radians) extracted from extrinsics.
-    tilt : float
-        Tilt angle (in radians) extracted from extrinsics.
-    swing : float
-        Swing angle (in radians) extracted from extrinsics.
-    grid_shape : tuple
-        The (row, col) shape of the input grids.
-
-    Notes
-    -----
-    The class internally computes the camera projection matrix (P),
-    applies distortion corrections, and calculates the `Ud` and `Vd`
-    mapping upon initialization.
-
-    The primary public methods for rectification are `merge_rectify`
-    (for a single image) and `merge_rectify_folder`
-    (for batch processing).
-    Helper methods like `build_K`, `distort_UV`, and `xyz_to_dist_UV`
-    are used internally during this process.
-
+    use_gpu : bool
+        Whether CuPy arrays are used.
+    grid_shape : tuple of int
+        ``(rows, cols)`` shape of the grids and of rectified images.
+    u_distorted, v_distorted : numpy.ndarray or cupy.ndarray
+        Integer image column (U) and row (V) sampled for each grid cell.
+        Zero marks cells that do not project into the image.
     """
 
-    def __init__(
-        self, intrinsics, extrinsics, grid_x, grid_y, grid_z, use_gpu=False
-    ):
-        """Initialize the object with camera parameters and grid data.
-
-        Parameters
-        ----------
-        intrinsics : np.ndarray
-            An 11 element numpy array representing the camera intrinsic
-            parameters, including focal lengths and optical center.
-        extrinsics : np.ndarray
-            A 6-element numpy array containing the camera extrinsic
-            parameters, specifying the rotation and translation of the
-            camera in space.
-        grid_x : np.ndarray
-            A 2D numpy array representing the X coordinates of the grid
-            points.
-        grid_y : np.ndarray
-            A 2D numpy array representing the Y coordinates of the grid
-            points.
-        grid_z : np.ndarray
-            A 2D numpy array representing the Z coordinates (elevation)
-            of the grid points.
-        use_gpu : bool, optional
-            A flag indicating whether to use GPU for computations.
-            Default is False.
+    def __init__(self, intrinsics, extrinsics, grid_x, grid_y, grid_z,
+                 use_gpu=False):
         """
-        logger.info("--- Initializing ImageRectifier ---")
-
-        self.use_gpu = use_gpu
-        logger.info(f"  Mode: {'GPU (CuPy)' if use_gpu else 'CPU (NumPy)'}")
-
-        # Convert numpy arrays to cupy arrays for GPU acceleration
-        if use_gpu:
-            self.intrinsics = cp.array(intrinsics)
-            self.extrinsics = cp.array(extrinsics)
-            self.grid_x = cp.array(grid_x)
-            self.grid_y = cp.array(grid_y)
-            self.grid_z = cp.array(grid_z)
-        else:  # Else,set values to inputted numpy array format
-            self.intrinsics = intrinsics
-            self.extrinsics = extrinsics
-            self.grid_x = grid_x
-            self.grid_y = grid_y
-            self.grid_z = grid_z
-
-        logger.info(f"  Input grid shape: {grid_x.shape}")
-
-        self.azimuth = self.extrinsics[3]  # Set azimuth from extrinsics
-        self.tilt = self.extrinsics[4]  # Set tilt from extrinsics
-        self.swing = self.extrinsics[5]  # Set swing from extrinsics
-        self.grid_shape = grid_x.shape  # Set grid shape
-
-        logger.info("  Starting distortion map computation (Ud, Vd)...")
-        self.Ud, self.Vd = (
-            # Compute list of distorted U and V coord. corresponding to
-            # world xyz coord.
-            self._compute_Ud_Vd()
-        )
-        logger.info("  ...Distortion map computation complete.")
-        logger.info("--- ImageRectifier Initialization Complete ---")
-
-    def merge_rectify(self, image_path, labels=False, verbose=False):
-        """Merge and rectify an image based on the provided path.
+        Store the camera model and precompute the grid-to-pixel map.
 
         Parameters
         ----------
-        image_path : str
-            The path to the image file to be loaded and rectified.
+        intrinsics : array_like
+            11-element CIRN intrinsics vector.
+        extrinsics : array_like
+            6-element extrinsics vector.
+        grid_x, grid_y, grid_z : array_like
+            2-D world coordinate grids of identical shape.
+        use_gpu : bool or None, optional
+            Backend choice; see the class docstring. Default is False.
+
+        Raises
+        ------
+        ValueError
+            If the parameter vectors or grid shapes are invalid.
+        """
+        self.use_gpu = resolve_use_gpu(use_gpu)
+        xp = get_xp(self.use_gpu)
+
+        # Camera parameters stay on the host; they are tiny scalars
+        self.intrinsics = np.asarray(intrinsics, dtype=float)
+        self.extrinsics = np.asarray(extrinsics, dtype=float)
+        if self.intrinsics.shape != (11,):
+            raise ValueError("intrinsics must have 11 elements")
+        if self.extrinsics.shape != (6,):
+            raise ValueError("extrinsics must have 6 elements")
+
+        self.grid_x = xp.asarray(grid_x)
+        self.grid_y = xp.asarray(grid_y)
+        self.grid_z = xp.asarray(grid_z)
+        if not self.grid_x.shape == self.grid_y.shape == self.grid_z.shape:
+            raise ValueError("grid_x, grid_y and grid_z must share a shape")
+        self.grid_shape = self.grid_x.shape
+
+        self.azimuth, self.tilt, self.swing = self.extrinsics[3:6]
+
+        logger.info("Initializing ImageRectifier (%s) for a %s grid.",
+                    "GPU" if self.use_gpu else "CPU", self.grid_shape)
+        self.u_distorted, self.v_distorted = self._compute_distorted_uv()
+
+    def merge_rectify(self, image_path, labels=False):
+        """
+        Rectify one image onto the grid.
+
+        Parameters
+        ----------
+        image_path : str or os.PathLike
+            Image to rectify.
         labels : bool, optional
-            A flag indicating whether to load the image in grayscale
-            (True) or in color (False). Default is False.
-        verbose : bool, optional
-            If True, print a log message when rectifying this image.
-            Default is False, to avoid spamming logs during batch jobs.
+            True to read the image as single-channel grayscale (label
+            masks), False to read it as RGB. Default is False.
 
         Returns
         -------
-        np.ndarray or cp.ndarray
-            The rectified image as an array of type uint8.
-
-        Notes
-        -----
-        This function loads an image from the specified path using the
-        `load_image` method, processes it to obtain rectified pixel
-        values using the `get_pixels` method, and returns the rectified
-        image. The function utilizes CuPy for GPU processing if
-        `self.use_gpu` is set to True; otherwise, it uses NumPy for CPU
-        processing. The output is cast to an array of type uint8 to
-        represent pixel values.
+        numpy.ndarray or cupy.ndarray
+            ``uint8`` array of shape ``(rows, cols, channels)`` with
+            ``channels`` 1 for labels and 3 for RGB. Cells outside the
+            camera view are 0.
         """
-        if verbose:
-            logger.info(f"Rectifying single image: {image_path}")
-
-        # Load image from path
         image = self._load_image(image_path, labels)
+        return self._get_pixels(image)
 
-        rectified_image = self._get_pixels(
-            image
-        )  # Collect pixel values for real world coordinates
-
-        if self.use_gpu:  # If GPU processing, return image as cupy arr
-            return cp.array(rectified_image, dtype=np.uint8)
-
-        else:  # Else, return as numpy array
-            return np.array(rectified_image, dtype=np.uint8)
-
-    def merge_rectify_folder(self, folder_path, zarr_store_path, labels=False):
+    def merge_rectify_folder(self, folder_path, zarr_store_path,
+                             labels=False):
         """
-        Merge and rectify all images in a specified folder and save
-        them to a single Zarr ZipStore to prevent inode bloat.
+        Rectify every image in a folder into one ZIP Zarr store.
+
+        Each image is stored as ``<image stem>_rectified``. Any existing
+        store is replaced once all images are written. Images that fail
+        to load are logged and skipped.
+
+        Parameters
+        ----------
+        folder_path : str or os.PathLike
+            Folder of images to rectify.
+        zarr_store_path : str or os.PathLike
+            Output store. ``.zip`` is appended if not already present.
+        labels : bool, optional
+            Read images as grayscale label masks. Default is False.
+
+        Returns
+        -------
+        int
+            Number of images written to the store.
         """
-        logger.info("\n=== Starting Batch Rectification ===")
-        logger.info(f"  Source folder: {folder_path}")
-        
-        # Ensure the output path ends in .zip
-        zarr_zip_path = f"{zarr_store_path}.zip"
-        logger.info(f"  Output Zarr store: {zarr_zip_path}")
+        folder = Path(folder_path)
+        zip_path = Path(zarr_store_path)
+        if zip_path.suffix != ".zip":
+            zip_path = zip_path.with_name(zip_path.name + ".zip")
 
-        # Open the ZipStore once before the loop
-        try:
-            # mode="w" starts a fresh archive so reruns replace old images
-            store_backend = zarr.storage.ZipStore(zarr_zip_path, mode="w")
-            store = zarr.group(store=store_backend)
-        except Exception as e:
-            logger.error(f"  ERROR: Could not open ZipStore at {zarr_zip_path}. {e}")
-            logger.error("=== Batch Rectification Aborted ===")
-            return
+        if not folder.is_dir():
+            logger.error("Source folder not found: %s", folder)
+            return 0
+        image_paths = sorted(p for p in folder.iterdir()
+                             if p.suffix.lower() in IMAGE_EXTENSIONS)
+        if not image_paths:
+            logger.warning("No images found in %s; nothing written.", folder)
+            return 0
 
-        try:
-            image_names = os.listdir(folder_path)
-        except FileNotFoundError:
-            logger.error(f"  ERROR: Source folder not found at {folder_path}.")
-            logger.error("=== Batch Rectification Aborted ===")
-            return
+        total = len(image_paths)
+        interval = progress_interval(total)
+        logger.info("Rectifying %d images from %s -> %s",
+                    total, folder, zip_path)
 
-        total_images = len(image_names)
+        written = 0
+        with write_zip_group(zip_path) as group:
+            for i, path in enumerate(image_paths):
+                if should_report(i, total, interval):
+                    logger.info("  Image %d/%d: %s", i + 1, total, path.name)
+                try:
+                    rectified = self.merge_rectify(path, labels)
+                except (OSError, ValueError) as err:
+                    logger.error("  Skipping %s: %s", path.name, err)
+                    continue
+                write_array(group, f"{path.stem}_rectified",
+                            to_numpy(rectified))
+                written += 1
 
-        if total_images == 0:
-            logger.warning("  WARNING: No images found in source folder. Nothing to do.")
-            logger.warning("=== Batch Rectification Complete ===")
-            return
-
-        logger.info(f"  Found {total_images} images to process.")
-        report_interval = max(1, total_images // 10)
-
-        for i, image_name in enumerate(image_names):
-            if ((i + 1) % report_interval == 0 or i == 0 or (i + 1) == total_images):
-                logger.info(f"  Processing image {i + 1}/{total_images}: {image_name}")
-
-            image_path = os.path.join(folder_path, image_name)
-
-            try:
-                rectified_image = self.merge_rectify(image_path, labels, verbose=False)
-            except Exception as e:
-                logger.error(f"  ERROR: Failed to rectify image {image_name}. {e}")
-                continue
-
-            dataset_name = f"{os.path.splitext(image_name)[0]}_rectified"
-
-            # Save the rectified image array to the Zarr store with chunking disabled
-            try:
-                # Port GPU array to CPU if needed
-                img_data = rectified_image.get() if self.use_gpu else rectified_image
-                
-                # create_array allows us to explicitly pass chunks=False
-                store.create_array(
-                    dataset_name, 
-                    data=img_data, 
-                    chunks=img_data.shape, 
-                    overwrite=True
-                )
-            except Exception as e:
-                logger.error(f"  ERROR: Failed to save {dataset_name} to Zarr store. {e}")
-
-        logger.info(f"  Successfully processed {total_images} images.")
-        
-        # CRITICAL: Close the ZipStore to properly write the archive directory
-        store_backend.close()
-        logger.info("=== Batch Rectification Complete ===")
+        logger.info("Wrote %d/%d rectified images to %s",
+                    written, total, zip_path)
+        return written
 
     def _load_image(self, image_path, labels):
-        """Load an image from the specified path.
+        """
+        Read an image from disk in the layout used for sampling.
 
         Parameters
         ----------
-        image_path : str
-            The file path to the image to be loaded.
+        image_path : str or os.PathLike
+            Image file to read.
         labels : bool
-            A flag indicating whether to load the image in grayscale
-            (True) or in color (False). If True, the image will be
-            loaded as a single-channel grayscale image; if False, the
-            image will be loaded in RGB format.
+            True for single-channel grayscale, False for RGB.
 
         Returns
         -------
-        np.ndarray or cp.ndarray
-            The loaded image as a numpy array (if use_gpu is False)
-            or as a cupy array (if use_gpu is True).
+        numpy.ndarray or cupy.ndarray
+            ``(H, W)`` grayscale or ``(H, W, 3)`` RGB ``uint8`` array on
+            the active backend.
 
-        Notes
-        -----
-        The function uses OpenCV to read the image. If `self.use_gpu`
-        is True, the image is converted to a cupy array for GPU
-        processing. If `labels` is True, the image is loaded in
-        grayscale; otherwise, it is loaded in RGB format.
+        Raises
+        ------
+        FileNotFoundError
+            If OpenCV cannot read the file.
         """
-        # If grayscale image of labels, read as grayscale image
-        if labels:
-            I = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-
-            if I is None:
-                raise FileNotFoundError(
-                    f"Image file not found or could not be read: {image_path}"
-                )
-
-        else:  # Else, read in as RGB
-            I = cv2.imread(image_path)
-
-            if I is None:
-                # Raise a standard, predictable error
-                raise FileNotFoundError(
-                    f"Image file not found or could not be read: {image_path}"
-                )
-
-            I = cv2.cvtColor(I, cv2.COLOR_BGR2RGB)
-
-        # Convert numpy array from OpenCV to cupy array for GPU process.
-        if self.use_gpu:
-            return cp.asarray(I)
-        else:
-            return I
+        flag = cv2.IMREAD_GRAYSCALE if labels else cv2.IMREAD_COLOR
+        image = cv2.imread(str(image_path), flag)
+        if image is None:
+            raise FileNotFoundError(f"Image not found or unreadable: "
+                                    f"{image_path}")
+        if not labels:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        return get_xp(self.use_gpu).asarray(image)
 
     def _reshape_grids(self):
-        """Reshape the grid arrays into a single 2D array of XYZ coord.
+        """
+        Flatten the grids into an ``(N, 3)`` array of XYZ points.
+
+        Points are ordered column-major (Fortran order) to match the
+        reshape applied to the projected coordinates.
 
         Returns
         -------
-        np.ndarray or cp.ndarray
-            A 2D array where each row represents a point in
-            3D space (X, Y, Z). The shape of the array will
-            be (N, 3), where N is the total number of grid points.
-
-        Notes
-        -----
-        The function takes the transposed grid arrays for X, Y, and Z
-        coordinates, reshapes them into column vectors, and concatenates
-        them along the second axis. If `self.use_gpu` is True, the
-        resulting array will be a cupy array for GPU processing;
-        otherwise, it will be a numpy array for CPU processing.
+        numpy.ndarray or cupy.ndarray
+            ``(rows * cols, 3)`` array of world coordinates.
         """
-        # Reshape grid arrays into vectors
-        x_vec = self.grid_x.T.reshape(-1, 1)
-        y_vec = self.grid_y.T.reshape(-1, 1)
-        z_vec = self.grid_z.T.reshape(-1, 1)
-
-        if (
-            self.use_gpu
-        ):  # Use cupy concatenate function if processing with a GPU
-            xyz = cp.concatenate([x_vec, y_vec, z_vec], axis=1)
-        else:  # Else, use numpy concatenate function
-            xyz = np.concatenate([x_vec, y_vec, z_vec], axis=1)
-
-        return xyz
+        xp = get_xp(self.use_gpu)
+        columns = [grid.T.reshape(-1, 1)
+                   for grid in (self.grid_x, self.grid_y, self.grid_z)]
+        return xp.concatenate(columns, axis=1)
 
     def _get_pixels(self, image):
-        """Extract pixel values from an image at specified grid points.
+        """
+        Sample the image at each grid cell's projected pixel.
 
         Parameters
         ----------
-        image : np.ndarray or cp.ndarray
-            The input image from which pixel values are to be extracted.
-            The image can be a 2D (grayscale) or 3D (color) array.
+        image : numpy.ndarray or cupy.ndarray
+            ``(H, W)`` or ``(H, W, C)`` image on the active backend.
 
         Returns
         -------
-        np.ndarray or cp.ndarray
-            A 3D array containing the interpolated pixel values
-            at the specified grid points (self.Vd, self.Ud).
-            The shape of the output will be (grid_shape[0],
-            grid_shape[1], number of channels) for multi-channel images
-            or (grid_shape[0], grid_shape[1], 1) for single-channel
-            images.
-
-        Notes
-        -----
-        The function uses regular grid interpolation to map pixel values
-        from the input image to the specified grid points.
-        If `self.use_gpu` is True, the function utilizes cupy for GPU
-        processing; otherwise, it uses numpy for CPU processing. Values
-        that fall outside the image boundaries are masked and assigned
-        NaN (for GPU) or 0 (for CPU) to indicate invalid pixels.
+        numpy.ndarray or cupy.ndarray
+            ``uint8`` array of shape ``(rows, cols, C)``; cells that
+            fall outside the image are 0.
         """
-        # Set the array module (numpy or cupy) and interpolator function
-        if self.use_gpu:
-            xp = cp
-            reg_interp_func = reg_interp_gpu
-        else:
-            xp = np
-            reg_interp_func = reg_interp
+        xp = get_xp(self.use_gpu)
+        if image.ndim == 2:
+            image = image[:, :, xp.newaxis]  # treat gray as one channel
+        height, width = image.shape[:2]
 
-        im_s = image.shape
+        cols, rows = self.u_distorted, self.v_distorted
+        # Index 0 marks invalid projections; the first row/column is
+        # also excluded, preserving the original implementation
+        outside = (cols <= 1) | (cols >= width) | (rows <= 1) | (
+            rows >= height)
 
-        # Unify 2D/3D logic by adding a channel dimension to 2D images
-        # This allows same logic for RGB and grayscale images
-        if len(im_s) == 2:
-            image = image[:, :, xp.newaxis]
-            im_s = image.shape  # Update shape to (H, W, 1)
+        # Clamp masked cells to a valid index, sample, then blank them
+        safe_rows = xp.where(outside, 0, rows)
+        safe_cols = xp.where(outside, 0, cols)
+        sampled = image[safe_rows, safe_cols].astype(np.uint8)
+        sampled[outside] = 0
+        return sampled
 
-        # Define the grid axes
-        points = (xp.arange(im_s[0]), xp.arange(im_s[1]))
-
-        # Create interpolator
-        rgi = reg_interp_func(
-            points,
-            image,  # Pass the (H, W, C) image directly
-            bounds_error=False,
-            fill_value=xp.nan,
-        )
-
-        # Call the interpolator to get all channel values
-        ir = rgi((self.Vd, self.Ud))
-
-        # Apply custom boundary mask and set fill values
-        if self.use_gpu:
-            # GPU/CuPy path (no 'errstate')
-            mask_u = xp.logical_or(self.Ud <= 1, self.Ud >= im_s[1])
-            mask_v = xp.logical_or(self.Vd <= 1, self.Vd >= im_s[0])
-            mask = xp.logical_or(mask_u, mask_v)
-
-            # Apply mask (fills with 0, as on the CPU; NaN has no uint8)
-            ir = xp.where(mask[:, :, xp.newaxis], 0, ir)
-
-        else:
-            # CPU/NumPy path (use 'errstate' to suppress warnings)
-            with xp.errstate(invalid="ignore"):
-                mask_u = xp.logical_or(self.Ud <= 1, self.Ud >= im_s[1])
-                mask_v = xp.logical_or(self.Vd <= 1, self.Vd >= im_s[0])
-                mask = xp.logical_or(mask_u, mask_v)
-
-            # Apply mask (fills with 0)
-            ir[mask] = 0
-
-        return ir
-
-    def _CIRN_angles_to_R(self):
-        """Calculate the rotation matrix from CIRN angles
-        (azimuth, tilt, swing).
+    def _cirn_angles_to_rotation(self):
+        """
+        Build the world-to-camera rotation from CIRN angles.
 
         Returns
         -------
-        np.ndarray or cp.ndarray
-            A 3x3 rotation matrix that represents the orientation
-            in 3D space based on the specified azimuth, tilt, and swing
-            angles.
-
-        Notes
-        -----
-        The rotation matrix is constructed using the provided angles:
-        - Azimuth: The angle of rotation around the vertical axis.
-        - Tilt: The angle of elevation from the horizontal plane.
-        - Swing: The angle of rotation around the forward axis.
-        If `self.use_gpu` is True, the function returns the rotation
-        matrix as a cupy array for GPU processing; otherwise, it returns
-        a numpy array for CPU processing.
+        numpy.ndarray or cupy.ndarray
+            3x3 rotation matrix for the azimuth, tilt, and swing.
         """
-        R = np.empty((3, 3))  # Initialize empty 3x3 rotation matrix
+        ca, sa = np.cos(self.azimuth), np.sin(self.azimuth)
+        ct, st = np.cos(self.tilt), np.sin(self.tilt)
+        cs, ss = np.cos(self.swing), np.sin(self.swing)
 
-        # Pre-calculate all 6 trig values once
-        ca = np.cos(self.azimuth)
-        sa = np.sin(self.azimuth)
-        ct = np.cos(self.tilt)
-        st = np.sin(self.tilt)
-        cs = np.cos(self.swing)
-        ss = np.sin(self.swing)
+        rotation = np.array([
+            [-ca * cs - sa * ct * ss, cs * sa - ss * ct * ca, -ss * st],
+            [-ss * ca + cs * ct * sa, ss * sa + cs * ct * ca, cs * st],
+            [st * sa, st * ca, -ct],
+        ])
+        return get_xp(self.use_gpu).asarray(rotation)
 
-        # Calculate rotation matrix values
-        # Note: using numpy rather than cupy even for GPU processing as
-        # it is a small matrix that is only calculated once.
-        # Porting to GPU would only add time.
-        R[0, 0] = -ca * cs - sa * ct * ss
-        R[0, 1] = cs * sa - ss * ct * ca
-        R[0, 2] = -ss * st
-        R[1, 0] = -ss * ca + cs * ct * sa
-        R[1, 1] = ss * sa + cs * ct * ca
-        R[1, 2] = cs * st
-        R[2, 0] = st * sa
-        R[2, 1] = st * ca
-        R[2, 2] = -ct
-
-        if self.use_gpu:  # Return as a cupy array if GPU processing
-            return cp.array(R)
-        else:
-            return R
-
-    def _build_K(self):
-        """Constructs the camera intrinsic matrix K.
-
-        This matrix is used to go from camera coordinates to undistorted
-        UV coordinates.
+    def _build_intrinsic_matrix(self):
+        """
+        Build the camera intrinsic matrix K.
 
         Returns
         -------
-        np.ndarray or cp.ndarray
-            A 3x3 camera intrinsic matrix that defines the
-            mapping from 3D world coordinates to 2D image coordinates.
-
-        Notes
-        -----
-        The intrinsic matrix K is constructed using the parameters from
-        the `self.intrinsics` array:
-        - K[0,0]: Negative focal length in the x-direction.
-        - K[1,1]: Negative focal length in the y-direction.
-        - K[0,2]: x-coordinate of the principal point.
-        - K[1,2]: y-coordinate of the principal point.
-        - K[2,2]: Set to 1 for homogeneous coordinates.
-        If `self.use_gpu` is True, the function returns the intrinsic
-        matrix as a cupy array for GPU processing; otherwise, it returns
-        a numpy array for CPU processing.
+        numpy.ndarray or cupy.ndarray
+            3x3 matrix with negated focal lengths on the diagonal and
+            the principal point in the last column, as in CIRN.
         """
-        # Initialize empty 3x3 intrinsic matrix
-        if self.use_gpu:
-            K = cp.zeros((3, 3))
-        else:
-            K = np.zeros((3, 3))
+        c0_u, c0_v, fx, fy = self.intrinsics[2:6]
+        intrinsic = np.array([
+            [-fx, 0.0, c0_u],
+            [0.0, -fy, c0_v],
+            [0.0, 0.0, 1.0],
+        ])
+        return get_xp(self.use_gpu).asarray(intrinsic)
 
-        # Set focal length in x direction
-        K[0, 0] = -(self.intrinsics[4])
-
-        # Set focal length in y direction
-        K[1, 1] = -(self.intrinsics[5])
-
-        # Set x-coordinate of principal point
-        K[0, 2] = self.intrinsics[2]
-
-        # Set y-coordinate of principal point
-        K[1, 2] = self.intrinsics[3]
-        K[2, 2] = 1
-
-        return K
-
-    def _intrinsics_extrinsics_to_P(self):
-        """Computes the camera projection matrix P.
-
-        Combines intrinsics and extrinsics to form the 4x4 projection
-        matrix P, along with its component matrices K, R, and IC.
+    def _projection_matrix(self):
+        """
+        Compose the 3x4 world-to-image projection matrix P = K R [I|-C].
 
         Returns
         -------
-        P : np.ndarray or cp.ndarray
-            3x4 camera projection matrix.
-        K : np.ndarray or cp.ndarray
-            3x3 intrinsic matrix.
-        R : np.ndarray or cp.ndarray
-            3x3 rotation matrix.
-        IC : np.ndarray or cp.ndarray
-            4x3 matrix combining identity and camera translation.
-
-        Notes
-        -----
-        Output P is normalized for homogenous coordinates. The
-        projection matrix P is constructed as follows:
-        - K is the intrinsic matrix built from camera parameters.
-        - R is the rotation matrix calculated from the azimuth, tilt,
-        and swing angles.
-        - The extrinsics (translation) are applied as a column vector
-        [-x, -y, -z].
-        The resulting matrix P transforms 3D world coordinates into 2D
-        image coordinates.
-        If `self.use_gpu` is True, the function utilizes cupy for GPU
-        processing; otherwise, it uses numpy for CPU processing. The
-        last row of the projection matrix is normalized by dividing by
-        P[2, 3].
+        projection : numpy.ndarray or cupy.ndarray
+            3x4 projection normalized so ``projection[2, 3] == 1``.
+        rotation : numpy.ndarray or cupy.ndarray
+            3x3 world-to-camera rotation.
+        translation : numpy.ndarray or cupy.ndarray
+            3x4 ``[I | -C]`` matrix with C the camera position.
         """
-        # Set the array module (numpy or cupy)
-        xp = cp if self.use_gpu else np
+        xp = get_xp(self.use_gpu)
+        intrinsic = self._build_intrinsic_matrix()
+        rotation = self._cirn_angles_to_rotation()
 
-        # Generate K and R matrices
-        K = self._build_K()
-        R = self._CIRN_angles_to_R()
+        camera_xyz = xp.asarray(-self.extrinsics[:3]).reshape(-1, 1)
+        translation = xp.concatenate([xp.eye(3), camera_xyz], axis=1)
 
-        x = self.extrinsics[0]
-        y = self.extrinsics[1]
-        z = self.extrinsics[2]
+        projection = xp.dot(intrinsic, xp.dot(rotation, translation))
+        projection /= projection[2, 3]
+        return projection, rotation, translation
 
-        # Create translation matrix
-        column_vec = xp.array([-x, -y, -z]).reshape(-1, 1)
-        IC = xp.concatenate([xp.eye(3), column_vec], axis=1)
-
-        # Combine K, R, and IC into P
-        P = xp.dot(K, xp.dot(R, IC))
-
-        # Normalize for homogeneous coordinates
-        P /= P[2, 3]
-
-        return P, K, R, IC
-
-    def _distort_UV(self, UV):
-        """Distort UV coordinates based on camera intrinsic parameters.
+    def _distort_uv(self, uv):
+        """
+        Apply lens distortion to undistorted pixel coordinates.
 
         Parameters
         ----------
-        UV : np.ndarray or cp.ndarray
-            A 2xN array containing UV coordinates,
-            where U is in the first row and V in the second.
+        uv : numpy.ndarray or cupy.ndarray
+            ``(2, N)`` undistorted U (row 0) and V (row 1) coordinates.
 
         Returns
         -------
-        Ud : np.ndarray or cp.ndarray
-            The distorted U coordinates.
-        Vd : np.ndarray or cp.ndarray
-            The distorted V coordinates.
-        flag : np.ndarray or cp.ndarray
-            Array indicating invalid (0) or valid (1) coordinates.
-
-        Notes
-        -----
-        The distortion is calculated using radial and tangential
-        distortion models based on the camera's intrinsic parameters.
-        The function applies corrections to the input UV coordinates and
-        ensures that any resulting coordinates that fall outside the
-        valid image boundaries are set to zero. The tangential
-        distortion is also computed at the corners of the image for
-        comparison. If `self.use_gpu` is True, the function utilizes
-        cupy for GPU processing; otherwise, it uses numpy for CPU
-        processing.
+        u_dist, v_dist : numpy.ndarray or cupy.ndarray
+            ``(N,)`` distorted coordinates; points outside the image
+            are set to 0.
+        valid : numpy.ndarray or cupy.ndarray
+            ``(N,)`` 1.0 where the tangential distortion is physically
+            plausible, 0.0 otherwise.
         """
-        # Set the array module (numpy or cupy)
-        xp = cp if self.use_gpu else np
+        xp = get_xp(self.use_gpu)
+        n_cols, n_rows, c0_u, c0_v, fx, fy, d1, d2, d3, t1, t2 = (
+            self.intrinsics)
 
-        # Assign coefficients out of intrinsic matrix
-        NU = self.intrinsics[0]
-        NV = self.intrinsics[1]
-        c0U = self.intrinsics[2]
-        c0V = self.intrinsics[3]
-        fx = self.intrinsics[4]
-        fy = self.intrinsics[5]
-        d1 = self.intrinsics[6]
-        d2 = self.intrinsics[7]
-        d3 = self.intrinsics[8]
-        t1 = self.intrinsics[9]
-        t2 = self.intrinsics[10]
+        # Normalized image-plane coordinates
+        x = (uv[0, :] - c0_u) / fx
+        y = (uv[1, :] - c0_v) / fy
 
-        # Separate UV into vectors U and V
-        U = UV[0, :]
-        V = UV[1, :]
-
-        # Normalize distances
-        x = (U - c0U) / fx
-        y = (V - c0V) / fy
-
-        # Radial distortion
+        # Radial and tangential distortion
         r2 = x**2 + y**2
-        fr = 1 + d1 * r2 + d2 * r2**2 + d3 * r2**3
-
-        # Tangential distortion
+        radial = 1 + d1 * r2 + d2 * r2**2 + d3 * r2**3
         dx = 2 * t1 * x * y + t2 * (r2 + 2 * x**2)
         dy = t1 * (r2 + 2 * y**2) + 2 * t2 * x * y
 
-        # Apply correction
-        xd = x * fr + dx
-        yd = y * fr + dy
-        Ud = xd * fx + c0U
-        Vd = yd * fy + c0V
+        u_dist = (x * radial + dx) * fx + c0_u
+        v_dist = (y * radial + dy) * fy + c0_v
 
-        # Find and mask negative UV coordinates
-        flag_mask = (Ud < 0) | (Ud > NU) | (Vd < 0) | (Vd > NV)
-        Ud[flag_mask] = 0
-        Vd[flag_mask] = 0
+        # Zero out points that land outside the image
+        outside = (u_dist < 0) | (u_dist > n_cols) | (v_dist < 0) | (
+            v_dist > n_rows)
+        u_dist[outside] = 0
+        v_dist[outside] = 0
 
-        # Define maximum possible tangential distortion at the corners
-        Um = xp.array([0, 0, NU.item(), NU.item()])
-        Vm = xp.array([0, NV.item(), NV.item(), 0])
-
-        # Normalization
-        xm = (Um - c0U) / fx
-        ym = (Vm - c0V) / fy
+        # Largest tangential distortion possible inside the image
+        # occurs at a corner; anything larger is a model artifact
+        corner_u = xp.array([0, 0, n_cols, n_cols])
+        corner_v = xp.array([0, n_rows, n_rows, 0])
+        xm = (corner_u - c0_u) / fx
+        ym = (corner_v - c0_v) / fy
         r2m = xm**2 + ym**2
-
-        # Tangential Distortion at corners
         dxm = 2 * t1 * xm * ym + t2 * (r2m + 2 * xm**2)
         dym = t1 * (r2m + 2 * ym**2) + 2 * t2 * xm * ym
 
-        # Find max values at corners
-        max_dym = xp.max(xp.abs(dym))
-        max_dxm = xp.max(xp.abs(dxm))
+        valid = xp.ones_like(u_dist)
+        valid[xp.abs(dy) > xp.max(xp.abs(dym))] = 0.0
+        valid[xp.abs(dx) > xp.max(xp.abs(dxm))] = 0.0
+        return u_dist, v_dist, valid
 
-        # Use direct boolean masking (more efficient than np.where)
-        mask_dy = xp.abs(dy) > max_dym
-        mask_dx = xp.abs(dx) > max_dxm
-
-        # Initialize and set flag array
-        flag = xp.ones_like(Ud)
-        flag[mask_dy] = 0.0
-        flag[mask_dx] = 0.0
-
-        return Ud, Vd, flag
-
-    def _xyz_to_dist_UV(self):
-        """Maps 3D world (XYZ) coordinates to distorted 2D (UV) image
-        coordinates.
-
-        This method uses the full camera model (P matrix) and distortion
-        parameters to project the 3D grid points onto the image plane.
+    def _xyz_to_distorted_uv(self):
+        """
+        Project every grid cell to distorted pixel coordinates.
 
         Returns
         -------
-        DU : np.ndarray or cp.ndarray
-            The distorted U coordinates, reshaped to match the grid.
-        DV : np.ndarray or cp.ndarray
-            The distorted V coordinates, reshaped to match the grid.
-
-        Notes
-        -----
-        The function computes the projection of 3D coordinates onto the
-        image plane using camera intrinsic and extrinsic parameters. It
-        first transforms the 3D coordinates into homogeneous coordinates
-        and then calculates the UV coordinates. Distortion is applied to
-        these UV coordinates based on the camera's intrinsic parameters.
-        The function also checks for negative Z camera coordinates and
-        updates a flag to indicate valid points. If `self.use_gpu` is
-        True, cupy is used for GPU processing; otherwise, numpy is used
-        for CPU processing. The final distorted U and V coordinates
-        are returned, multiplied by the flag to indicate valid points.
+        u_dist, v_dist : numpy.ndarray or cupy.ndarray
+            Float coordinates shaped like the grid; 0 where the cell
+            is behind the camera, outside the image, or implausibly
+            distorted.
         """
+        xp = get_xp(self.use_gpu)
+        projection, rotation, translation = self._projection_matrix()
 
-        # Set the array module (numpy or cupy)
-        xp = cp if self.use_gpu else np
-
-        # Create matrix P and its components
-        P, K, R, IC = self._intrinsics_extrinsics_to_P()
-
-        # Reshape grids
-        xyz = self._reshape_grids()  # (N, 3)
-
-        # Create homogeneous coordinates and project to image plane
+        xyz = self._reshape_grids()
         xyz_homogeneous = xp.vstack((xyz.T, xp.ones(xyz.shape[0])))
-        UV_homogeneous = xp.dot(P, xyz_homogeneous)
 
-        # Perspective divide
-        UV = UV_homogeneous[:2, :] / UV_homogeneous[2, :]
+        # Project to the image plane and perspective-divide
+        uv_homogeneous = xp.dot(projection, xyz_homogeneous)
+        uv = uv_homogeneous[:2, :] / uv_homogeneous[2, :]
 
-        # Apply distortion
-        Ud, Vd, flag = self._distort_UV(UV)  # (N,) (N,) (N,)
-        DU = Ud.reshape(self.grid_shape, order="F")
-        DV = Vd.reshape(self.grid_shape, order="F")
+        u_dist, v_dist, valid = self._distort_uv(uv)
 
-        # Compute camera coordinates
-        xyzC = xp.dot(xp.dot(R, IC), xyz_homogeneous)  # (3, N)
+        # Points with non-positive camera depth are behind the camera
+        xyz_camera = xp.dot(xp.dot(rotation, translation), xyz_homogeneous)
+        valid[xyz_camera[2, :] <= 0.0] = 0.0
 
-        # Find negative Zc coordinates (Z <= 0) and update the flag
-        # negative_z_indices = xp.where(xyzC[2, :] <= 0.0)
-        mask_z = xyzC[2, :] <= 0.0
+        shape = self.grid_shape
+        valid = valid.reshape(shape, order="F")
+        return (u_dist.reshape(shape, order="F") * valid,
+                v_dist.reshape(shape, order="F") * valid)
 
-        # Apply the mask to the flag
-        # flag[negative_z_indices] = 0.0
-        flag[mask_z] = 0.0
-        flag = flag.reshape(self.grid_shape, order="F")
-
-        return DU * flag, DV * flag
-
-    def _compute_Ud_Vd(self):
-        """Compute the distorted U and V coordinates from 3D points.
+    def _compute_distorted_uv(self):
+        """
+        Compute the integer pixel indices sampled for each grid cell.
 
         Returns
         -------
-        Ud : np.ndarray or cp.ndarray
-            The final, rounded, integer-cast U coordinates.
-        Vd : np.ndarray or cp.ndarray
-            The final, rounded, integer-cast V coordinates.
-
-        Notes
-        -----
-        This function computes the distorted U and V coordinates by
-        calling the `xyz_to_dist_UV` method, which converts 3D
-        coordinates to 2D distorted image coordinates. The resulting
-        coordinates are then rounded to the nearest integer and cast to
-        integers to represent pixel indices. The function uses either
-        NumPy for CPU processing or CuPy for GPU processing based on the
-        value of `self.use_gpu`.
+        u_distorted, v_distorted : numpy.ndarray or cupy.ndarray
+            Rounded integer column and row indices shaped like the grid;
+            0 (invalid) where the grid elevation is NaN.
         """
-        # Set the array module
-        xp = cp if self.use_gpu else np
-
-        Ud, Vd = (
-            self._xyz_to_dist_UV()
-        )  # Calculate distorted U and V coordinates
-
-        # Cells without elevation project to NaN; casting NaN to int is
-        # undefined, so mark them with the invalid index 0 first
-        Ud = xp.round(xp.nan_to_num(Ud, nan=0.0)).astype(int)
-        Vd = xp.round(xp.nan_to_num(Vd, nan=0.0)).astype(int)
-
-        return Ud, Vd
+        xp = get_xp(self.use_gpu)
+        u_dist, v_dist = self._xyz_to_distorted_uv()
+        # Cells without LiDAR coverage project to NaN; casting NaN to
+        # int is undefined, so mark them invalid explicitly
+        return tuple(xp.round(xp.nan_to_num(coord, nan=0.0)).astype(int)
+                     for coord in (u_dist, v_dist))

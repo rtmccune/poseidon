@@ -1,66 +1,64 @@
-import argparse
-import poseidon_utils
+"""Stage 01: keep only images taken in daylight.
+
+By default an image is kept if it was taken between local sunrise and
+sunset at the site's camera location (``--method sun``). Alternatively
+``--method hours`` keeps a fixed Eastern-time hour window.
+
+Example
+-------
+``python run_image_filter.py --site carolina_beach --image_dir
+images/all_events --dest images/daylight``
+"""
+
+from poseidon_utils.image_handler import ImageHandler
+
+import cli_common
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Filter images.")
+def main(argv=None):
+    """
+    Copy daylight images into a new folder.
 
-    parser.add_argument(
-        "--drive",
-        type=str,
-        required=True,
-        help="Root file path to the image archive drive.",
-    )
-    parser.add_argument(
-        "--image_dir",
-        type=str,
-        required=True,
-        help="Folder containing original images.",
-    )
-    parser.add_argument(
-        "--dest",
-        type=str,
-        required=True,
-        help="Destination folder for filtered images.",
-    )
-    
-    parser.add_argument(
-        "--lat", 
-        type=float, 
-        default=35.7796, 
-        help="Latitude of the camera. Defaults to 35.7796 (Raleigh, NC)."
-    )
-    parser.add_argument(
-        "--lon", 
-        type=float, 
-        default=-78.6382, 
-        help="Longitude of the camera. Defaults to -78.6382 (Raleigh, NC)."
-    )
-    
-    parser.add_argument(
-        "--start", type=int, default=6, help="Start time (Eastern)."
-    )
-    parser.add_argument(
-        "--end", type=int, default=19, help="End time (Eastern)."
-    )
-    parser.add_argument(
-        "--workers", type=int, default=None, help="Maximum worker threads."
-    )
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments. Default reads ``sys.argv``.
+    """
+    parser = cli_common.make_parser(__doc__.splitlines()[0])
+    cli_common.add_site_argument(parser)
+    parser.add_argument("--image_dir", required=True,
+                        help="Folder of images to filter.")
+    parser.add_argument("--dest", required=True,
+                        help="Folder receiving the kept images.")
+    parser.add_argument("--method", choices=("sun", "hours"), default="sun",
+                        help="Filter by solar position or by clock hours.")
+    parser.add_argument("--lat", type=float, default=None,
+                        help="Camera latitude; overrides the site config.")
+    parser.add_argument("--lon", type=float, default=None,
+                        help="Camera longitude; overrides the site config.")
+    parser.add_argument("--start", type=int, default=6,
+                        help="First Eastern hour kept (--method hours).")
+    parser.add_argument("--end", type=int, default=19,
+                        help="Last Eastern hour kept (--method hours).")
+    parser.add_argument("--workers", type=int, default=None,
+                        help="Copy threads.")
+    args = cli_common.start(parser, argv)
+    handler = ImageHandler()
 
-    args = parser.parse_args()
+    if args.method == "hours":
+        handler.copy_images_using_hour_window(
+            args.image_dir, args.dest, args.start, args.end, args.workers)
+        return
 
-    handler = poseidon_utils.ImageHandler(sdfp_image_drive=args.drive)
-
+    site = cli_common.load_site(args)
+    lat = site.latitude if args.lat is None else args.lat
+    lon = site.longitude if args.lon is None else args.lon
+    if lat is None or lon is None:
+        cli_common.fail(f"No camera coordinates for site '{site.name}'; set "
+                        f"latitude/longitude in its YAML or pass --lat/--lon.")
     handler.copy_images_using_sun_position(
-        image_dir=args.image_dir,
-        destination_folder=args.dest,
-        # start_hour_east=args.start,
-        # end_hour_east=args.end,
-        latitude=args.lat,
-        longitude=args.lon,
-        max_workers=args.workers,
-    )
-    print("Image filtering complete.")
+        args.image_dir, args.dest, latitude=lat, longitude=lon,
+        max_workers=args.workers)
 
 
 if __name__ == "__main__":

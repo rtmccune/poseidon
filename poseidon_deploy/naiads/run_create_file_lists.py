@@ -1,51 +1,38 @@
-import argparse
-import sys
+"""Split a folder of images into file lists for an HPC job array.
 
-# Assuming the function is in 'poseidon_utils/hpc_tools.py'
-import poseidon_utils.file_organizer as file_organizer
+Writes ``file_list_1.txt`` ... ``file_list_<N>.txt``, one per array
+task; run before segmentation (stage 02) and label generation (03).
+
+Example
+-------
+``python run_create_file_lists.py --image_dir images/daylight
+--num_jobs 32``
+"""
+
+from poseidon_utils.file_organizer import prepare_job_lists
+
+import cli_common
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Scans a directory and splits file lists for an HPC job array."
-    )
+def main(argv=None):
+    """
+    Write job array file lists.
 
-    # --- Path Arguments ---
-    parser.add_argument(
-        "--image_dir",
-        type=str,
-        required=True,
-        help="Path to the directory containing files to be processed.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default=None,
-        help="Directory to save the 'file_list_*.txt' files. "
-        "(Default: 'job_file_lists' in the parent of --image_dir)",
-    )
-
-    # --- Configuration Arguments ---
-    parser.add_argument(
-        "--num_jobs",
-        type=int,
-        required=True,
-        help="The total number of job array tasks (i.e., number of file lists to create).",
-    )
-
-    args = parser.parse_args()
-
-    # --- Generate Job Lists ---
-    print("Starting job list preparation...")
-
-    # Call the function from your utility module
-    file_organizer.prepare_job_lists(
-        image_folder=args.image_dir,
-        num_jobs=args.num_jobs,
-        output_dir=args.output_dir,
-    )
-
-    print("Job list preparation finished.")
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments. Default reads ``sys.argv``.
+    """
+    parser = cli_common.make_parser(__doc__.splitlines()[0])
+    parser.add_argument("--image_dir", required=True,
+                        help="Folder whose files are split into lists.")
+    parser.add_argument("--num_jobs", type=int, required=True,
+                        help="Number of job array tasks (file lists).")
+    parser.add_argument("--output_dir", default=None,
+                        help="Folder for the lists; default is "
+                             "'job_file_lists' beside --image_dir.")
+    args = cli_common.start(parser, argv)
+    prepare_job_lists(args.image_dir, args.num_jobs, args.output_dir)
 
 
 if __name__ == "__main__":

@@ -1,654 +1,342 @@
+"""Organize flood event data and images into per-event folders.
+
+Each flood event gets a folder named
+``<sensor>_<padded start>_<padded end>`` (UTC, ``YYYYMMDDHHMMSS``)
+holding that event's sensor records CSV and image subfolders. The
+padded event window is computed from the abbreviated flood event CSV's
+UTC columns by :func:`event_windows`, so CSV folders and image folders
+always agree.
+"""
+
+import logging
 import os
-import re
 import shutil
-import sys
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from .constants import EASTERN_TZ
+from .logging_utils import progress_interval
+from .naming import (
+    TIMESTAMP_FORMAT,
+    camera_from_sensor_id,
+    extract_camera_name,
+    extract_timestamp,
+    parse_timestamp,
+)
 
-def _log(message, level="info"):
+logger = logging.getLogger(__name__)
+
+#: Image extensions recognized when sorting images into events.
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
+
+__all__ = [
+    "create_flood_csvs_and_subfolders",
+    "event_windows",
+    "extract_camera_name",
+    "extract_timestamp",
+    "filter_abbr_flood_csv_by_eastern_time",
+    "organize_images_into_flood_events",
+    "prepare_job_lists",
+    "prune_empty_event_folders",
+]
+
+
+def event_windows(abbr_events, padding_hours=3):
     """
-    Prints a timestamped message to stdout or stderr.
+    Compute padded UTC windows and folder names for flood events.
 
     Parameters
     ----------
-    message : str
-        The message to be logged.
-    level : str, optional
-        The log level. "info" (default) prints to stdout,
-        "error" prints to stderr.
-
-    """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    formatted_message = f"[{timestamp}] {level.upper()}: {message}"
-
-    if level.lower() == "error":
-        # Print to standard error
-        print(formatted_message, file=sys.stderr)
-    else:
-        # Print to standard output
-        print(formatted_message, file=sys.stdout)
-
-
-def filter_abbr_flood_csv_by_eastern_time(
-    input_path, output_path, min_hour=6, max_hour=19
-):
-    """
-    Filter a CSV by hour of day in US/Eastern Time.
-
-    Reads a CSV file containing a 'start_time_UTC' column. It converts
-    these timestamps to 'America/New_York' (Eastern Time), correctly
-    handling EST/EDT. The DataFrame is then filtered to include only
-    rows where the hour of the day falls within the specified range
-    [min_hour, max_hour). The result is saved to a new CSV file.
-
-    Parameters
-    ----------
-    input_path : str
-        The file path to the input CSV. Must contain a
-        'start_time_UTC' column.
-    output_path : str
-        The file path where the filtered CSV will be saved.
-    min_hour : int, optional
-        The starting hour (inclusive, 0-23) for the filter.
-        Default is 6 (representing 6:00 AM).
-    max_hour : int, optional
-        The ending hour (exclusive, 0-24) for the filter.
-        Default is 20 (representing 8:00 PM, so it includes
-        hours 6 through 19).
+    abbr_events : pandas.DataFrame
+        Abbreviated events with ``sensor_ID``, ``start_time_UTC`` and
+        ``end_time_UTC``.
+    padding_hours : float, optional
+        Hours added before each start and after each end. Default 3.
 
     Returns
     -------
-    None
-        This function does not return a value. It saves the filtered
-        DataFrame to the file specified by `output_path` and logs
-        status messages.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the file at `input_path` is not found.
-    Exception
-        Catches other potential errors during file reading,
-        processing, or writing, such as permissions errors.
+    pandas.DataFrame
+        Columns ``sensor_ID``, ``camera_ID``, ``start`` and ``end``
+        (padded, aware UTC) and ``folder_name``. Rows with unparsable
+        times are dropped with a warning.
     """
-    try:
-        _log(f"Reading data from '{input_path}'")
-        df = pd.read_csv(input_path)
-
-        # Ensure the required UTC column exists
-        required_column = "start_time_UTC"
-        if required_column not in df.columns:
-            _log(
-                f"Input CSV must contain the column '{required_column}'",
-                level="error",
-            )
-            return
-
-        _log(
-            f"Converting UTC to Eastern Time and filtering for hours {min_hour}:00 to {max_hour}:00"
-        )
-
-        # Convert the 'start_time_UTC' column to datetime objects
-        df["start_time_UTC"] = pd.to_datetime(
-            df["start_time_UTC"], errors="coerce", utc=True
-        )
-
-        # Drop rows where the date conversion failed
-        df.dropna(subset=["start_time_UTC"], inplace=True)
-
-        # Localize the UTC times and convert to US/Eastern.
-        df["start_time_ET"] = df["start_time_UTC"].dt.tz_convert(
-            "America/New_York"
-        )
-
-        # Get the hour of the day
-        hour_of_day = df["start_time_ET"].dt.hour
-
-        # Filter the DataFrame
-        filtered_df = df[
-            (hour_of_day >= min_hour) & (hour_of_day < max_hour)
-        ].copy()
-
-        _log(f"Saving filtered data to '{output_path}'")
-        filtered_df.to_csv(output_path, index=False)
-
-        _log(f"Success! Filtered file saved with {len(filtered_df)} rows.")
-
-    except FileNotFoundError:
-        _log(f"The file '{input_path}' was not found.", level="error")
-    except Exception as e:
-        _log(f"An unexpected error occurred: {e}", level="error")
-
-
-def create_flood_csvs_and_subfolders(
-    abbr_events_path, full_events_path, output_parent_dir, padding_hours=3
-):
-    """
-    Filters full event data based on abbreviated event windows and saves
-    each event into its own subfolder.
-
-    This function reads a list of "abbreviated" flood events (defined
-    in EST) and a "full" data record (defined in UTC). It applies a
-    fixed-offset EST timezone ('Etc/GMT+5'), converts the event windows
-    to UTC, applies padding, and then filters the full data for each
-    event. Each filtered event's data is saved as a new CSV in its
-    own uniquely named subfolder.
-
-    Parameters
-    ----------
-    abbr_events_path : str
-        File path to the abbreviated flood events CSV.
-        Requires columns: 'sensor_ID', 'start_time_EST', 'end_time_EST'.
-    full_events_path : str
-        File path to the full data record (all sensor readings).
-        Requires columns: 'sensor_ID', 'time_UTC'.
-    output_parent_dir : str
-        The parent directory where new subfolders for each event
-        will be created.
-    padding_hours : int, optional
-        The number of hours to add before the start and after the end
-        of each event window for padding. Default is 3.
-
-    Returns
-    -------
-    None
-        Files are written to disk. Logs status.
-
-    Raises
-    ------
-    FileNotFoundError
-        If `abbr_events_path` or `full_events_path` is not found.
-    Exception
-        Catches other potential errors during file loading or time
-        conversion.
-    """
-    try:
-        _log(f"Loading abbreviated events from: {abbr_events_path}")
-        abbr_df = pd.read_csv(abbr_events_path)
-
-        _log(f"Loading full data record from: {full_events_path}")
-        full_df = pd.read_csv(full_events_path)
-    except FileNotFoundError as e:
-        _log(f"File not found. {e}", level="error")
-        return
-    except Exception as e:
-        _log(f"Error loading files: {e}", level="error")
-        return
-
-    _log(f"Processing event time windows with {padding_hours}-hour padding...")
-
-    # --- Timezone Processing ---
     padding = pd.Timedelta(hours=padding_hours)
+    windows = pd.DataFrame({
+        "sensor_ID": abbr_events["sensor_ID"].astype(str),
+        "start": pd.to_datetime(abbr_events["start_time_UTC"], utc=True,
+                                errors="coerce") - padding,
+        "end": pd.to_datetime(abbr_events["end_time_UTC"], utc=True,
+                              errors="coerce") + padding,
+    })
+    invalid = windows["start"].isna() | windows["end"].isna()
+    if invalid.any():
+        logger.warning("Dropping %d events with invalid timestamps.",
+                       int(invalid.sum()))
+        windows = windows[~invalid]
 
-    # Convert naive EST strings to aware datetime objects
-    try:
-        # Parse the time strings. As the error message indicates,
-        # pd.to_datetime() is successfully reading them as
-        # timezone-AWARE objects (e.g., "2025-11-10 12:00:00-05:00").
-        start_time_aware = pd.to_datetime(
-            abbr_df["start_time_EST"], errors="coerce"
-        )
-        end_time_aware = pd.to_datetime(
-            abbr_df["end_time_EST"], errors="coerce"
-        )
+    windows["camera_ID"] = windows["sensor_ID"].map(camera_from_sensor_id)
+    windows["folder_name"] = (
+        windows["sensor_ID"] + "_"
+        + windows["start"].dt.strftime(TIMESTAMP_FORMAT) + "_"
+        + windows["end"].dt.strftime(TIMESTAMP_FORMAT))
+    return windows.reset_index(drop=True)
 
-        # Check for NaTs (Not a Time) created by errors="coerce"
-        # This handles the "ensure... valid timestamps" error.
-        invalid_rows = start_time_aware.isnull() | end_time_aware.isnull()
-        if invalid_rows.any():
-            _log(
-                f"Found {invalid_rows.sum()} invalid timestamps. Dropping rows with errors.",
-                level="error",
-            )
-            # Filter out the bad rows from both the Series and the DataFrame
-            start_time_aware = start_time_aware[~invalid_rows]
-            end_time_aware = end_time_aware[~invalid_rows]
-            # Use .copy() to avoid a SettingWithCopyWarning
-            abbr_df = abbr_df[~invalid_rows].copy()
 
-        # The error was caused by calling .tz_localize() on these
-        # already-aware datetimes.
-        # The correct step is to simply .tz_convert() them to UTC.
-        abbr_df["start_time_UTC_padded"] = (
-            start_time_aware.dt.tz_convert("UTC") - padding
-        )
-        abbr_df["end_time_UTC_padded"] = (
-            end_time_aware.dt.tz_convert("UTC") + padding
-        )
+def filter_abbr_flood_csv_by_eastern_time(input_path, output_path,
+                                          min_hour=6, max_hour=19):
+    """
+    Keep events that start within an Eastern local-time hour range.
 
-    except Exception as e:
-        _log(
-            f"Error processing time columns ('start_time_EST'): {e}",
-            level="error",
-        )
-        _log(
-            "Please ensure 'start_time_EST' and 'end_time_EST' are valid timestamps.",
-            level="error",
-        )
-        return
+    Parameters
+    ----------
+    input_path : str or os.PathLike
+        Abbreviated CSV with a ``start_time_UTC`` column.
+    output_path : str or os.PathLike
+        Filtered CSV to write.
+    min_hour : int, optional
+        First hour kept (inclusive, 0-23). Default is 6.
+    max_hour : int, optional
+        First hour excluded (exclusive, 1-24). Default is 19, keeping
+        starts from 06:00 through 18:59.
 
-    # Create string representations for file naming
-    abbr_df["start_str"] = abbr_df["start_time_UTC_padded"].dt.strftime(
-        "%Y%m%d%H%M%S"
-    )
-    abbr_df["end_str"] = abbr_df["end_time_UTC_padded"].dt.strftime(
-        "%Y%m%d%H%M%S"
-    )
+    Returns
+    -------
+    pandas.DataFrame
+        The filtered events, with an added ``start_time_ET`` column.
 
-    # Ensure the full data's time column is timezone-aware UTC
-    full_df["time_UTC"] = pd.to_datetime(full_df["time_UTC"], utc=True)
+    Raises
+    ------
+    FileNotFoundError
+        If `input_path` does not exist.
+    KeyError
+        If the CSV lacks ``start_time_UTC``.
+    """
+    events = pd.read_csv(input_path)
+    if "start_time_UTC" not in events:
+        raise KeyError(f"{input_path} has no 'start_time_UTC' column")
 
-    _log(f"Generating filtered CSVs in '{output_parent_dir}'...")
+    events["start_time_UTC"] = pd.to_datetime(events["start_time_UTC"],
+                                              utc=True, errors="coerce")
+    events = events.dropna(subset=["start_time_UTC"])
+    events["start_time_ET"] = events["start_time_UTC"].dt.tz_convert(
+        EASTERN_TZ)
+    hour = events["start_time_ET"].dt.hour
+    kept = events[(hour >= min_hour) & (hour < max_hour)].copy()
+
+    kept.to_csv(output_path, index=False)
+    logger.info("Kept %d of %d events starting %02d:00-%02d:00 ET -> %s",
+                len(kept), len(events), min_hour, max_hour, output_path)
+    return kept
+
+
+def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path,
+                                     output_parent_dir, padding_hours=3):
+    """
+    Write each event's sensor records into its own event folder.
+
+    Parameters
+    ----------
+    abbr_events_path : str or os.PathLike
+        Abbreviated CSV (``sensor_ID``, ``start_time_UTC``,
+        ``end_time_UTC``).
+    full_events_path : str or os.PathLike
+        Sensor records CSV with ``sensor_ID`` and ``time_UTC``.
+    output_parent_dir : str or os.PathLike
+        Parent folder for the event folders.
+    padding_hours : float, optional
+        Hours added around each event. Default is 3.
+
+    Returns
+    -------
+    int
+        Number of event CSVs written. Events without records are
+        skipped.
+
+    Raises
+    ------
+    FileNotFoundError
+        If either CSV does not exist.
+    """
+    windows = event_windows(pd.read_csv(abbr_events_path), padding_hours)
+    records = pd.read_csv(full_events_path)
+    records["time_UTC"] = pd.to_datetime(records["time_UTC"], utc=True)
+    records["sensor_ID"] = records["sensor_ID"].astype(str)
     os.makedirs(output_parent_dir, exist_ok=True)
 
-    created_count = 0
-    total_events = len(abbr_df)
-    _log(f"Starting to process {total_events} events...")
-
-    # --- Main Loop: Filter and Save ---
-    for index, row in abbr_df.iterrows():
-        sensor_id = row["sensor_ID"]
-        start_time = row["start_time_UTC_padded"]
-        end_time = row["end_time_UTC_padded"]
-
-        # Filter the full DataFrame
-        filtered_df = full_df[
-            (full_df["sensor_ID"] == sensor_id)
-            & (full_df["time_UTC"] >= start_time)
-            & (full_df["time_UTC"] <= end_time)
-        ]
-
-        if filtered_df.empty:
+    written = 0
+    for window in windows.itertuples():
+        rows = records[(records["sensor_ID"] == window.sensor_ID)
+                       & (records["time_UTC"] >= window.start)
+                       & (records["time_UTC"] <= window.end)]
+        if rows.empty:
             continue
+        folder = os.path.join(output_parent_dir, window.folder_name)
+        os.makedirs(folder, exist_ok=True)
+        rows.to_csv(os.path.join(folder, f"{window.folder_name}.csv"),
+                    index=False)
+        written += 1
 
-        # --- File and Folder Path Generation ---
-        folder_name = f"{sensor_id}_{row['start_str']}_{row['end_str']}"
-        subfolder_path = os.path.join(output_parent_dir, folder_name)
-        os.makedirs(subfolder_path, exist_ok=True)
-
-        csv_filename = f"{folder_name}.csv"
-        output_path = os.path.join(subfolder_path, csv_filename)
-
-        filtered_df.to_csv(output_path, index=False)
-        created_count += 1
-
-    _log(
-        f"Script complete. Successfully created {created_count} CSV files in subfolders."
-    )
+    logger.info("Wrote %d of %d event CSVs under %s", written, len(windows),
+                output_parent_dir)
+    return written
 
 
-def extract_camera_name(filename):
+def organize_images_into_flood_events(image_folder, csv_file,
+                                      destination_folder, subfolder_name,
+                                      padding_hours=3):
     """
-    Extracts sensor ID from filenames based on a specific pattern.
+    Copy images into the event folders whose window contains them.
+
+    An image within several overlapping windows is copied into each.
+    Files already present at the destination are not copied again.
 
     Parameters
     ----------
-    filename : str
-        The filename to parse (e.g., "CAM_NC_01_20230101120000.jpg").
-
-    Returns
-    -------
-    str or None
-        The matched camera name (e.g., "CAM_NC_01") or None if
-        no match is found.
-    """
-    # Pattern: CAM_XX_00
-    pattern = r"CAM_[A-Z]{2}_[0-9]{2}"
-    match = re.search(pattern, filename)
-    return match.group(0) if match else None
-
-
-def extract_timestamp(filename):
-    """
-    Extracts a 14-digit UTC timestamp from filenames.
-
-    Parameters
-    ----------
-    filename : str
-        The filename to parse (e.g., "CAM_NC_01_20230101120000.jpg").
-
-    Returns
-    -------
-    str or None
-        The matched timestamp string (e.g., "20230101120000") or
-        None if no match is found.
-    """
-    # Pattern: 20230101120000
-    pattern = r"\d{14}"
-    match = re.search(pattern, filename)
-    return match.group(0) if match else None
-
-
-def organize_images_into_flood_events(
-    image_folder, csv_file, destination_folder, subfolder_name, padding_hours=3
-):
-    """
-    Efficiently organizes images into folders based on flood event time
-    ranges.
-
-    This "single-pass" method builds a lookup of events first, then
-    iterates through all images once, placing them in the correct
-    event folder.
-
-    Parameters
-    ----------
-    image_folder : str
-        Path to the directory containing the original images.
-    csv_file : str
-        Path to the CSV file defining flood events.
-        Requires columns: 'sensor_ID', 'start_time_UTC', 'end_time_UTC'.
-    destination_folder : str
-        Path where the organized event folders should be created.
+    image_folder : str or os.PathLike
+        Folder of images named with a camera and UTC timestamp.
+    csv_file : str or os.PathLike
+        Abbreviated CSV defining the events.
+    destination_folder : str or os.PathLike
+        Parent folder of the event folders.
     subfolder_name : str
-        Name of the subfolder inside each event folder to store the
-        images (e.g., "orig_images").
-    padding_hours : int, optional
-        The number of hours to add before the start and after the end
-        of each event window. Default is 3.
+        Subfolder within each event folder, e.g. ``"orig_images"``.
+    padding_hours : float, optional
+        Hours added around each event. Default is 3.
 
     Returns
     -------
-    None
-        Files are copied into new directories. Logs status.
+    int
+        Number of files copied.
 
     Raises
     ------
     FileNotFoundError
-        If `csv_file` or `image_folder` is not found.
+        If `csv_file` or `image_folder` does not exist.
     """
+    windows = event_windows(pd.read_csv(csv_file), padding_hours)
+    by_camera = defaultdict(list)
+    for window in windows.itertuples():
+        by_camera[window.camera_ID].append(
+            (window.start, window.end, window.folder_name))
 
-    # --- 1. Build Event Lookup Dictionary ---
-    _log(f"Reading event data from '{csv_file}'")
-    try:
-        df = pd.read_csv(csv_file)
-    except FileNotFoundError:
-        _log(f"CSV file not found at '{csv_file}'", level="error")
-        return
+    images = sorted(name for name in os.listdir(image_folder)
+                    if name.lower().endswith(IMAGE_EXTENSIONS))
+    logger.info("Sorting %d images into %d events.", len(images),
+                len(windows))
 
-    _log(f"Applying {padding_hours}-hour padding to event windows...")
+    copied = unmatched = 0
+    interval = progress_interval(len(images))
+    for i, name in enumerate(images):
+        if i and i % interval == 0:
+            logger.info("  %d%% (%d of %d images)",
+                        100 * i // len(images), i, len(images))
+        camera, taken = extract_camera_name(name), parse_timestamp(name)
+        matches = [folder for start, end, folder in by_camera.get(camera, [])
+                   if taken is not None and start <= taken <= end]
+        if not matches:
+            unmatched += 1
+        for folder in matches:
+            dest_dir = os.path.join(destination_folder, folder,
+                                    subfolder_name)
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, name)
+            if not os.path.exists(dest):
+                shutil.copy2(os.path.join(image_folder, name), dest)
+                copied += 1
 
-    padding = pd.Timedelta(hours=padding_hours)
-
-    # Apply padding and create folder names
-    df["start_time_UTC"] = (
-        pd.to_datetime(df["start_time_UTC"], utc=True) - padding
-    )
-    df["end_time_UTC"] = pd.to_datetime(df["end_time_UTC"], utc=True) + padding
-
-    df["start_time_str"] = df["start_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
-    df["end_time_str"] = df["end_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
-
-    df["sensor_ID"] = df["sensor_ID"].astype(str)
-    df["camera_ID"] = "CAM_" + df["sensor_ID"]
-    df["folder_name"] = (
-        df["sensor_ID"] + "_" + df["start_time_str"] + "_" + df["end_time_str"]
-    )
-
-    # Create the lookup: { camera_ID: [ (start, end, folder_name), ... ] }
-    event_lookup = defaultdict(list)
-    for _, row in df.iterrows():
-        event_details = (
-            row["start_time_UTC"],
-            row["end_time_UTC"],
-            row["folder_name"],
-        )
-        event_lookup[row["camera_ID"]].append(event_details)
-
-    _log(
-        f"Built lookup for {len(df)} events across {len(event_lookup)} cameras."
-    )
-
-    # --- 2. Process All Images in a Single Pass ---
-    _log(f"Scanning image folder: '{image_folder}'...")
-
-    try:
-        all_files = [
-            f
-            for f in os.listdir(image_folder)
-            if f.lower().endswith((".png", ".jpg", ".jpeg"))
-        ]
-    except FileNotFoundError:
-        _log(f"Image folder not found at '{image_folder}'", level="error")
-        return
-
-    total_files = len(all_files)  # <-- Total for progress
-    if not all_files:
-        _log("No image files found in the source directory.")
-        return
-
-    # --- Progress Reporting Setup ---
-    # Only set a step if there are enough files to warrant updates
-    progress_step = 0
-    if total_files > 10:
-        progress_step = total_files // 10  # 10% increment
-    # --- End Progress Setup ---
-
-    copy_count = 0
-    skip_count = 0
-    copied_files = set()  # Keep track of files already copied
-
-    _log(f"Organizing {total_files} images...")
-
-    # Use enumerate to get the index 'i'
-    for i, filename in enumerate(all_files):
-
-        # --- Progress Reporting Logic ---
-        # Report at 10%, 20%, ... 90%
-        # Check i > 0 to avoid reporting at 0%
-        if progress_step > 0 and i % progress_step == 0 and i > 0:
-            percent_complete = int((i / total_files) * 100)
-            _log(
-                f"  ...progress: {percent_complete}% complete ({i} of {total_files} images processed)"
-            )
-        # --- End Progress Reporting ---
-
-        # Extract info from the image filename
-        camera_name = extract_camera_name(filename)
-        timestamp_str = extract_timestamp(filename)
-
-        if not camera_name or not timestamp_str:
-            skip_count += 1
-            continue
-
-        try:
-            img_time = pd.to_datetime(
-                timestamp_str, format="%Y%m%d%H%M%S", utc=True
-            )
-        except ValueError:
-            skip_count += 1  # Skip files with bad timestamps
-            continue
-
-        # Find a matching event for this image
-        if camera_name in event_lookup:
-            for start_time, end_time, folder_name in event_lookup[camera_name]:
-
-                # Check if the image time is within the event window
-                if start_time <= img_time <= end_time:
-
-                    # --- 3. Create Folder and Copy File ---
-                    dest_path = os.path.join(
-                        destination_folder, folder_name, subfolder_name
-                    )
-                    os.makedirs(dest_path, exist_ok=True)
-
-                    src_file = os.path.join(image_folder, filename)
-                    dest_file = os.path.join(dest_path, filename)
-
-                    # Only copy if it doesn't already exist
-                    if dest_file not in copied_files and not os.path.exists(
-                        dest_file
-                    ):
-                        shutil.copy2(
-                            src_file, dest_file
-                        )  # copy2 preserves metadata
-                        copy_count += 1
-                        copied_files.add(dest_file)
-
-                    # An image might belong to multiple overlapping events
-                    # So we continue checking, not 'break'
-
-    _log("--- Image Organization Complete ---")
-    _log(f"Successfully copied: {copy_count} files")
-    _log(f"Skipped (no match):  {skip_count} files")
+    logger.info("Copied %d files; %d images matched no event.", copied,
+                unmatched)
+    return copied
 
 
-def prepare_job_lists(image_folder: str, num_jobs: int, output_dir: str = None):
+def prepare_job_lists(image_folder, num_jobs, output_dir=None):
     """
-    Prepare file lists for an HPC job array.
-
-    Scans a source directory for files, filters hidden files (starting with '.'),
-    and splits the sorted file list into a specified number of new text files.
-    These output files are designed to be used as inputs for an HPC job array,
-    where each job processes one text file listing its assigned images.
+    Split a folder's files into text lists for an HPC job array.
 
     Parameters
     ----------
-    image_folder : str
-        The absolute or relative path to the directory containing the files
-        to be processed.
+    image_folder : str or os.PathLike
+        Folder whose (non-hidden) files are listed.
     num_jobs : int
-        The total number of job array tasks, which determines the number
-        of output file lists to create.
-    output_dir : str, optional
-        The directory where the 'file_list_*.txt' files will be saved.
-        If None (default), a new directory 'job_file_lists' will be
-        created in the parent directory of `image_folder`.
+        Number of lists, one per job array task.
+    output_dir : str or os.PathLike, optional
+        Folder for ``file_list_<n>.txt`` (1-based). Default is
+        ``job_file_lists`` beside `image_folder`.
 
     Returns
     -------
-    None
-        This function does not return a value. It creates files on disk as
-        a side effect and prints status messages to the console.
+    list of pathlib.Path
+        The list files written.
 
+    Raises
+    ------
+    NotADirectoryError
+        If `image_folder` is not a directory.
+    ValueError
+        If `num_jobs` is not positive.
     """
-    # Resolve the input path immediately to get a full, absolute path.
     image_path = Path(image_folder).resolve()
-
-    # Check if the source directory exists early on
     if not image_path.is_dir():
-        print(
-            f"Error: The specified image folder does not exist: '{image_path}'"
-        )
-        return
+        raise NotADirectoryError(f"Image folder not found: {image_path}")
+    if num_jobs < 1:
+        raise ValueError("num_jobs must be at least 1")
 
-    if output_dir is None:
-        # Create 'job_file_lists' in the parent directory of the source images.
-        final_output_path = image_path.parent / "job_file_lists"
-        print(
-            f"Output directory not specified. Defaulting to: {final_output_path}"
-        )
-    else:
-        # If an output directory is specified, resolve it to an absolute path too.
-        final_output_path = Path(output_dir).resolve()
-        print(f"Using specified output directory: {final_output_path}")
+    out_path = (image_path.parent / "job_file_lists" if output_dir is None
+                else Path(output_dir).resolve())
+    out_path.mkdir(parents=True, exist_ok=True)
 
-    # Create the final output directory if it doesn't exist.
-    final_output_path.mkdir(parents=True, exist_ok=True)
-
-    # Get sorted list of files using modern pathlib
-    files = sorted(
-        [
-            f.name
-            for f in image_path.iterdir()
-            if f.is_file() and not f.name.startswith(".")
-        ]
-    )
-
+    files = sorted(p.name for p in image_path.iterdir()
+                   if p.is_file() and not p.name.startswith("."))
     if not files:
-        print(
-            f"Warning: No valid files found in '{image_path}'. No lists created."
-        )
-        return
+        logger.warning("No files in %s; no lists created.", image_path)
+        return []
 
-    total_files = len(files)
-
-    # Split into chunks for number of jobs
-    file_chunks = np.array_split(files, num_jobs)
-
-    for i, chunk in enumerate(file_chunks):
-        list_filename = final_output_path / f"file_list_{i+1}.txt"
-
-        with open(list_filename, "w") as f:
-            for filename in chunk:
-                f.write(filename + "\n")
-
-    print(
-        f"\nSuccess! Created {len(file_chunks)} file lists in '{final_output_path}' for a total of {total_files} files."
-    )
+    list_paths = []
+    for i, chunk in enumerate(np.array_split(files, num_jobs), start=1):
+        list_path = out_path / f"file_list_{i}.txt"
+        list_path.write_text("".join(f"{name}\n" for name in chunk))
+        list_paths.append(list_path)
+    logger.info("Wrote %d file lists for %d files to %s", len(list_paths),
+                len(files), out_path)
+    return list_paths
 
 
 def prune_empty_event_folders(output_parent_dir, image_subfolder_name):
     """
-    Scans the output directory and removes any event subfolders
-    that were created but contain no images.
-
-    This cleanup step is for event subfolders that have a CSV file
-    but for which no matching images were found and copied.
+    Delete event folders that never received an image subfolder.
 
     Parameters
     ----------
-    output_parent_dir : str
-        The parent directory containing all the individual
-        event subfolders to scan.
+    output_parent_dir : str or os.PathLike
+        Parent folder of the event folders.
     image_subfolder_name : str
-        The name of the subfolder that should contain images
-        (e.g., "orig_images").
+        Subfolder an event must contain to be kept, e.g.
+        ``"orig_images"``.
 
     Returns
     -------
-    None
-        Folders are deleted from the disk. Logs status.
+    list of str
+        Names of the deleted event folders.
+
+    Raises
+    ------
+    FileNotFoundError
+        If `output_parent_dir` does not exist.
     """
-    _log(f"Starting cleanup of empty event folders in '{output_parent_dir}'...")
-    _log(f"Looking for subfolders that are missing '{image_subfolder_name}'.")
-
-    removed_folders = []
-
-    try:
-        # Get a list of all items in the parent directory
-        all_event_folders = os.listdir(output_parent_dir)
-    except FileNotFoundError:
-        _log(
-            f"Parent directory not found: '{output_parent_dir}'", level="error"
-        )
-        return
-
-    for folder_name in all_event_folders:
-        event_folder_path = os.path.join(output_parent_dir, folder_name)
-
-        # Ensure we are only checking directories
-        if not os.path.isdir(event_folder_path):
+    removed = []
+    for name in sorted(os.listdir(output_parent_dir)):
+        event_dir = os.path.join(output_parent_dir, name)
+        if not os.path.isdir(event_dir):
             continue
-
-        # This is the path to the folder we expect to find *inside*
-        # the event subfolder (e.g., .../CAM_NC_01_.../orig_images)
-        image_folder_path = os.path.join(
-            event_folder_path, image_subfolder_name
-        )
-
-        # The condition for deletion:
-        # The 'orig_images' folder does not exist.
-        if not os.path.exists(image_folder_path):
+        if not os.path.exists(os.path.join(event_dir, image_subfolder_name)):
             try:
-                # Log *before* deleting
-                _log(
-                    f"  - Pruning event folder (no images found): {folder_name}"
-                )
-                shutil.rmtree(event_folder_path)
-                removed_folders.append(folder_name)
-            except OSError as e:
-                _log(
-                    f"Failed to delete {event_folder_path}: {e}", level="error"
-                )
-
-    if not removed_folders:
-        _log("No empty event folders found to prune.")
-    else:
-        _log(
-            f"Cleanup complete. Pruned {len(removed_folders)} empty event folders."
-        )
+                shutil.rmtree(event_dir)
+                removed.append(name)
+            except OSError as err:
+                logger.error("Could not delete %s: %s", event_dir, err)
+    logger.info("Pruned %d event folders without '%s'.", len(removed),
+                image_subfolder_name)
+    return removed

@@ -1,316 +1,333 @@
-import os
+"""Summarize flooding on a roadway region of interest over a flood event.
+
+A region of interest (ROI) is drawn in LabelMe on a rectified image as
+either a line/linestrip (a transect along the road) or a polygon (the
+road surface). For every depth and water surface elevation (WSE) map
+in an event, the values inside the ROI are extracted and reduced to a
+per-timestep CSV:
+
+* ``<roi>_accessibility_time_series.csv`` - flooded pixel counts,
+  impassability flag, and depth statistics.
+* ``<roi>_wse_time_series.csv`` - WSE statistics.
+
+The raw ROI samples are also saved as ``zarr/<roi>_depths.zip`` and
+``zarr/<roi>_wse.zip`` for later analysis.
+"""
+
 import json
-import zarr
+import logging
+import os
+import warnings
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from scipy.interpolate import interp1d
-import re
-from skimage.draw import polygon  # <--- Added for polygon interior masking
+from skimage.draw import polygon
 
-def _extract_timestamp(filename):
-    pattern = r"\d{14}"
-    match = re.search(pattern, filename)
-    return match.group(0) if match else None
+from poseidon_utils.naming import extract_timestamp
+from poseidon_utils.zarr_io import (
+    array_names,
+    open_zip_group,
+    write_array,
+    write_zip_group,
+)
 
-def _log(message):
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
+logger = logging.getLogger(__name__)
+
+#: LabelMe shape types treated as transects.
+LINE_SHAPES = ("line", "linestrip")
+
+
+def roi_pixels_from_labelme(json_path, label, step_size=1.0):
+    """
+    Read a LabelMe shape and return the image pixels it covers.
+
+    Parameters
+    ----------
+    json_path : str or os.PathLike
+        LabelMe JSON file drawn on a rectified image.
+    label : str
+        Label of the shape to use.
+    step_size : float, optional
+        Spacing in pixels between samples along a line. Default 1.0.
+
+    Returns
+    -------
+    coords : numpy.ndarray
+        ``(N, 2)`` integer ``(row, col)`` pixels in image orientation
+        (row 0 at the top / northern edge).
+    shape_type : str
+        LabelMe shape type (``"polygon"``, ``"line"``, ``"linestrip"``).
+
+    Raises
+    ------
+    ValueError
+        If no shape has `label` or its type is unsupported.
+    """
+    with open(json_path) as handle:
+        shapes = json.load(handle).get("shapes", [])
+
+    shape = next((s for s in shapes if s.get("label") == label), None)
+    if shape is None:
+        found = sorted({s.get("label", "?") for s in shapes})
+        raise ValueError(f"No shape labeled '{label}' in {json_path}; "
+                         f"found {found}")
+
+    points = np.asarray(shape["points"], dtype=float)  # (x, y) vertices
+    shape_type = shape["shape_type"]
+
+    if shape_type in LINE_SHAPES:
+        # Resample the polyline at even arc-length spacing
+        seg_lengths = np.hypot(*np.diff(points, axis=0).T)
+        arc = np.concatenate([[0.0], np.cumsum(seg_lengths)])
+        samples = np.arange(0.0, arc[-1], step_size)
+        if samples.size == 0 or samples[-1] < arc[-1]:
+            samples = np.append(samples, arc[-1])  # include the end vertex
+        cols = np.interp(samples, arc, points[:, 0])
+        rows = np.interp(samples, arc, points[:, 1])
+        coords = np.column_stack((np.round(rows), np.round(cols)))
+        return coords.astype(int), shape_type
+
+    if shape_type == "polygon":
+        rows, cols = polygon(points[:, 1], points[:, 0])
+        return np.column_stack((rows, cols)).astype(int), shape_type
+
+    raise ValueError(f"Unsupported shape_type '{shape_type}' for label "
+                     f"'{label}'")
+
+
+def sample_roi(grid_map, coords):
+    """
+    Sample a north-up image ROI from a south-up grid map.
+
+    Grid maps are stored with row 0 at the southern edge, while
+    LabelMe coordinates come from images displayed north-up, so rows
+    are flipped before sampling.
+
+    Parameters
+    ----------
+    grid_map : numpy.ndarray
+        2-D map in grid orientation.
+    coords : numpy.ndarray
+        ``(N, 2)`` ``(row, col)`` pixels in image orientation.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(N,)`` float32 samples; NaN for pixels outside the map.
+    """
+    height, width = grid_map.shape
+    rows = (height - 1) - coords[:, 0]
+    cols = coords[:, 1]
+    inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+
+    values = np.full(len(coords), np.nan, dtype=np.float32)
+    values[inside] = grid_map[rows[inside], cols[inside]]
+    return values
+
+
+def accessibility_table(times, depths):
+    """
+    Summarize ROI depth samples per timestep.
+
+    Parameters
+    ----------
+    times : pandas.DatetimeIndex
+        Timestamp of each row of `depths`.
+    depths : numpy.ndarray
+        ``(T, N)`` ROI depth samples; NaN where there is no water.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``Time``, ``Impassable`` (1 if any ROI pixel has depth
+        above zero), ``FloodedPixels``, ``TotalPixels``, ``MeanDepth``,
+        ``MedianDepth``, ``MaxDepth``, ``MinDepth``, sorted by time.
+    """
+    flooded = depths > 0.0
+    with warnings.catch_warnings():
+        # Dry timesteps have all-NaN rows; NaN is the right answer
+        warnings.simplefilter("ignore", RuntimeWarning)
+        table = pd.DataFrame({
+            "Time": times,
+            "Impassable": flooded.any(axis=1).astype(int),
+            "FloodedPixels": flooded.sum(axis=1),
+            "TotalPixels": depths.shape[1],
+            "MeanDepth": np.nanmean(depths, axis=1),
+            "MedianDepth": np.nanmedian(depths, axis=1),
+            "MaxDepth": np.nanmax(depths, axis=1),
+            "MinDepth": np.nanmin(depths, axis=1),
+        })
+    return table.sort_values("Time")
+
+
+def wse_table(times, wse):
+    """
+    Summarize ROI water surface elevation samples per timestep.
+
+    Parameters
+    ----------
+    times : pandas.DatetimeIndex
+        Timestamp of each row of `wse`.
+    wse : numpy.ndarray
+        ``(T, N)`` ROI WSE samples; NaN where there is no water.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``Time``, ``MeanWSE``, ``MedianWSE``, ``MaxWSE``,
+        sorted by time.
+    """
+    with warnings.catch_warnings():
+        # Dry timesteps have all-NaN rows; NaN is the right answer
+        warnings.simplefilter("ignore", RuntimeWarning)
+        table = pd.DataFrame({
+            "Time": times,
+            "MeanWSE": np.nanmean(wse, axis=1),
+            "MedianWSE": np.nanmedian(wse, axis=1),
+            "MaxWSE": np.nanmax(wse, axis=1),
+        })
+    return table.sort_values("Time")
+
 
 class RoadwayAnalyzer:
-    def __init__(self, target_event_dir, labelme_json_path, line_label="roadway", step_size=1.0, statistic="95_perc"):
-        self.event_path = target_event_dir
-        self.event_name = os.path.basename(target_event_dir)
-        self.labelme_json_path = labelme_json_path
-        self.roi_label = line_label  # Can be a line or polygon label
-        self.step_size = step_size
+    """
+    Extract and summarize depth and WSE on a roadway ROI for one event.
+
+    Parameters
+    ----------
+    target_event_dir : str or os.PathLike
+        Event folder containing ``zarr/depth_maps.zip``.
+    labelme_json_path : str or os.PathLike
+        LabelMe JSON defining the ROI on a rectified image.
+    roi_label : str, optional
+        Label of the ROI shape. Default is ``"roadway"``.
+    step_size : float, optional
+        Sample spacing in pixels along line ROIs. Default is 1.0.
+    statistic : str, optional
+        Depth/WSE map statistic to analyze (``"95_perc"``,
+        ``"90_perc"``, ``"mean"``, ``"median"``). Default ``"95_perc"``.
+
+    Attributes
+    ----------
+    roi_name : str
+        ROI name taken from the JSON filename; prefixes all outputs.
+    roi_coords : numpy.ndarray
+        ``(N, 2)`` ROI pixels in image orientation.
+    geom_type : str
+        LabelMe shape type of the ROI.
+    """
+
+    def __init__(self, target_event_dir, labelme_json_path,
+                 roi_label="roadway", step_size=1.0, statistic="95_perc"):
+        """
+        Load the ROI geometry for an event.
+
+        Parameters
+        ----------
+        target_event_dir : str or os.PathLike
+            Event folder containing ``zarr/depth_maps.zip``.
+        labelme_json_path : str or os.PathLike
+            LabelMe JSON defining the ROI.
+        roi_label : str, optional
+            Label of the ROI shape. Default is ``"roadway"``.
+        step_size : float, optional
+            Sample spacing along line ROIs. Default is 1.0.
+        statistic : str, optional
+            Map statistic to analyze. Default is ``"95_perc"``.
+        """
+        self.event_path = os.fspath(target_event_dir)
+        self.event_name = os.path.basename(os.path.normpath(self.event_path))
         self.statistic = statistic
-        
-        # Base name derived from the JSON (e.g., 'canal_dr_transect' or 'canal_dr_polygon')
-        self.roi_name = os.path.splitext(os.path.basename(labelme_json_path))[0]
-        self.geom_type = None # Will be set during parsing
-        
-        self.roi_coords = self._get_coords_from_labelme()
-        
-        if self.roi_coords is None:
-            raise ValueError(f"Could not find a valid shape labeled '{self.roi_label}' in {labelme_json_path}")
-            
-        _log(f"Initialized RoadwayAnalyzer for '{self.statistic}' using {self.geom_type} '{self.roi_name}'. Area/Length: {len(self.roi_coords)} pixels.")
-
-    def _get_coords_from_labelme(self):
-        """Auto-detects lines vs polygons and extracts the correct pixel coordinates."""
-        try:
-            with open(self.labelme_json_path, 'r') as f:
-                data = json.load(f)
-        except Exception as e:
-            _log(f"Error reading LabelMe JSON: {e}")
-            return None
-
-        points = None
-        shape_type = None
-        for shape in data['shapes']:
-            if shape['label'] == self.roi_label:
-                points = np.array(shape['points'])
-                shape_type = shape['shape_type']
-                break
-        
-        if points is None:
-            available_labels = [s.get('label', 'unknown') for s in data.get('shapes', [])]
-            _log(f"debug: Found labels in JSON: {available_labels}")
-            return None
-
-        self.geom_type = shape_type
-
-        # --- LINE EXTRACTION ---
-        if shape_type in ['line', 'linestrip']:
-            dists = np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))
-            cumulative_dist = np.insert(np.cumsum(dists), 0, 0)
-            
-            fx = interp1d(cumulative_dist, points[:, 0])
-            fy = interp1d(cumulative_dist, points[:, 1])
-            
-            new_dists = np.arange(0, cumulative_dist[-1], self.step_size)
-            if new_dists.size == 0 or new_dists[-1] < cumulative_dist[-1]:
-                new_dists = np.append(new_dists, cumulative_dist[-1])
-            new_x = fx(new_dists)
-            new_y = fy(new_dists)
-            
-            coords = np.column_stack((np.round(new_y), np.round(new_x))).astype(int)
-            return coords
-
-        # --- POLYGON EXTRACTION ---
-        elif shape_type == 'polygon':
-            # polygon(r, c) takes Rows (Y) and Cols (X)
-            rr, cc = polygon(points[:, 1], points[:, 0])
-            coords = np.column_stack((rr, cc)).astype(int)
-            return coords
-            
-        else:
-            _log(f"Unsupported shape_type '{shape_type}' for label '{self.roi_label}'")
-            return None
+        self.roi_name = os.path.splitext(
+            os.path.basename(labelme_json_path))[0]
+        self.roi_coords, self.geom_type = roi_pixels_from_labelme(
+            labelme_json_path, roi_label, step_size)
+        logger.info("RoadwayAnalyzer: %s ROI '%s' with %d pixels "
+                    "(statistic %s).", self.geom_type, self.roi_name,
+                    len(self.roi_coords), statistic)
 
     def process_single_event(self):
-        """Orchestrates the extraction and CSV generation for a single event."""
-        _log(f"--- Starting Analysis for {self.event_name} ---")
-        self._gen_roi_depths()
-        self._process_roadway_accessibility()
-        
-        # --- NEW CALLS FOR WSE ---
-        self._gen_roi_wse()
-        self._process_roadway_wse()
-        
-        _log(f"--- Finished Analysis for {self.event_name} ---")
+        """
+        Extract ROI samples and write the accessibility and WSE CSVs.
 
-    def _gen_roi_depths(self):
-        in_zip_path = os.path.join(self.event_path, "zarr", "depth_maps.zip")
-        out_zip_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_depths.zip")
+        Returns
+        -------
+        bool
+            True if the event's depth maps were found and processed.
+        """
+        logger.info("Analyzing roadway for %s", self.event_name)
+        depth = self._extract_roi_series("depth")
+        if depth is None:
+            return False
+        times, depths = depth
+        self._save_csv(accessibility_table(times, depths),
+                       "accessibility_time_series")
 
-        if not os.path.exists(in_zip_path):
-            _log(f"Source depth maps not found: {in_zip_path}")
-            return
+        wse = self._extract_roi_series("wse")
+        if wse is not None:
+            self._save_csv(wse_table(*wse), "wse_time_series")
+        return True
 
-        # 1. Open Source ZipStore
-        in_backend = zarr.storage.ZipStore(in_zip_path, mode="r")
-        in_root = zarr.open_group(store=in_backend, mode="r")
-        
-        target_suffix = f"depth_map_{self.statistic}"
-        
-        file_names = sorted([
-            f for f in in_root.keys() 
-            if f.endswith(target_suffix) and "wse_map" not in f
-        ])
-        
-        num_files = len(file_names)
-        if num_files == 0:
-            _log(f"No depth maps found matching suffix '{target_suffix}'")
-            in_backend.close()
-            return
+    def _extract_roi_series(self, kind):
+        """
+        Sample the ROI from every depth or WSE map in the event.
 
-        roi_depth_array = np.empty((num_files, len(self.roi_coords)), dtype=np.float32)
-        timestamp_list = []
+        Parameters
+        ----------
+        kind : {'depth', 'wse'}
+            Which map family to read.
 
-        # 2. Extract Data
-        for idx, file_name in enumerate(file_names):
-            timestamp_list.append(_extract_timestamp(file_name))
-            
-            try:
-                depth_map = in_root[file_name][:] 
-                
-                ys = self.roi_coords[:, 0]
-                xs = self.roi_coords[:, 1]
-                
-                h, w = depth_map.shape
-                
-                # Flip the Y-axis to match the Zarr array's geographic orientation
-                ys_flipped = (h - 1) - ys
-                
-                valid_mask = (ys_flipped >= 0) & (ys_flipped < h) & (xs >= 0) & (xs < w)
-                
-                roi_depth_array[idx, :] = np.nan
-                roi_depth_array[idx, valid_mask] = depth_map[ys_flipped[valid_mask], xs[valid_mask]]
-                
-            except Exception as e:
-                _log(f"Error processing {file_name}: {e}")
-                roi_depth_array[idx, :] = np.nan
+        Returns
+        -------
+        tuple of (pandas.DatetimeIndex, numpy.ndarray) or None
+            Timestamps and ``(T, N)`` samples, or None if the event has
+            no matching maps.
+        """
+        zarr_dir = os.path.join(self.event_path, "zarr")
+        in_path = os.path.join(zarr_dir, "depth_maps.zip")
+        if not os.path.exists(in_path):
+            logger.warning("Depth maps not found: %s", in_path)
+            return None
 
-        # 3. Save to Output ZipStore
-        datetimes = np.array(pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30")
-        
-        try:
-            out_backend = zarr.storage.ZipStore(out_zip_path, mode="w")
-            out_root = zarr.open_group(store=out_backend, mode="w")
-            
-            # Save the extracted array using the dynamic ROI name
-            out_root.create_array("timestamps", data=datetimes, chunks=datetimes.shape, overwrite=True)
-            out_root.create_array(f"{self.roi_name}_depths", data=roi_depth_array, chunks=roi_depth_array.shape, overwrite=True)
-            
-            out_backend.close()
-            _log(f"Successfully generated {out_zip_path}")
-        except Exception as e:
-            _log(f"Failed to save ZipStore: {e}")
-            
-        in_backend.close()
+        suffix = f"{kind}_map_{self.statistic}"
+        with open_zip_group(in_path) as group:
+            names = array_names(group, suffix=suffix)
+            if not names:
+                logger.warning("No maps ending in '%s' in %s",
+                               suffix, in_path)
+                return None
+            samples = np.stack([sample_roi(group[name][:], self.roi_coords)
+                                for name in names])
 
-    def _process_roadway_accessibility(self):
-        zip_store_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_depths.zip")
+        stamps = [extract_timestamp(name) for name in names]
+        times = pd.to_datetime(stamps, format="%Y%m%d%H%M%S", utc=True)
 
-        if not os.path.exists(zip_store_path):
-            return
+        # Keep the raw samples next to the event's other Zarr products
+        out_name = "depths" if kind == "depth" else "wse"
+        out_path = os.path.join(zarr_dir, f"{self.roi_name}_{out_name}.zip")
+        with write_zip_group(out_path) as out_group:
+            stamp_text = np.array(times.astype(str), dtype="U30")
+            write_array(out_group, "timestamps", stamp_text)
+            write_array(out_group, f"{self.roi_name}_{out_name}", samples)
+        return times, samples
 
-        try:
-            # 1. Read from the ZipStore
-            backend = zarr.storage.ZipStore(zip_store_path, mode="r")
-            root = zarr.open_group(store=backend, mode="r")
-            
-            timestamps = root["timestamps"][:]
-            roi_depths = root[f"{self.roi_name}_depths"][:]
-            backend.close()
-            
-            datetimes = pd.to_datetime(timestamps, utc=True)
-            
-            # Count pixels > 0.0 to get the flooded area, and get the total polygon size
-            flooded_pixels = np.sum(roi_depths > 0.0, axis=1)
-            total_pixels = roi_depths.shape[1]
-            
-            # 2. Statistics Calculation
-            # NOTE: For a polygon, 'impassable' means ANY pixel inside the polygon is > 0.
-            impassable = np.any(roi_depths > 0.0, axis=1).astype(int)
-            
-            with np.errstate(all='ignore'):
-                mean_depths = np.nanmean(roi_depths, axis=1)
-                median_depths = np.nanmedian(roi_depths, axis=1)
-                max_depths = np.nanmax(roi_depths, axis=1)
-                min_depths = np.nanmin(roi_depths, axis=1)
+    def _save_csv(self, table, suffix):
+        """
+        Write a summary table to the event folder.
 
-            stats_df = pd.DataFrame({
-                "Time": datetimes,
-                "Impassable": impassable,
-                "FloodedPixels": flooded_pixels,
-                "TotalPixels": total_pixels,
-                "MeanDepth": mean_depths,
-                "MedianDepth": median_depths,
-                "MaxDepth": max_depths,
-                "MinDepth": min_depths,
-            }).sort_values(by="Time")
+        Parameters
+        ----------
+        table : pandas.DataFrame
+            Table to save.
+        suffix : str
+            Filename suffix after ``<roi_name>_``.
 
-            # 3. Save CSV
-            output_path = os.path.join(self.event_path, f"{self.roi_name}_accessibility_time_series.csv")
-            stats_df.to_csv(output_path, index=False)
-            _log(f"Accessibility CSV saved to {output_path}")
-            
-        except Exception as e:
-            _log(f"Error calculating stats: {e}")
-            
-    def _gen_roi_wse(self):
-        """Extracts Water Surface Elevation (WSE) maps from the Zarr store."""
-        in_zip_path = os.path.join(self.event_path, "zarr", "depth_maps.zip")
-        out_zip_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_wse.zip")
-
-        if not os.path.exists(in_zip_path):
-            return
-
-        in_backend = zarr.storage.ZipStore(in_zip_path, mode="r")
-        in_root = zarr.open_group(store=in_backend, mode="r")
-        
-        target_suffix = f"wse_map_{self.statistic}"
-        
-        # Look specifically FOR the wse_map files
-        file_names = sorted([
-            f for f in in_root.keys() 
-            if f.endswith(target_suffix)
-        ])
-        
-        num_files = len(file_names)
-        if num_files == 0:
-            _log(f"No WSE maps found matching suffix '{target_suffix}'")
-            in_backend.close()
-            return
-        
-        roi_wse_array = np.empty((num_files, len(self.roi_coords)), dtype=np.float32)
-        timestamp_list = []
-
-        for idx, file_name in enumerate(file_names):
-            timestamp_list.append(_extract_timestamp(file_name))
-            try:
-                wse_map = in_root[file_name][:] 
-                ys = self.roi_coords[:, 0]
-                xs = self.roi_coords[:, 1]
-                h, w = wse_map.shape
-                ys_flipped = (h - 1) - ys
-                valid_mask = (ys_flipped >= 0) & (ys_flipped < h) & (xs >= 0) & (xs < w)
-                
-                roi_wse_array[idx, :] = np.nan
-                roi_wse_array[idx, valid_mask] = wse_map[ys_flipped[valid_mask], xs[valid_mask]]
-            except Exception as e:
-                roi_wse_array[idx, :] = np.nan
-
-        datetimes = np.array(pd.to_datetime(timestamp_list, utc=True).astype(str), dtype="U30")
-        
-        try:
-            out_backend = zarr.storage.ZipStore(out_zip_path, mode="w")
-            out_root = zarr.open_group(store=out_backend, mode="w")
-            out_root.create_array("timestamps", data=datetimes, chunks=datetimes.shape, overwrite=True)
-            out_root.create_array(f"{self.roi_name}_wse", data=roi_wse_array, chunks=roi_wse_array.shape, overwrite=True)
-            out_backend.close()
-        except Exception as e:
-            _log(f"Failed to save WSE ZipStore: {e}")
-            
-        in_backend.close()
-
-    def _process_roadway_wse(self):
-        """Calculates statistics for WSE and saves to a new CSV."""
-        zip_store_path = os.path.join(self.event_path, "zarr", f"{self.roi_name}_wse.zip")
-
-        if not os.path.exists(zip_store_path):
-            return
-
-        try:
-            backend = zarr.storage.ZipStore(zip_store_path, mode="r")
-            root = zarr.open_group(store=backend, mode="r")
-            timestamps = root["timestamps"][:]
-            roi_wse = root[f"{self.roi_name}_wse"][:]
-            backend.close()
-            
-            datetimes = pd.to_datetime(timestamps, utc=True)
-            
-            # For WSE, 0.0 often means dry/no data depending on your datum. 
-            # We replace 0.0 with NaN so we only average actual water elevations.
-            roi_wse_masked = np.where(roi_wse == 0.0, np.nan, roi_wse)
-            
-            with np.errstate(all='ignore'):
-                mean_wse = np.nanmean(roi_wse_masked, axis=1)
-                median_wse = np.nanmedian(roi_wse_masked, axis=1)
-                max_wse = np.nanmax(roi_wse_masked, axis=1)
-
-            stats_df = pd.DataFrame({
-                "Time": datetimes,
-                "MeanWSE": mean_wse,
-                "MedianWSE": median_wse,
-                "MaxWSE": max_wse,
-            }).sort_values(by="Time")
-
-            output_path = os.path.join(self.event_path, f"{self.roi_name}_wse_time_series.csv")
-            stats_df.to_csv(output_path, index=False)
-            _log(f"WSE CSV saved to {output_path}")
-            
-        except Exception as e:
-            _log(f"Error calculating WSE stats: {e}")
+        Returns
+        -------
+        str
+            Path of the written CSV.
+        """
+        path = os.path.join(self.event_path, f"{self.roi_name}_{suffix}.csv")
+        table.to_csv(path, index=False)
+        logger.info("Saved %s", path)
+        return path
