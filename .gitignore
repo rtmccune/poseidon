@@ -11,6 +11,9 @@ segformer_report.txt
 *.out
 runs/
 
+# Retired code, notebooks, and assets kept locally for reference
+local_archive/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
