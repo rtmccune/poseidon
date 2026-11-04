@@ -1,0 +1,27 @@
+{
+ "version": "5.2.1",
+ "flags": {},
+ "shapes": [
+  {
+   "label": "COR",
+   "points": [
+    [
+     1022.308,
+     181.026
+    ],
+    [
+     222.308,
+     1180.171
+    ]
+   ],
+   "group_id": null,
+   "description": "",
+   "shape_type": "line",
+   "flags": {}
+  }
+ ],
+ "imagePath": null,
+ "imageData": null,
+ "imageHeight": 1400,
+ "imageWidth": 1300
+}

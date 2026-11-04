@@ -1,0 +1,27 @@
+{
+ "version": "5.2.1",
+ "flags": {},
+ "shapes": [
+  {
+   "label": "EOR",
+   "points": [
+    [
+     994.271,
+     153.021
+    ],
+    [
+     -13.75,
+     1406.25
+    ]
+   ],
+   "group_id": null,
+   "description": "",
+   "shape_type": "line",
+   "flags": {}
+  }
+ ],
+ "imagePath": null,
+ "imageData": null,
+ "imageHeight": 1400,
+ "imageWidth": 1300
+}

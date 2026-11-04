@@ -14,23 +14,25 @@ crs: EPSG:32119               # NAD83 / North Carolina (meters)
 latitude: null
 longitude: null
 
-# Rectification grid bounds (site CRS, meters) and spacing (meters).
-# These match the virtual sensor pixels below. A smaller clip
-# (847895-847960, 127352-127422) is being trialled in notebooks; if
-# adopted, the virtual sensor pixels must be recomputed for it.
+# Rectification grid bounds (site CRS, meters) and spacing (meters):
+# a 65 m x 70 m clip around Shell Hill Road (1400 rows x 1300 columns).
+# The ROIs and virtual sensors below are in this clip's pixel frame;
+# recompute them if the extent changes.
 grid:
-  min_x: 847809.694
-  max_x: 847973.874
-  min_y: 127254.634
-  max_y: 127450.141
+  min_x: 847895
+  max_x: 847960
+  min_y: 127352
+  max_y: 127422
   resolution: 0.05
 
-lidar_file: data/lidar/down_east.laz
+lidar_file: data/lidar/down_east_2019.laz
 lidar_units: meters           # units of the LiDAR point coordinates
 basemap: data/basemaps/DE_01_basemap.tif
 
-# Roadway region of interest (LabelMe JSON drawn on a rectified image).
-roi_json: data/transects/shell_hill_rd_polygon.json
+# Roadway region of interest (LabelMe JSON in the clip's rectified,
+# north-up image frame). Center- and edge-of-road transects are in the
+# same folder.
+roi_json: poseidon_deploy/configs/sites/rois/down_east/shell_hill_rd_polygon.json
 
 # Lowest in-situ sensor WSE (m) shown in image/sensor comparison plots.
 sensor_wse_floor: 0.49
@@ -61,8 +63,6 @@ extrinsics:
 # Virtual sensor locations as [column, row] grid pixels, row 0 at the
 # southern (minimum y) edge of the grid.
 virtual_sensors:
-  - [1610, 1847]
-  - [2682, 3176]
-  - [1756, 1990]
-  - [2120, 2414]
-  - [2556, 2928]
+  - [981, 1226]   # sensor1: x 847944.05, y 127413.30
+  - [686, 783]    # sensor2: x 847929.30, y 127391.15
+  - [254, 320]    # sensor3: x 847907.70, y 127368.00
