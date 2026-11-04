@@ -722,7 +722,7 @@ class DepthMapPlotter:
             if not (0 <= row_north_up < height and 0 <= col < width):
                 continue
             # Sample at the pixel center
-            x, y = data_affine_transform * (col + 0.5, row_north_up + 0.5)
+            x, y = data_affine_transform @ (col + 0.5, row_north_up + 0.5)
             points.append(transformer.transform(x, y))
 
         if not points:

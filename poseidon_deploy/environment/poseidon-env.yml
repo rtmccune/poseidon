@@ -37,6 +37,8 @@ dependencies:
   # C++ executables (poseidon_utils/src)
   - cxx-compiler
   - c-compiler
+  - cmake
+  - make
   # Notebooks and development
   - jupyter
   - pytest

@@ -75,10 +75,19 @@ Without a GPU (any OS; every stage runs on the CPU):
 ```bash
 conda env create --file poseidon_deploy/environment/poseidon-env-no-gpu.yml
 ```
-On an HPC system, the pinned lock file reproduces the tested environment:
+On a linux-64 HPC system, the explicit spec installs the exact package
+builds of the lock file without solving:
 ```bash
-conda env create --prefix /path/to/conda/env \
-    --file poseidon_deploy/environment/poseidon-linux-64-lock.yml
+conda create --prefix /path/to/conda/env \
+    --file poseidon_deploy/environment/explicit-spec.txt
+```
+To refresh the lock after editing `poseidon-env.yml` (requires
+`conda-lock`):
+```bash
+cd poseidon_deploy/environment
+conda-lock lock -f poseidon-env.yml -p linux-64 \
+    --lockfile poseidon-linux-64-lock.yml
+python parse_lock.py poseidon-linux-64-lock.yml explicit-spec.txt
 ```
 Then install POSEIDON into the environment:
 ```bash
