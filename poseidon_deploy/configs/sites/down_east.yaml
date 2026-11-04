@@ -8,11 +8,10 @@ name: down_east               # also the shared grid descriptor
 sensor_id: DE_01              # SDFP sensor ID; camera is CAM_DE_01
 crs: EPSG:32119               # NAD83 / North Carolina (meters)
 
-# Camera location (decimal degrees) for sun-position image filtering.
-# Not yet recorded for this site: set before running 01_filter_images,
-# or pass --lat/--lon to run_image_filter.py.
-latitude: null
-longitude: null
+# Camera location (decimal degrees) for sun-position image filtering,
+# converted from the camera position in the extrinsics below.
+latitude: 34.8703
+longitude: -76.3925
 
 # Rectification grid bounds (site CRS, meters) and spacing (meters):
 # a 65 m x 70 m clip around Shell Hill Road (1400 rows x 1300 columns).
