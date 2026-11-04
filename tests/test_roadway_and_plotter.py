@@ -153,6 +153,19 @@ def test_roadway_event_csvs(tmp_path):
         event / "zarr" / "south_road_depths.zip")
 
 
+def test_roi_pixels_outside_the_grid_are_not_counted(tmp_path):
+    """Coverage uses only ROI pixels that lie on the grid."""
+    event = tmp_path / "TS_01_event"
+    write_depth_store(event, {TIMES[0]: np.full((10, 10), 0.1)})
+    # 15 x 5 polygon whose eastern 5 columns run past the 10-column grid
+    roi = write_labelme(tmp_path / "edge_road.json", [
+        ("roadway", "polygon", [[5, 0], [14, 0], [14, 4], [5, 4]])])
+    assert RoadwayAnalyzer(event, roi).process_single_event()
+    access = pd.read_csv(event / "edge_road_accessibility_time_series.csv")
+    assert access.loc[0, "TotalPixels"] == 5 * 5
+    assert access.loc[0, "FloodedPixels"] == 5 * 5
+
+
 def test_roadway_event_without_depth_maps_reports_failure(tmp_path):
     """process_single_event returns False when no store exists."""
     roi = write_labelme(tmp_path / "r.json", [

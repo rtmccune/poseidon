@@ -125,6 +125,36 @@ def sample_roi(grid_map, coords):
     return values
 
 
+def clip_roi_to_grid(coords, shape):
+    """
+    Drop ROI pixels that fall outside the grid.
+
+    ROIs drawn near the edge of a rectified image can extend past it;
+    those pixels can never be observed, so counting them would deflate
+    coverage (``FloodedPixels / TotalPixels``).
+
+    Parameters
+    ----------
+    coords : numpy.ndarray
+        ``(N, 2)`` ``(row, col)`` ROI pixels in image orientation.
+    shape : tuple of int
+        ``(rows, cols)`` of the grid maps.
+
+    Returns
+    -------
+    numpy.ndarray
+        The ROI pixels inside the grid.
+    """
+    height, width = shape
+    inside = ((coords[:, 0] >= 0) & (coords[:, 0] < height)
+              & (coords[:, 1] >= 0) & (coords[:, 1] < width))
+    if not inside.all():
+        logger.warning("%d of %d ROI pixels lie outside the %s grid and "
+                       "are ignored.", int((~inside).sum()), len(coords),
+                       shape)
+    return coords[inside]
+
+
 def accessibility_table(times, depths):
     """
     Summarize ROI depth samples per timestep.
@@ -296,7 +326,8 @@ class RoadwayAnalyzer:
                 logger.warning("No maps ending in '%s' in %s",
                                suffix, in_path)
                 return None
-            samples = np.stack([sample_roi(group[name][:], self.roi_coords)
+            coords = clip_roi_to_grid(self.roi_coords, group[names[0]].shape)
+            samples = np.stack([sample_roi(group[name][:], coords)
                                 for name in names])
 
         stamps = [extract_timestamp(name) for name in names]
