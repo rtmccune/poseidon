@@ -10,79 +10,171 @@
 
 ---
 
-**POSEIDON** is a Python-based scientific tool for automated flood-level extraction from imagery.  
-It integrates image segmentation and georectification to detect water surfaces and estimate flood depths across real-world terrain.
+**POSEIDON** is a Python-based scientific tool for automated flood-level
+extraction from imagery. It integrates image segmentation and
+georectification to detect water surfaces and estimate flood depths across
+real-world terrain.
 
+## How it works
 
-# Setup
-## Clone the Repository
+1. **Flood events** – `poseidon_utils.EventTracker` downloads Sunny Day
+   Flooding Project (SDFP) water levels and lists flood events.
+2. **Images** – `poseidon_utils.ImageHandler` pulls event images from the
+   SDFP archive and keeps those taken in daylight.
+3. **Segmentation** – a Segmentation Gym model labels water in each image.
+4. **Grid** – `poseidon_core.GridGenerator` interpolates ground LiDAR onto
+   a regular elevation grid for the site.
+5. **Rectification** – `poseidon_core.ImageRectifier` projects images and
+   labels onto that grid using the camera calibration.
+6. **Depths** – `poseidon_core.DepthMapProcessor` finds each pond, takes its
+   water surface elevation (WSE) from the ground elevation along its
+   waterline, and computes depth = WSE − ground.
+7. **Products** – `DepthMapPlotter` maps depths and virtual sensor time
+   series; `RoadwayAnalyzer` summarizes flooding on a roadway.
+
+## Repository layout
+
+```
+poseidon_core/          Processing pipeline (grid, rectify, depths, plots, roadway)
+poseidon_utils/         Shared utilities and data access
+  constants.py            Unit conversions and time zones
+  naming.py               Camera/timestamp parsing of SDFP filenames
+  logging_utils.py        setup_logging() for scripts and notebooks
+  zarr_io.py              Atomic ZIP Zarr store helpers
+  site_config.py          Per-site YAML configuration loader
+  event_tracker.py        SDFP API client and flood event CSVs
+  image_handler.py        SDFP image archive access and filtering
+  file_organizer.py       Per-event folder organization
+  src/                    C++ label and overlay generators
+poseidon_deploy/
+  configs/sites/          One YAML per site: camera, grid, CRS, sensors, ROI
+  naiads/                 Command-line drivers for each pipeline stage
+  hpc_submission_scripts/ LSF job scripts that run the drivers
+  analysis/               Cross-event analysis and QC plots
+  environment/            Conda environment and lock files
+  calibration/            Intrinsic camera calibration notebook
+  segmentation/           Segmentation Gym submodule, models, templates
+notebooks/              Worked example of the Python API
+tests/                  pytest suite
+```
+
+## Setup
+
+### Clone the repository
 ```bash
 git clone --recurse-submodules https://github.com/rtmccune/poseidon.git
+cd poseidon
 ```
 
-## Environment
-To create a conda environment for this workflow navigate to your local copy of the 'poseidon' repository and run the following command:
+### Environment
+With an NVIDIA GPU (Linux):
 ```bash
-conda env create --file poseidon_deploy/environment.yml
+conda env create --file poseidon_deploy/environment/poseidon-env.yml
 ```
-
-To create a conda environment on a linux-64 based system (such as an HPC system) for this workflow navigate to the 'poseidon' repository and run the following command:
+Without a GPU (any OS; every stage runs on the CPU):
 ```bash
-conda env create --prefix /path/to/conda/env --file poseidon_deploy/poseidon-linux-64-lock.yml
+conda env create --file poseidon_deploy/environment/poseidon-env-no-gpu.yml
 ```
-
-## C++ Executables
-These executables rely on the opencv library for processing. First, ensure that you have opencv installed on your system.
-
-To install opencv:
-  On Ubuntu/Debian-based systems run:
-  ```bash
-  sudo apt install libopencv-dev
-  ```
-  
-  On Fedora/RHEL-based systems run:
-  ```bash
-  sudo dnf install opencv-devel
-  ```
-
-  On macOS:
-  ```bash
-  brew install opencv
-  ```
-
-After the working 'poseidon' environment and OpenCV have been installed on your system, compile the executables using cmake:
-
-1. Activate poseidon conda environment.
-  ```bash
-  conda activate poseidon
-  ```
-
-2. Create a build directory.
-  ```bash
-  cd poseidon_utils/src
-  mkdir build
-  cd build
-  ```
-3. Configure the build for your system.
-  ```bash
-  cmake ..
-  ```
-4. Build the exectuables.
-  ```bash
-  make
-  ```
-The compiled executables will now exist in the 'bin' directory for use. You can test that these compiled executables are working by running the test_compiled_funcs.sh script from the docs/tests directory. To run these tests from the 'bin' directory simply:
+On an HPC system, the pinned lock file reproduces the tested environment:
 ```bash
-../../tests/test_compiled_funcs.sh
+conda env create --prefix /path/to/conda/env \
+    --file poseidon_deploy/environment/poseidon-linux-64-lock.yml
 ```
-## Segmentation Gym Container
-From the repository root directory run:
+Then install POSEIDON into the environment:
 ```bash
-apptainer pull poseidon_deploy/segmentation/container/seg_gym.sif oras://ghcr.io/rtmccune/segmentation-gym-tf:latest
+conda activate poseidon
+pip install -e .
 ```
 
-## Python Tests
-To test the posedion library, run the following command from the 'poseidon' directory.
-  ```bash
-  python -m pytest -v tests/
-  ```
+GPU acceleration (CuPy/cuCIM) is optional. Classes take `use_gpu=None` to
+use a GPU when one is available, `False` to force the CPU, or `True` to
+require a GPU.
+
+### C++ executables
+The label and overlay generators need OpenCV (included in the conda
+environment). From an activated environment:
+```bash
+cd poseidon_utils/src
+cmake -S . -B build
+cmake --build build
+```
+The executables are written to `poseidon_utils/bin/`. Rebuild them after
+upgrading OpenCV.
+
+### Segmentation Gym container
+From the repository root:
+```bash
+apptainer pull poseidon_deploy/segmentation/container/seg_gym.sif \
+    oras://ghcr.io/rtmccune/segmentation-gym-tf:latest
+```
+
+## Site configuration
+
+Each monitoring site is described once in
+`poseidon_deploy/configs/sites/<site>.yaml`: camera intrinsics and
+extrinsics, rectification grid extent and resolution, coordinate
+reference system, LiDAR units, virtual sensor pixels, camera
+latitude/longitude, and default data paths (LiDAR, basemap, roadway ROI).
+Drivers take `--site <name>` instead of these values on every command
+line. Add a site by copying an existing YAML; the calibration notebook
+prints intrinsics in the YAML format.
+
+```python
+import poseidon_utils
+site = poseidon_utils.load_site_config("carolina_beach")
+```
+
+## Running the pipeline on the HPC
+
+1. Copy `poseidon_deploy/hpc_paths.template.env` to
+   `poseidon_deploy/hpc_paths.env` and set `POSEIDON_ENV`, `IMAGE_DRIVE`,
+   and `SITE`. Data are read from and written to `data/$SITE/`.
+2. Submit each stage from `poseidon_deploy/hpc_submission_scripts/`, e.g.
+   `bsub < 07_make_rectify.sh`.
+
+| Stage | Script | Purpose |
+|---|---|---|
+| 00 | `00_pull_and_save_images.sh` | Copy archive images within each flood event |
+| 01 | `01_filter_images.sh` | Keep images taken between sunrise and sunset |
+| – | `99_create_job_lists.sh` | Split image folders into job-array file lists |
+| 02 | `02_segment_lists.sh` | Segment images (job array) |
+| 03 | `03_make_labels.sh` | Convert predictions to label images (job array) |
+| 04 | `04_make_overlays.sh` | Draw QC overlays (job array) |
+| 05 | `05_flood_event_setup.sh` | Create one folder per event with data and images |
+| 06 | `06_prep_rect_grid.sh` | Build the site's elevation grid (once per site) |
+| 07 | `07_make_rectify.sh` | Rectify images and labels (one task per event) |
+| 08 | `08_calc_depths.sh` | Compute WSE and depth maps (one task per event) |
+| 09 | `09_make_plots.sh` | Plot maps and virtual sensor series (per event) |
+| 10 | `10_calc_roadway.sh` | Roadway accessibility time series (per event) |
+| 11 | `11_summarize_road_stats.sh` | Summarize roadway statistics over events |
+
+Per-event stages are job arrays: set `#BSUB -J name[1-N]` to the number of
+event folders. Rerun one event with, for example,
+`TARGET_EVENT=<event folder> bsub -J rectify_one < 07_make_rectify.sh`.
+Re-running a stage replaces its earlier outputs.
+
+The remaining `99_*` scripts run QC and analysis (overlay comparisons,
+accessibility plots, anomaly detection) and segmentation model training.
+
+## Example notebook
+
+`notebooks/poseidon_workflow.ipynb` runs grid generation, rectification,
+depth estimation, and roadway analysis on one event with the Python API.
+
+## Tests
+
+From the repository root:
+```bash
+python -m pytest
+```
+GPU tests run only when CuPy can use a local GPU (`python -m pytest -m gpu`
+selects them). Sun-position tests need `astral`, and the C++ tests need the
+built executables (or `POSEIDON_BIN=/path/to/bin`).
+
+## Code style
+
+Code follows PEP 8 (79-character lines) with numpy-style docstrings,
+checked by `ruff` using the configuration in `pyproject.toml`:
+```bash
+ruff check .
+```

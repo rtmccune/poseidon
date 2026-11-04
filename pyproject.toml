@@ -9,6 +9,7 @@ authors = [
   { name="Ryan McCune", email="rmccune@ncsu.edu" },
 ]
 description = "POSEIDON is a Python-based scientific tool for automated flood-level extraction from imagery. It integrates image segmentation and georectification to detect water surfaces and estimate flood depths across real-world terrain."
+readme = "docs/README.md"
 requires-python = ">=3.11"
 # Dependencies are managed with conda: see poseidon_deploy/environment/.
 
@@ -18,3 +19,47 @@ include = ["poseidon_core*", "poseidon_utils*"]
 
 [tool.setuptools.package-data]
 poseidon_core = ["assets/*"]
+
+# ----- Style: PEP 8 (79 columns) and numpy docstrings ------------------------
+
+[tool.ruff]
+line-length = 79
+target-version = "py311"
+extend-exclude = [
+  "local_archive",
+  "poseidon_deploy/segmentation/segmentation_gym",
+]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "D",        # pydocstyle
+  "N",        # pep8-naming
+  "I",        # import sorting
+  "B",        # bugbear
+]
+ignore = [
+  "D105",     # magic methods are self-describing
+  "B905",     # zip() strictness is not needed for equal-length inputs
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.isort]
+known-first-party = ["poseidon_core", "poseidon_utils"]
+known-local-folder = ["cli_common", "access_plotter"]
+
+# ----- Tests -----------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "gpu: needs a working CuPy/cuCIM GPU (skipped otherwise)",
+]
+filterwarnings = [
+  # cmocean passes a deprecated argument to matplotlib on import
+  "ignore::DeprecationWarning:cmocean.*",
+]
