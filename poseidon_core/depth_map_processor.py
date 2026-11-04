@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from cucim.skimage.measure import label
 from cucim.skimage.morphology import binary_closing
-from skimage.measure import find_contours
+from cucim.skimage.segmentation import find_boundaries
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,8 @@ class DepthMapProcessor:
         self.elev_grid = elevation_grid
         self.elev_grid_cp = cp.array(self.elev_grid)
         self.plot_edges = plot_edges
+        # Default histogram folder so single-image calls can plot too
+        self.pond_edge_elev_plot_dir = "data/edge_histograms"
 
     def process_single_depth_map(self, array, file_name):
         """Processes a Zarr store and computes depth maps.
@@ -134,7 +136,8 @@ class DepthMapProcessor:
 
         # 2. Open the Output ZipStore
         try:
-            out_store_backend = zarr.storage.ZipStore(depth_map_zarr_zip_path, mode="a")
+            # mode="w" starts a fresh archive so reruns replace old maps
+            out_store_backend = zarr.storage.ZipStore(depth_map_zarr_zip_path, mode="w")
             out_store = zarr.group(store=out_store_backend)
         except Exception as e:
             logger.error(f"  ERROR: Could not create output ZipStore at {depth_map_zarr_zip_path}. {e}")
@@ -265,12 +268,11 @@ class DepthMapProcessor:
         return relabeled_data
 
     def _extract_contours(self, labeled_data, gpu_label_array):
-        """Extracts contour pixels and their elevation values for each
-        pond.
+        """Collect waterline pixels and their elevations for each pond.
 
-        This function identifies contours around labeled pond regions,
-        extracts their pixel coordinates, and retrieves
-        corresponding label values.
+        The waterline is each pond's inner boundary: pond pixels with a
+        4-connected neighbor outside the pond. Elevations are read from
+        the elevation grid, and NaN elevations are dropped.
 
         Parameters
         ----------
@@ -278,75 +280,30 @@ class DepthMapProcessor:
             A CuPy array where each pond is labeled with a unique
             integer ID.
         gpu_label_array : cp.ndarray
-            A CuPy array representing the original labeled dataset,
-            where 1 indicates flooded regions.
+            The original labeled dataset (unused; kept for the API).
 
         Returns
         -------
         contour_pixels_per_pond : dict[int, np.ndarray]
-            A dictionary mapping each pond ID to an array of its contour
-            pixel coordinates (Nx2).
+            A dictionary mapping each pond ID to an (N, 2) array of its
+            waterline pixel coordinates.
         contour_values_per_pond : dict[int, np.ndarray]
-            A dictionary mapping each pond ID to an array of elevation
-            values at contour pixels.
+            A dictionary mapping each pond ID to the finite elevations
+            at its waterline pixels.
         """
-        # --- GPU Operations ---
-        # Get unique pond IDs
-        unique_ponds = cp.unique(labeled_data)
-        unique_ponds = unique_ponds[
-            unique_ponds != 0
-        ]  # Exclude background label
+        edges = find_boundaries(labeled_data, mode="inner") & (labeled_data > 0)
+        rows, cols = (cp.asnumpy(a) for a in cp.nonzero(edges))
+        pond_ids = cp.asnumpy(labeled_data[edges])
+        elevations = cp.asnumpy(self.elev_grid_cp[edges])
+        finite = np.isfinite(elevations)
 
-        # Create the elevation-water map
-        arr = cp.where(gpu_label_array.squeeze() == 1, self.elev_grid_cp, 0)
-
-        # --- GPU-to-CPU Transfers ---
-        # Transfer all required data to CPU *once*.
-        # These are the main unavoidable bottlenecks, as find_contours
-        # runs on the CPU.
-        unique_ponds_np = cp.asnumpy(unique_ponds)
-        labeled_data_np = cp.asnumpy(labeled_data)
-        arr_np = cp.asnumpy(arr)
-
-        # --- CPU Operations ---
-        pond_contours = {}
-
-        # Loop 1: Find contours for each pond
-        for pond_id in unique_ponds_np:
-            # Create a simple binary mask for this pond
-            pond_mask = labeled_data_np == pond_id
-
-            # Find contours directly on the 0/1 mask.
-            contours = find_contours(pond_mask, level=0.5)
-            pond_contours[pond_id] = contours
-
-        # Loop 2: Process contours and look up elevation values
         contour_pixels_per_pond = {}
         contour_values_per_pond = {}
-
-        for pond_id, contours in pond_contours.items():
-            if not contours:
-                continue  # Skip empty contours
-
-            contour_pixels = np.vstack(
-                [np.round(contour).astype(int) for contour in contours]
-            )
-
-            # Ensure indices are within bounds
-            valid_mask = (
-                (0 <= contour_pixels[:, 1])
-                & (contour_pixels[:, 1] < arr_np.shape[1])
-                & (0 <= contour_pixels[:, 0])
-                & (contour_pixels[:, 0] < arr_np.shape[0])
-            )
-
-            contour_pixels = contour_pixels[valid_mask]
-
-            # Look up elevation values from the complete map.
-            contour_values = arr_np[contour_pixels[:, 0], contour_pixels[:, 1]]
-
-            contour_pixels_per_pond[pond_id] = contour_pixels
-            contour_values_per_pond[pond_id] = contour_values
+        for pond_id in np.unique(pond_ids[finite]):
+            keep = finite & (pond_ids == pond_id)
+            contour_pixels_per_pond[pond_id] = np.column_stack(
+                (rows[keep], cols[keep]))
+            contour_values_per_pond[pond_id] = elevations[keep]
 
         return contour_pixels_per_pond, contour_values_per_pond
 

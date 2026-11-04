@@ -515,6 +515,10 @@ class ImageHandler:
 
         # Initialize the location object (name and region are arbitrary here)
         loc = LocationInfo("Camera_Loc", "Region", "UTC", latitude, longitude)
+        # Sun times must use the local calendar date: on the UTC date the
+        # "sunset" is the previous evening's whenever it falls after
+        # midnight UTC, which rejected every summer image
+        local_tz = ZoneInfo("America/New_York")
         
         filtered_files = []
         sun_cache = {} # Cache sunrise/sunset times per date to avoid redundant math
@@ -531,13 +535,12 @@ class ImageHandler:
                 file_timestamp_naive = datetime.strptime(file_timestamp_str, "%Y%m%d%H%M%S")
                 file_timestamp_utc = file_timestamp_naive.replace(tzinfo=timezone.utc)
 
-                # Extract the date to check against the cache
-                date_key = file_timestamp_utc.date()
+                # Extract the local date to check against the cache
+                date_key = file_timestamp_utc.astimezone(local_tz).date()
 
                 if date_key not in sun_cache:
-                    # Calculate sun events for this specific date
-                    # Astral returns these as timezone-aware UTC datetime objects
-                    s = sun(loc.observer, date=date_key)
+                    # Calculate sun events for this local date
+                    s = sun(loc.observer, date=date_key, tzinfo=local_tz)
                     sun_cache[date_key] = (s['sunrise'], s['sunset'])
 
                 sunrise, sunset = sun_cache[date_key]
@@ -591,7 +594,7 @@ class ImageHandler:
                 ),
                 # Create camera ID column because sensor images are
                 # stored with camera name
-                camera_ID=lambda x: "CAM_" + x["sensor_ID"],
+                camera_ID=lambda x: "CAM_" + x["sensor_ID"].astype(str),
             )
         )
 

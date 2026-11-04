@@ -112,23 +112,20 @@ class GridGenerator:
         self.lidar_units = lidar_units
         self.lidar = self._load_lidar()
 
-        # Determine extents, converting from feet to meters if provided
-        # extent units are in feet. Otherwise, they are assumed to be in
-        # meters.
-        if extent_units == "feet":
-            # If extent provided in feet, convert matching
-            # the create_point_array logic
-            scale_factor = 0.3048
-            self.min_x_extent = np.min(self.lidar.x) * scale_factor
-            self.max_x_extent = np.max(self.lidar.x) * scale_factor
-            self.min_y_extent = np.min(self.lidar.y) * scale_factor
-            self.max_y_extent = np.max(self.lidar.y) * scale_factor
-        else:
-            # If extent units are not feet, assume they are in meters
-            self.min_x_extent = min_x_extent
-            self.max_x_extent = max_x_extent
-            self.min_y_extent = min_y_extent
-            self.max_y_extent = max_y_extent
+        # Convert given extents to meters; missing extents default to the
+        # LiDAR bounds converted from the LiDAR's units
+        extent_scale = 0.3048 if extent_units == "feet" else 1.0
+        lidar_scale = 0.3048 if lidar_units == "feet" else 1.0
+
+        def to_meters(value, lidar_bound):
+            if value is None:
+                return float(lidar_bound) * lidar_scale
+            return float(value) * extent_scale
+
+        self.min_x_extent = to_meters(min_x_extent, np.min(self.lidar.x))
+        self.max_x_extent = to_meters(max_x_extent, np.max(self.lidar.x))
+        self.min_y_extent = to_meters(min_y_extent, np.min(self.lidar.y))
+        self.max_y_extent = to_meters(max_y_extent, np.max(self.lidar.y))
 
     def create_point_array(self, point_mask_value=2):
         """Create a filtered array of LiDAR points.
@@ -492,33 +489,33 @@ class GridGenerator:
 
         # Save X grid
         print(f"    X -> {path_x}")
-        zarr.open(
-            path_x,
-            mode="w",
-            shape=grid_x.shape,
-            dtype=grid_x.dtype,
-            chunks=True,  # Use default chunking
-        )[:] = grid_x
+        # chunks="auto": zarr >= 3.2 no longer accepts chunks=True
+        zarr.create_array(
+            store=path_x,
+            data=grid_x,
+            chunks="auto",
+            overwrite=True,
+        )
 
         # Save Y grid
         print(f"    Y -> {path_y}")
-        zarr.open(
-            path_y,
-            mode="w",
-            shape=grid_y.shape,
-            dtype=grid_y.dtype,
-            chunks=True,
-        )[:] = grid_y
+        # chunks="auto": zarr >= 3.2 no longer accepts chunks=True
+        zarr.create_array(
+            store=path_y,
+            data=grid_y,
+            chunks="auto",
+            overwrite=True,
+        )
 
         # Save Z grid
         print(f"    Z -> {path_z}")
-        zarr.open(
-            path_z,
-            mode="w",
-            shape=grid_z.shape,
-            dtype=grid_z.dtype,
-            chunks=True,
-        )[:] = grid_z
+        # chunks="auto": zarr >= 3.2 no longer accepts chunks=True
+        zarr.create_array(
+            store=path_z,
+            data=grid_z,
+            chunks="auto",
+            overwrite=True,
+        )
 
     @staticmethod
     def plot_elev_grid(grid_z, save_fig=False, fig_name="pixel_DEM.png"):

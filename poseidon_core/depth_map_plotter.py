@@ -190,7 +190,7 @@ class DepthMapPlotter:
         # Renamed slightly so we generate a fresh zip file without conflicts
         output_zarr_store = self.event_path / "zarr" / "virtual_sensor_data.zip"
 
-        if not zip_path.exists():
+        if not zip_path.exists() or self.virtual_sensor_loc is None:
             return
 
         in_backend = zarr.storage.ZipStore(zip_path, mode="r")
@@ -260,8 +260,11 @@ class DepthMapPlotter:
             
         match = []
         for filename in sorted(os.listdir(orig_images_path)):
-            sensor_id = _extract_camera_name(filename)[4:]
+            camera_name = _extract_camera_name(filename)
             timestamp_str = _extract_timestamp(filename)
+            if camera_name is None or timestamp_str is None:
+                continue  # not an SDFP image name
+            sensor_id = camera_name[4:]
             timestamp = pytz.utc.localize(datetime.strptime(timestamp_str, "%Y%m%d%H%M%S"))
 
             filtered_df = sunnyd_data[sunnyd_data["sensor_ID"] == sensor_id]

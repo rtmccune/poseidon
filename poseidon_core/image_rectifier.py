@@ -191,7 +191,8 @@ class ImageRectifier:
 
         # Open the ZipStore once before the loop
         try:
-            store_backend = zarr.storage.ZipStore(zarr_zip_path, mode="a")
+            # mode="w" starts a fresh archive so reruns replace old images
+            store_backend = zarr.storage.ZipStore(zarr_zip_path, mode="w")
             store = zarr.group(store=store_backend)
         except Exception as e:
             logger.error(f"  ERROR: Could not open ZipStore at {zarr_zip_path}. {e}")
@@ -399,8 +400,8 @@ class ImageRectifier:
             mask_v = xp.logical_or(self.Vd <= 1, self.Vd >= im_s[0])
             mask = xp.logical_or(mask_u, mask_v)
 
-            # Apply mask (fills with NaN)
-            ir = xp.where(mask[:, :, xp.newaxis], xp.nan, ir)
+            # Apply mask (fills with 0, as on the CPU; NaN has no uint8)
+            ir = xp.where(mask[:, :, xp.newaxis], 0, ir)
 
         else:
             # CPU/NumPy path (use 'errstate' to suppress warnings)
@@ -757,8 +758,9 @@ class ImageRectifier:
             self._xyz_to_dist_UV()
         )  # Calculate distorted U and V coordinates
 
-        # Round to the nearest integer to represent pixel indices
-        Ud = xp.round(Ud).astype(int)
-        Vd = xp.round(Vd).astype(int)
+        # Cells without elevation project to NaN; casting NaN to int is
+        # undefined, so mark them with the invalid index 0 first
+        Ud = xp.round(xp.nan_to_num(Ud, nan=0.0)).astype(int)
+        Vd = xp.round(xp.nan_to_num(Vd, nan=0.0)).astype(int)
 
         return Ud, Vd

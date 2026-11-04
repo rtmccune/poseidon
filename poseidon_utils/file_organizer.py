@@ -383,6 +383,7 @@ def organize_images_into_flood_events(
     df["start_time_str"] = df["start_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
     df["end_time_str"] = df["end_time_UTC"].dt.strftime("%Y%m%d%H%M%S")
 
+    df["sensor_ID"] = df["sensor_ID"].astype(str)
     df["camera_ID"] = "CAM_" + df["sensor_ID"]
     df["folder_name"] = (
         df["sensor_ID"] + "_" + df["start_time_str"] + "_" + df["end_time_str"]

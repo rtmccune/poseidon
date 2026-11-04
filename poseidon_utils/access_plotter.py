@@ -342,7 +342,8 @@ for poly_name, files in polygon_files.items():
             # ax1c.axhline(y=0.38, color=coastal_colors['erosion_rust']['base'], linestyle='-', linewidth=2, alpha=0.9, label='Car Floatation (38 cm)')
 
             ax1c.set_xlabel('Roadway Percentage Covered (%)')
-            ax1c.set_ylabel(f'Maximum Depth on Roadway (m)')
+            pretty_1c = {'MaxDepth': 'Maximum Depth', 'MeanDepth': 'Mean Depth', 'MedianDepth': 'Median Depth'}[metric]
+            ax1c.set_ylabel(f'{pretty_1c} on Roadway (m)')
             # ax1c.set_title(f'{metric} vs Roadway Coverage (Logistic Fit - Good Seg. Only)\n({poly_name})')
             ax1c.grid(False)
             

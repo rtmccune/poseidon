@@ -69,6 +69,8 @@ class RoadwayAnalyzer:
             fy = interp1d(cumulative_dist, points[:, 1])
             
             new_dists = np.arange(0, cumulative_dist[-1], self.step_size)
+            if new_dists.size == 0 or new_dists[-1] < cumulative_dist[-1]:
+                new_dists = np.append(new_dists, cumulative_dist[-1])
             new_x = fx(new_dists)
             new_y = fy(new_dists)
             

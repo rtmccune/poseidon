@@ -239,6 +239,7 @@ class EventTracker:
         try:
             self._gen_flood_tracker(download_data, full_csv_path)
             self._gen_abbr_flood_event_csv(download_data, abbr_csv_path)
+            self._sync_detailed_event_numbers(full_csv_path, abbr_csv_path)
             print("CSV files created successfully.")
         except Exception as e:
             print(f"An error occurred during CSV generation: {e}")
@@ -575,6 +576,15 @@ class EventTracker:
                     )
                     return None  # Failed permanently
 
+            except requests.exceptions.JSONDecodeError:
+                # Must precede RequestException, its parent class
+                print(
+                    f"Error: Server returned OK but failed to decode JSON for {task_id}."
+                )
+                # This is a server error, but retrying may not help
+                # if it's consistently sending bad JSON.
+                return None
+
             except (
                 requests.exceptions.RequestException,  # Catches all connection/timeout errors
                 IncompleteRead,  # Catches the specific connection drop
@@ -584,14 +594,6 @@ class EventTracker:
                     f"Request error for {task_id}: {req_err}. "
                     f"Attempt {attempt + 1} of {max_retries}."
                 )
-
-            except requests.exceptions.JSONDecodeError:
-                print(
-                    f"Error: Server returned OK but failed to decode JSON for {task_id}."
-                )
-                # This is a server error, but retrying may not help
-                # if it's consistently sending bad JSON.
-                return None
 
             # If we are not on the last attempt, sleep before retrying
             if attempt < max_retries - 1:
@@ -1031,7 +1033,7 @@ class EventTracker:
                 if pd.isna(max_ft):
                     max_ft = 0.0
 
-            max_m = max_ft / 3.28
+            max_m = max_ft * 0.3048
 
             abbr_df.loc[index, "max_road_water_level_(ft)"] = round(max_ft, 3)
             abbr_df.loc[index, "max_road_water_level_(m)"] = round(max_m, 3)
@@ -1091,6 +1093,12 @@ class EventTracker:
                 sorted_dataframe["sensor_ID"] == sensor
             ]
 
+            # Flood state is per sensor: an event still open when one
+            # sensor's record ends must not carry into the next sensor
+            flood_start_time = None
+            flood_end_time = None
+            max_water_level = 0
+
             for _, row in filtered_dataframe.iterrows():
                 water_level = row["road_water_level_adj"]
                 timestamp = row["date"]
@@ -1130,7 +1138,7 @@ class EventTracker:
                                 max_water_level, 3
                             ),
                             "max_road_water_level_(m)": round(
-                                max_water_level / 3.28, 3
+                                max_water_level * 0.3048, 3
                             ),
                         }
                     )
@@ -1312,6 +1320,12 @@ class EventTracker:
                 sorted_dataframe["sensor_ID"] == sensor
             ]
 
+            # Flood state is per sensor: an event still open when one
+            # sensor's record ends must not carry into the next sensor
+            flood_start_time = None
+            flood_end_time = None
+            max_water_level = 0
+
             for _, row in filtered_dataframe.iterrows():
                 water_level = row["road_water_level_adj"]
                 sensor_wtr_level = row["sensor_water_level_adj"]
@@ -1382,7 +1396,7 @@ class EventTracker:
                                 max_water_level, 3
                             ),
                             "max_road_water_level_(m)": round(
-                                max_water_level / 3.28, 3
+                                max_water_level * 0.3048, 3
                             ),
                         }
                     )
@@ -1412,6 +1426,36 @@ class EventTracker:
             updated_data = self._reassign_flood_numbers(filtered_df)
 
         updated_data.to_csv(csv_filename, index=False)
+
+    @staticmethod
+    def _sync_detailed_event_numbers(full_csv, abbr_csv):
+        """
+        Copy flood event numbers from the abbreviated CSV to the detailed one.
+
+        Each detailed row takes the number of the abbreviated event of the
+        same sensor whose start/end window contains it, so both files
+        always agree.
+
+        Parameters
+        ----------
+        full_csv : str
+            Detailed (row-by-row) flood event CSV, updated in place.
+        abbr_csv : str
+            Abbreviated (one row per event) flood event CSV.
+        """
+        if not (os.path.exists(full_csv) and os.path.exists(abbr_csv)):
+            return
+        detailed = pd.read_csv(full_csv)
+        events = pd.read_csv(abbr_csv)
+        times = pd.to_datetime(detailed["time_UTC"], utc=True)
+        for _, event in events.iterrows():
+            inside = (
+                (detailed["sensor_ID"] == event["sensor_ID"])
+                & (times >= pd.to_datetime(event["start_time_UTC"], utc=True))
+                & (times <= pd.to_datetime(event["end_time_UTC"], utc=True))
+            )
+            detailed.loc[inside, "flood_event"] = event["flood_event"]
+        detailed.to_csv(full_csv, index=False)
 
     def _gen_flood_tracker_from_abbr(
         self,
@@ -1704,11 +1748,13 @@ class EventTracker:
         # Merge on sensor_ID to compare all outages with all floods for
         # that sensor
         merged = pd.merge(
-            outage_dataframe,
-            abbr_floods,
+            outage_dataframe[["outage_number", "sensor_ID", "start_time_UTC"]],
+            abbr_floods[
+                ["flood_event", "sensor_ID", "start_time_UTC", "end_time_UTC"]
+            ],
             on="sensor_ID",
             suffixes=("_outage", "_flood"),
-        )
+        ).rename(columns={"end_time_UTC": "end_time_UTC_flood"})
 
         if merged.empty:
             print(
@@ -1794,14 +1840,19 @@ class EventTracker:
             print("No flood events in CSV to plot.")
             return
 
+        # A sensor can flood twice within one combined event; number the
+        # repeats so their plots do not overwrite each other
+        repeats = abbr_dataframe.groupby(["flood_event", "sensor_ID"]).cumcount()
+
         # Iterate over each row (event) in the DataFrame
-        for _, row in abbr_dataframe.iterrows():
+        for (_, row), repeat in zip(abbr_dataframe.iterrows(), repeats):
             sensor_id = row["sensor_ID"]
             event_number = row["flood_event"]
+            suffix = "" if repeat == 0 else f"_{repeat + 1}"
 
             # Check if file already exists
             plot_filename = os.path.join(
-                plot_folder, f"flood_event_{event_number}_{sensor_id}.png"
+                plot_folder, f"flood_event_{event_number}_{sensor_id}{suffix}.png"
             )
             if os.path.exists(plot_filename) and not force_overwrite:
                 print(f"Plot already exists (skipping): {plot_filename}")
