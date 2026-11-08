@@ -8,13 +8,7 @@ import pytest
 import requests
 
 from poseidon_utils import event_tracker as et_module
-from poseidon_utils.event_tracker import (
-    EventTracker,
-    build_detailed_events,
-    detect_flood_events,
-    number_flood_events,
-    observations_from_raw,
-)
+from poseidon_utils.event_tracker import EventTracker
 
 START = pd.Timestamp("2024-01-01 00:00", tz="UTC")
 
@@ -48,6 +42,23 @@ def records(levels_by_sensor, step_minutes=6, start=START):
                 "date_surveyed": start,
             })
     return pd.DataFrame(rows)
+
+
+def detect_flood_events(data):
+    """
+    Run event detection and return the events as a table.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Raw SDFP records.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per completed flood event.
+    """
+    return pd.DataFrame(EventTracker._detect_flood_events(data))
 
 
 @pytest.fixture
@@ -100,7 +111,7 @@ def test_missing_levels_neither_start_nor_end_events():
     assert events.iloc[0]["max_road_water_level_(ft)"] == 0.2
 
 
-def test_overlapping_events_across_sensors_share_a_number():
+def test_overlapping_events_across_sensors_share_a_number(tracker):
     """Numbers group events that overlap in time, in start order."""
     t = START
     events = pd.DataFrame({
@@ -108,15 +119,15 @@ def test_overlapping_events_across_sensors_share_a_number():
         "start_time_UTC": [t + pd.Timedelta(hours=h) for h in (1, 0, 5, 3)],
         "end_time_UTC": [t + pd.Timedelta(hours=h) for h in (4, 2, 6, 3.5)],
     })
-    numbered = number_flood_events(events)
+    numbered = tracker._reassign_abbr_flood_numbers(events)
     assert numbered["sensor_ID"].tolist() == ["A", "B", "A", "C"]
     assert numbered["flood_event"].tolist() == [1, 1, 1, 2]
 
 
-def test_event_starting_exactly_at_previous_end_is_new():
+def test_event_starting_exactly_at_previous_end_is_new(tracker):
     """Touching (not overlapping) events get separate numbers."""
     t = START
-    numbered = number_flood_events(pd.DataFrame({
+    numbered = tracker._reassign_abbr_flood_numbers(pd.DataFrame({
         "sensor_ID": ["A", "B"],
         "start_time_UTC": [t, t + pd.Timedelta(hours=1)],
         "end_time_UTC": [t + pd.Timedelta(hours=1), t + pd.Timedelta(hours=2)],
@@ -124,12 +135,14 @@ def test_event_starting_exactly_at_previous_end_is_new():
     assert numbered["flood_event"].tolist() == [1, 2]
 
 
-def test_detailed_rows_carry_the_summary_event_numbers():
+def test_detailed_rows_carry_the_summary_event_numbers(tracker, tmp_path):
     """Detailed rows use the summary numbering; summary on last row."""
     raw = records({"AA_01": [-0.5, 0.1, 0.3, -0.1, -0.5],
                    "BB_01": [-0.5, -0.5, 0.2, 0.1, -0.2]})
-    events = number_flood_events(detect_flood_events(raw))
-    detailed = build_detailed_events(observations_from_raw(raw), events)
+    abbr, full = tmp_path / "abbr.csv", tmp_path / "full.csv"
+    tracker._gen_abbr_flood_event_csv(raw, abbr)
+    tracker._gen_flood_tracker(raw, full, abbr)
+    detailed = pd.read_csv(full)
 
     assert len(detailed) == 3 + 3  # rise through the ending reading
     assert set(detailed["flood_event"]) == {1}
@@ -234,12 +247,13 @@ def test_flood_day_counts_depend_on_the_clock(tmp_path):
     pd.DataFrame({
         "start_time_UTC": ["2024-01-01 22:00+00:00"],
         "end_time_UTC": ["2024-01-02 02:00+00:00"],
+        "start_time_EST": ["2024-01-01 17:00-05:00"],
+        "end_time_EST": ["2024-01-01 21:00-05:00"],
     }).to_csv(csv, index=False)
     assert EventTracker.num_of_flood_days("UTC", csv) == 2
     assert EventTracker.num_of_flood_days("EST", csv) == 1
     assert EventTracker.num_of_flood_days_by_start(csv) == 1
-    with pytest.raises(ValueError):
-        EventTracker.num_of_flood_days("PST", csv)
+    assert EventTracker.num_of_flood_days("PST", csv) is None
 
 
 def test_error_averages_use_the_week_before_each_event_end(tmp_path):
@@ -252,7 +266,8 @@ def test_error_averages_use_the_week_before_each_event_end(tmp_path):
         "Mean": [100.0, 1.0, 3.0], "5th Pct": [0, 0, 0],
         "95th Pct": [2.0, 2.0, 4.0],
     }).to_csv(errors, index=False)
-    result = EventTracker.avg_errors(str(errors), csv_filename=str(abbr))
+    assert EventTracker.avg_errors(str(errors), csv_filename=str(abbr))
+    result = pd.read_csv(abbr)
     assert result.loc[0, "Mean of Mean"] == 2.0  # Jan 1 is outside
     assert result.loc[0, "Mean of 95th Pct"] == 3.0
 
@@ -426,12 +441,12 @@ def test_date_chunks_cover_the_window_inclusively(tracker):
 
 
 def test_location_names_expand_to_sensor_ids(tracker):
-    """Location names are case-insensitive; unknown names raise."""
+    """Location names are case-insensitive; unknown names give None."""
     assert tracker._resolve_sensor_ids("Down East") == [
         "DE_01", "DE_02", "DE_03", "DE_04"]
     assert tracker._resolve_sensor_ids(["XX_01"]) == ["XX_01"]
-    with pytest.raises(ValueError, match="Atlantis"):
-        tracker._resolve_sensor_ids("Atlantis")
+    assert tracker._resolve_sensor_ids("Atlantis") is None
+    assert tracker.get_data("Atlantis") is None
 
 
 def test_failed_chunks_fall_back_to_daily_requests(tracker, monkeypatch):

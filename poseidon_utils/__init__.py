@@ -18,6 +18,8 @@ image_handler
     Pull and filter images from the SDFP image archive.
 file_organizer
     Organize event CSVs and images into per-event folders.
+utils
+    Timestamped ``log`` helper shared with the flood_event_QC package.
 
 Heavy dependencies (``requests``, ``matplotlib``, ``astral``) load only
 when the classes that need them are first accessed.
@@ -34,7 +36,7 @@ _LAZY_ATTRIBUTES = {
 }
 _LAZY_MODULES = {
     "constants", "event_tracker", "file_organizer", "image_handler",
-    "logging_utils", "naming", "site_config", "zarr_io",
+    "logging_utils", "naming", "site_config", "utils", "zarr_io",
 }
 
 __all__ = [

@@ -183,11 +183,12 @@ def test_unlabeled_images_are_those_without_matching_labels(tmp_path):
     assert names_in(tmp_path / "todo") == ["CAM_CB_03_20240101120600.jpg"]
 
 
-def test_time_filters_reject_naive_bounds():
-    """Comparing aware and naive datetimes is refused up front."""
-    with pytest.raises(ValueError, match="timezone-aware"):
-        ImageHandler()._filter_files_by_start_and_end_time(
-            [], datetime(2024, 1, 1), datetime(2024, 1, 2))
+def test_time_filters_reject_naive_bounds(tmp_path):
+    """Naive bounds keep nothing instead of raising mid-filter."""
+    images = touch(tmp_path / "images", "CAM_CB_03_20240101120000.jpg")
+    assert ImageHandler()._filter_files_by_start_and_end_time(
+        [str(images / "CAM_CB_03_20240101120000.jpg")],
+        datetime(2024, 1, 1), datetime(2024, 1, 2)) == []
 
 
 # ----- file_organizer --------------------------------------------------------
@@ -296,3 +297,66 @@ def test_job_lists_split_files_evenly(tmp_path):
     assert lists[0].parent == tmp_path / "job_file_lists"
     with pytest.raises(NotADirectoryError):
         fo.prepare_job_lists(tmp_path / "missing", 2)
+
+
+def test_daylight_coverage_splits_event_and_buffer_images(tmp_path):
+    """An event across sunset is counted by daylight, inside vs. buffer."""
+    pytest.importorskip("astral")
+    # Hourly images 18:00 Jan 15 to 06:00 Jan 16 UTC, plus two at night
+    # on Jan 17. Carolina Beach sunset on Jan 15 is about 22:25 UTC.
+    hours = pd.date_range("2024-01-15 18:00", "2024-01-16 06:00", freq="h")
+    night = pd.to_datetime(["2024-01-17 02:00", "2024-01-17 03:00"])
+    images = touch(tmp_path / "all", *(
+        f"CAM_CB_03_{t:%Y%m%d%H%M%S}.jpg" for t in hours.append(night)))
+    csv = tmp_path / "abbr.csv"
+    pd.DataFrame({
+        "flood_event": [1, 2, 3],
+        "sensor_ID": ["CB_03", "CB_03", "CB_02"],
+        # 6 h event across sunset; night-only event; event with no camera
+        "start_time_UTC": ["2024-01-15 21:00:00+00:00",
+                           "2024-01-17 02:00:00+00:00",
+                           "2024-01-15 21:00:00+00:00"],
+        "end_time_UTC": ["2024-01-16 03:00:00+00:00",
+                         "2024-01-17 03:00:00+00:00",
+                         "2024-01-16 03:00:00+00:00"],
+        "duration_(hours)": [6.0, 1.0, 6.0],
+    }).to_csv(csv, index=False)
+    original = csv.read_text()
+
+    out = tmp_path / "abbr_daylight.csv"
+    fo.summarize_event_daylight_coverage(csv, images, out, CB_LAT, CB_LON,
+                                         padding_hours=3)
+    cov = pd.read_csv(out)
+
+    sunset_event = cov.iloc[0]
+    assert sunset_event["has_daylight_images"]
+    assert sunset_event["has_event_daylight_images"]
+    # Inside the event: 21:00-03:00 is 7 images, daylight only 21 and 22
+    assert (sunset_event["event_images_total"],
+            sunset_event["event_images_daylight"],
+            sunset_event["event_images_night"]) == (7, 2, 5)
+    # Buffers: 18-20 UTC (daylight) before, 04-06 UTC (night) after
+    assert (sunset_event["buffer_images_total"],
+            sunset_event["buffer_images_daylight"],
+            sunset_event["buffer_images_night"]) == (6, 3, 3)
+    assert sunset_event["event_daylight_image_fraction"] == round(2 / 7, 3)
+    assert 1.3 < sunset_event["event_daylight_hours"] < 1.5
+    assert sunset_event["event_daylight_start_UTC"].startswith(
+        "2024-01-15 21:00")
+    assert sunset_event["event_daylight_end_UTC"].startswith(
+        "2024-01-15 22:00")
+    assert sunset_event["first_daylight_image_UTC"].startswith(
+        "2024-01-15 18:00")
+
+    night_event, no_camera = cov.iloc[1], cov.iloc[2]
+    assert night_event["has_images"] and not night_event["has_daylight_images"]
+    assert night_event["event_images_night"] == 2
+    assert night_event["event_daylight_hours"] == 0
+    assert not no_camera["has_images"]
+    assert no_camera["event_images_total"] == 0
+
+    # The original sheet is untouched; rerunning on the output is stable
+    assert csv.read_text() == original
+    again = fo.summarize_event_daylight_coverage(out, images, out, CB_LAT,
+                                                 CB_LON, padding_hours=3)
+    assert list(again.columns) == list(cov.columns)

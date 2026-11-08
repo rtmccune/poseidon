@@ -41,6 +41,7 @@ __all__ = [
     "organize_images_into_flood_events",
     "prepare_job_lists",
     "prune_empty_event_folders",
+    "summarize_event_daylight_coverage",
 ]
 
 
@@ -130,6 +131,232 @@ def filter_abbr_flood_csv_by_eastern_time(input_path, output_path,
     logger.info("Kept %d of %d events starting %02d:00-%02d:00 ET -> %s",
                 len(kept), len(events), min_hour, max_hour, output_path)
     return kept
+
+
+#: Columns added by :func:`summarize_event_daylight_coverage`, in order.
+DAYLIGHT_COVERAGE_COLUMNS = [
+    "buffer_hours",
+    "has_images",
+    "has_daylight_images",
+    "has_event_daylight_images",
+    "event_images_total",
+    "event_images_daylight",
+    "event_images_night",
+    "buffer_images_total",
+    "buffer_images_daylight",
+    "buffer_images_night",
+    "event_daylight_image_fraction",
+    "event_daylight_hours",
+    "event_daylight_start_UTC",
+    "event_daylight_end_UTC",
+    "first_daylight_image_UTC",
+    "last_daylight_image_UTC",
+]
+
+
+def _image_index(image_dir):
+    """
+    List the images in a folder by camera, with their UTC timestamps.
+
+    Parameters
+    ----------
+    image_dir : str or os.PathLike
+        Folder of images named with a camera and UTC timestamp.
+
+    Returns
+    -------
+    dict of str to pandas.DatetimeIndex
+        Sorted, de-duplicated image timestamps for each camera. Files
+        without a camera name or timestamp are ignored.
+    """
+    stamps = defaultdict(list)
+    for entry in os.scandir(image_dir):
+        if not (entry.is_file()
+                and entry.name.lower().endswith(IMAGE_EXTENSIONS)):
+            continue
+        camera, timestamp = (extract_camera_name(entry.name),
+                             parse_timestamp(entry.name))
+        if camera and timestamp is not None:
+            stamps[camera].append(timestamp)
+    return {camera: pd.DatetimeIndex(times).sort_values().unique()
+            for camera, times in stamps.items()}
+
+
+def _daylight_hours(start, end, latitude, longitude, tz):
+    """
+    Hours of a UTC window that fall between local sunrise and sunset.
+
+    Parameters
+    ----------
+    start, end : pandas.Timestamp
+        Aware UTC window.
+    latitude, longitude : float
+        Site location in decimal degrees.
+    tz : datetime.tzinfo
+        Site time zone.
+
+    Returns
+    -------
+    float
+        Daylight hours inside the window, from the sun's position
+        alone (independent of whether the camera recorded).
+    """
+    from .image_handler import sun_times
+
+    total = pd.Timedelta(0)
+    day = start.astimezone(tz).date()
+    while day <= end.astimezone(tz).date():
+        sunrise, sunset = sun_times(day, latitude, longitude, tz)
+        overlap = (min(end, pd.Timestamp(sunset))
+                   - max(start, pd.Timestamp(sunrise)))
+        total += max(overlap, pd.Timedelta(0))
+        day += pd.Timedelta(days=1)
+    return round(total.total_seconds() / 3600, 3)
+
+
+def summarize_event_daylight_coverage(abbr_events_path, image_dir,
+                                      output_path, latitude, longitude,
+                                      padding_hours=3, tz=EASTERN_TZ):
+    """
+    Add per-event daylight image counts to the abbreviated event CSV.
+
+    For each event, the images in `image_dir` from the event's camera
+    are split into those inside the event (``start_time_UTC`` to
+    ``end_time_UTC``) and those in the buffers before and after it
+    (`padding_hours` each side), and each group into daylight (local
+    sunrise to sunset) and night. The result is every original row
+    and column plus :data:`DAYLIGHT_COVERAGE_COLUMNS`:
+
+    * ``has_images`` / ``has_daylight_images``: any image / any
+      daylight image in the buffered window. Events without daylight
+      images get no event folder (see
+      :func:`prune_empty_event_folders`).
+    * ``has_event_daylight_images``: any daylight image inside the
+      event itself, not counting the buffers.
+    * ``event_images_*`` / ``buffer_images_*``: total, daylight, and
+      night image counts inside the event and in the two buffers.
+    * ``event_daylight_image_fraction``: daylight share of the event's
+      images (empty if it has none).
+    * ``event_daylight_hours``: hours of the event between sunrise and
+      sunset, from the sun alone. Comparing it with
+      ``duration_(hours)`` separates "the event was at night" from "the
+      camera did not record".
+    * ``event_daylight_start_UTC`` / ``event_daylight_end_UTC``: first
+      and last daylight image inside the event, the window to use when
+      comparing camera results with the sensor over the same period.
+    * ``first_daylight_image_UTC`` / ``last_daylight_image_UTC``: the
+      same over the buffered window.
+
+    Parameters
+    ----------
+    abbr_events_path : str or os.PathLike
+        Abbreviated CSV with ``sensor_ID``, ``start_time_UTC`` and
+        ``end_time_UTC``. It is not modified.
+    image_dir : str or os.PathLike
+        Folder of all pulled images (before daylight filtering).
+    output_path : str or os.PathLike
+        CSV to write. Rewritten in full on every call.
+    latitude, longitude : float
+        Camera location in decimal degrees.
+    padding_hours : float, optional
+        Buffer on each side of an event; match the image pull and
+        event setup stages. Default is 3.
+    tz : datetime.tzinfo, optional
+        Site time zone. Default is US Eastern.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The annotated events, in the input's row order.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the CSV or `image_dir` does not exist.
+    """
+    from .image_handler import is_daylight
+
+    events = pd.read_csv(abbr_events_path)
+    # Drop coverage columns from an earlier run so they are recomputed
+    events = events.drop(columns=[c for c in DAYLIGHT_COVERAGE_COLUMNS
+                                  if c in events.columns])
+    images = _image_index(image_dir)
+    is_day = {camera: np.array([is_daylight(t, latitude, longitude, tz)
+                                for t in times], dtype=bool)
+              for camera, times in images.items()}
+    padding = pd.Timedelta(hours=padding_hours)
+    empty = pd.DatetimeIndex([], tz="UTC")
+
+    def first(times):
+        """Return the earliest time, or NaT if there is none."""
+        return times[0] if len(times) else pd.NaT
+
+    def last(times):
+        """Return the latest time, or NaT if there is none."""
+        return times[-1] if len(times) else pd.NaT
+
+    starts = pd.to_datetime(events["start_time_UTC"], utc=True,
+                            errors="coerce")
+    ends = pd.to_datetime(events["end_time_UTC"], utc=True, errors="coerce")
+    rows = []
+    for sensor_id, start, end in zip(events["sensor_ID"].astype(str), starts,
+                                     ends):
+        if pd.isna(start) or pd.isna(end):
+            logger.warning("Event for %s has invalid times; coverage left "
+                           "empty.", sensor_id)
+            rows.append({"buffer_hours": padding_hours})
+            continue
+        camera = camera_from_sensor_id(sensor_id)
+        times = images.get(camera, empty)
+        day = is_day.get(camera, np.zeros(0, dtype=bool))
+
+        in_window = (times >= start - padding) & (times <= end + padding)
+        in_event = (times >= start) & (times <= end)
+        in_buffer = in_window & ~in_event
+        window_day = times[in_window & day]
+        event_day = times[in_event & day]
+
+        n_event, n_event_day = int(in_event.sum()), int((in_event & day).sum())
+        n_buffer = int(in_buffer.sum())
+        n_buffer_day = int((in_buffer & day).sum())
+        rows.append({
+            "buffer_hours": padding_hours,
+            "has_images": bool(in_window.any()),
+            "has_daylight_images": len(window_day) > 0,
+            "has_event_daylight_images": len(event_day) > 0,
+            "event_images_total": n_event,
+            "event_images_daylight": n_event_day,
+            "event_images_night": n_event - n_event_day,
+            "buffer_images_total": n_buffer,
+            "buffer_images_daylight": n_buffer_day,
+            "buffer_images_night": n_buffer - n_buffer_day,
+            "event_daylight_image_fraction": (
+                round(n_event_day / n_event, 3) if n_event else np.nan),
+            "event_daylight_hours": _daylight_hours(start, end, latitude,
+                                                    longitude, tz),
+            "event_daylight_start_UTC": first(event_day),
+            "event_daylight_end_UTC": last(event_day),
+            "first_daylight_image_UTC": first(window_day),
+            "last_daylight_image_UTC": last(window_day),
+        })
+
+    coverage = pd.DataFrame(rows, columns=DAYLIGHT_COVERAGE_COLUMNS,
+                            index=events.index)
+    annotated = pd.concat([events, coverage], axis=1)
+    annotated.to_csv(output_path, index=False)
+
+    kept = annotated["has_daylight_images"].fillna(False).astype(bool)
+    logger.info("Daylight coverage for %d events -> %s: %d with daylight "
+                "images (%d inside the event itself), %d night or buffer "
+                "only, %d with no images.", len(annotated), output_path,
+                int(kept.sum()),
+                int(annotated["has_event_daylight_images"].fillna(False)
+                    .astype(bool).sum()),
+                int((annotated["has_images"].fillna(False).astype(bool)
+                     & ~kept).sum()),
+                int((~annotated["has_images"].fillna(False).astype(bool))
+                    .sum()))
+    return annotated
 
 
 def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path,

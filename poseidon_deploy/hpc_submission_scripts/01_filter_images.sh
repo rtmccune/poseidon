@@ -3,6 +3,8 @@
 #
 # Input:  $SITE_DATA/images/all_events_during_FOV/
 # Output: $SITE_DATA/images/daylight_all_events/
+#         $SITE_DATA/abbr_flood_events_daylight.csv (the event sheet plus
+#         per-event daylight/night image counts; the original is unchanged)
 # The camera latitude/longitude come from the site config.
 #
 #BSUB -J image_filter
@@ -19,4 +21,7 @@ activate_env
 python -u "$NAIADS/run_image_filter.py" \
     --site "$SITE" \
     --image_dir "$SITE_DATA/images/all_events_during_FOV" \
-    --dest "$SITE_DATA/images/daylight_all_events"
+    --dest "$SITE_DATA/images/daylight_all_events" \
+    --events_csv "$SITE_DATA/abbr_flood_events.csv" \
+    --events_out "$SITE_DATA/abbr_flood_events_daylight.csv" \
+    --buffer 3  # match --buffer in 00_pull_and_save_images.sh

@@ -42,8 +42,9 @@ poseidon_utils/         Shared utilities and data access
   logging_utils.py        setup_logging() for scripts and notebooks
   zarr_io.py              Atomic ZIP Zarr store helpers
   site_config.py          Per-site YAML configuration loader
-  event_tracker.py        SDFP API client and flood event CSVs
-  image_handler.py        SDFP image archive access and filtering
+  event_tracker.py        SDFP API client and flood event CSVs (shared with flood_event_QC)
+  image_handler.py        SDFP image archive access and filtering (shared with flood_event_QC)
+  utils.py                log() helper used by the two shared modules
   file_organizer.py       Per-event folder organization
   src/                    C++ label and overlay generators
 poseidon_deploy/
@@ -54,7 +55,7 @@ poseidon_deploy/
   environment/            Conda environment and lock files
   calibration/            Intrinsic camera calibration notebook
   segmentation/           Segmentation Gym submodule, models, templates
-notebooks/              Worked example of the Python API
+notebooks/              Worked examples of the Python API
 tests/                  pytest suite
 ```
 
@@ -165,10 +166,17 @@ Re-running a stage replaces its earlier outputs.
 The remaining `99_*` scripts run QC and analysis (overlay comparisons,
 accessibility plots, anomaly detection) and segmentation model training.
 
-## Example notebook
+## Example notebooks
 
-`notebooks/poseidon_workflow.ipynb` runs grid generation, rectification,
-depth estimation, and roadway analysis on one event with the Python API.
+* `notebooks/flood_event_pull.ipynb` downloads SDFP water levels for the
+  Carolina Beach and Down East sensors and builds each site's flood event,
+  outage, and plot outputs (needs SDFP API credentials).
+* `notebooks/poseidon_workflow.ipynb` runs grid generation, rectification,
+  depth estimation, and roadway analysis on one event with the Python API.
+
+`event_tracker.py`, `image_handler.py`, and `utils.py` in `poseidon_utils`
+are kept identical to the copies in the flood_event_QC repository; change
+them in both places.
 
 ## Tests
 
