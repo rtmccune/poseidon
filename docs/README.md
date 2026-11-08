@@ -93,8 +93,12 @@ python parse_lock.py poseidon-linux-64-lock.yml explicit-spec.txt
 Then install POSEIDON into the environment:
 ```bash
 conda activate poseidon
-pip install -e .
+python -m pip install -e .
 ```
+Use `python -m pip`, not a bare `pip`: if the environment has no `pip`
+of its own, `pip` resolves to the system one (on the NC State HPC, a
+Python 3.9 user install), which fails with
+`requires a different Python: 3.9 not in '>=3.11'`.
 
 GPU acceleration (CuPy/cuCIM) is optional. Classes take `use_gpu=None` to
 use a GPU when one is available, `False` to force the CPU, or `True` to
@@ -114,9 +118,13 @@ upgrading OpenCV.
 ### Segmentation Gym container
 From the repository root:
 ```bash
+mkdir -p poseidon_deploy/segmentation/container   # not in a fresh clone
 apptainer pull poseidon_deploy/segmentation/container/seg_gym.sif \
     oras://ghcr.io/rtmccune/segmentation-gym-tf:latest
 ```
+The image is about 7 GB. On a cluster, point `APPTAINER_CACHEDIR` and
+`APPTAINER_TMPDIR` at project storage first so the download does not
+fill your home quota.
 
 ## Site configuration
 
