@@ -14,14 +14,14 @@ longitude: -77.8894
 
 # Rectification grid bounds (site CRS, meters) and spacing (meters).
 grid:
-  min_x: 712160
-  max_x: 712230
-  min_y: 33100
-  max_y: 33170
+  min_x: 712158
+  max_x: 712190
+  min_y: 33120
+  max_y: 33160
   resolution: 0.05
 
-lidar_file: data/lidar/Job1051007_34077_04_88.laz
-lidar_units: feet             # units of the LiDAR point coordinates
+lidar_file: data/lidar/carolina_beach_2019.laz
+lidar_units: meters           # units of the LiDAR point coordinates
 basemap: data/basemaps/CB_03_basemap.tif
 
 # Roadway region of interest (LabelMe JSON drawn on a rectified image).
