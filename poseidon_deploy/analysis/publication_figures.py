@@ -8,8 +8,11 @@ and PDF in ``--out_dir`` with the CSVs behind every number shown.
 Figure 1, ``<roi>_pub_fig1_aligned_timing``
     (a) Mean depth across events against hours since the start of each
     event's window (the event folder's buffered window; the event
-    sheet's start is dashed at +``--padding_hours``) for the in-situ
-    sensor, each virtual sensor and the ROI mean. Dry times are left
+    sheet's start is dotted at +``--padding_hours``) for the in-situ
+    sensor, each virtual sensor and the ROI mean. The in-situ sensor is
+    drawn only between the event sheet's start and end: it defines the
+    event, and its readings in the buffer belong to neighbouring events
+    whose padded windows overlap. Dry times are left
     out, so each line is the mean depth among events with water at
     that time (15-min bins with >= 3 events).
     (b), (c) Onset lead and end lag per event: minutes water appeared
@@ -241,7 +244,14 @@ def _draw_means_panel(ax, series, padding_hours):
     pandas.DataFrame
         The composites drawn.
     """
-    aligned = sc.aligned_series(series, "start", "buffer")
+    # The sensor defines each event, so its line covers only the event
+    # sheet's start to end; readings in the buffer belong to neighbouring
+    # events whose padded windows overlap. Camera lines keep the whole
+    # window: what they see before and after is the point of the panel.
+    outside = (series["source"] == sc.SENSOR) & (
+        (series["time"] < series["flood_start"])
+        | (series["time"] > series["flood_end"]))
+    aligned = sc.aligned_series(series[~outside], "start", "buffer")
     table = sc.composites(aligned, stat="mean")
     present = set(table["source"])
     sources = ([sc.SENSOR] if sc.SENSOR in present else []) + sorted(
@@ -255,7 +265,7 @@ def _draw_means_panel(ax, series, padding_hours):
                 linestyle="--" if source == sc.SENSOR else "-",
                 label=_display(source))
     ax.axvline(padding_hours, color=INK, linewidth=1, linestyle=":",
-               label="Event start (event sheet)")
+               label="Event Start")
     durations = (aligned["flood_end"] - aligned["flood_start"]
                  ).dt.total_seconds() / 3600
     ax.set_xlim(0, float(np.nanpercentile(durations, 90))

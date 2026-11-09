@@ -719,6 +719,9 @@ def test_publication_figures_from_events(tmp_path):
     assert agreement["image_metric"].tolist() == [
         "Mean Roadway Depth in Field of View",
         "Maximum Roadway Depth in Field of View"]
+    means = pd.read_csv(out / "road_pub_fig1_aligned_timing_a_means.csv")
+    sensor_hours = means.loc[means["source"] == "In-situ sensor", "hours"]
+    assert sensor_hours.min() >= 3  # never before the event start (+3 h)
     metrics = (out / "road_pub_metrics.md").read_text()
     assert "VS1 against the in-situ sensor" in metrics
     assert "Anywhere on Roadway" in metrics and "Bias (m)" in metrics

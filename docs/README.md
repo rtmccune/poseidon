@@ -348,8 +348,11 @@ Each statistic comes with an event-resampled 95% CI.
 - **`<roi>_pub_fig1_aligned_timing`:**
   - **(a)** Mean water depth across events against hours since the start
     of the window, for the in-situ sensor, VS1–VSn and the ROI mean. The
-    event sheet's start is dotted at +3 h. The legend reads In-Situ Sensor,
-    VS1–VSn and Mean on Roadway.
+    event sheet's start ("Event Start") is dotted at +3 h. The legend reads
+    In-Situ Sensor, VS1–VSn and Mean on Roadway. The in-situ sensor is
+    drawn only from the sheet's start to its end, since it defines the
+    event; readings in the buffer belong to neighbouring events whose
+    windows overlap.
   - **(b), (c)** Onset lead and end lag time per event and camera
     location, with the mean labelled in minutes above each column. Both
     panels share one y-axis, and "Anywhere on Roadway" is the whole ROI.
