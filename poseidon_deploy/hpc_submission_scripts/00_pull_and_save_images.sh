@@ -5,7 +5,7 @@
 # Output: $SITE_DATA/images/all_events_during_FOV/
 #
 #BSUB -J image_pull
-#BSUB -W 10
+#BSUB -W 30
 #BSUB -n 1
 #BSUB -q ccee
 #BSUB -o image_pull.%J.out
