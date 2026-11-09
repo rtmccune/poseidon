@@ -647,3 +647,74 @@ def test_sensor_that_never_saw_water_has_no_peak():
     assert series["sensor_peak"].isna().all()
     assert sc.aligned_series(series, "peak").empty
     assert not sc.aligned_series(series, "start").empty
+
+
+def test_sensor_wet_threshold_matches_event_detection():
+    """Sensor levels at or below 0.02 ft count as dry."""
+    import sensor_camera_comparison as sc
+
+    assert sc.SENSOR_WET_M == pytest.approx(0.02 * 0.3048)
+    times = pd.Series(pd.date_range("2024-01-01 12:00", periods=3,
+                                    freq="6min", tz="UTC"))
+    sensor = pd.DataFrame({"datetime_utc": times,
+                           "SensorDepth_m": [0.0, 0.01 * 0.3048,
+                                             0.05 * 0.3048]})
+    state = sc.sensor_state(times, sensor, 1)
+    assert state["sensor_state"].tolist() == ["sensor dry", "sensor dry",
+                                              "sensor wet"]
+
+
+def test_publication_figures_from_events(tmp_path):
+    """Both figures and their CSVs are written from good images only."""
+    import publication_figures as pub
+    from poseidon_utils.zarr_io import write_array, write_zip_group
+
+    labels, sensor = [], []
+    for e in range(4):
+        start = pd.Timestamp("2024-06-01 12:00", tz="UTC") + pd.Timedelta(
+            days=e)
+        name = (f"DE_01_{start - pd.Timedelta(hours=3):%Y%m%d%H%M%S}_"
+                f"{start + pd.Timedelta(hours=4):%Y%m%d%H%M%S}")
+        folder = tmp_path / "events" / name
+        (folder / "zarr").mkdir(parents=True)
+        times = pd.date_range(start - pd.Timedelta(minutes=30), periods=16,
+                              freq="6min", tz="UTC")
+        depth = np.clip(np.sin(np.linspace(0, np.pi, 16)) * 0.1, 0, None)
+        wet = depth > 0
+        pd.DataFrame({
+            "Time": times, "Impassable": wet.astype(int),
+            "FloodedPixels": (np.linspace(5, 100, 16) * 10).astype(int),
+            "TotalPixels": 1000, "MaxDepth": depth * 1.5,
+            "MeanDepth": depth, "MedianDepth": depth,
+            "MinDepth": 0.0}).to_csv(
+            folder / "road_accessibility_time_series.csv", index=False)
+        with write_zip_group(folder / "zarr" / "virtual_sensor_data.zip") as g:
+            write_array(g, "timestamps",
+                        np.array(times.astype(str), dtype="U30"))
+            vs = np.where(wet, depth, np.nan)[:, None]
+            write_array(g, "vs_depth", vs)
+            write_array(g, "vs_wse", vs)
+        labels += [(f"comparison_CAM_DE_01_{t:%Y%m%d%H%M%S}.jpg", 1)
+                   for t in times]
+        sensor += [(t, d * 0.9 / 0.3048) for t, d in zip(times, depth)]
+    pd.DataFrame(labels, columns=["Filename", "Segmentation_Score"]).to_csv(
+        tmp_path / "labels.csv", index=False)
+    pd.DataFrame(sensor, columns=["time_UTC", "road_water_level"]).to_csv(
+        tmp_path / "sensor.csv", index=False)
+
+    out = tmp_path / "pub"
+    assert pub.main(["--events_dir", str(tmp_path / "events"), "--roi",
+                     "road", "--sensor", str(tmp_path / "sensor.csv"),
+                     "--labels", str(tmp_path / "labels.csv"), "--out_dir",
+                     str(out), "--n_boot", "20"]) == 0
+    for name in ("road_pub_fig1_aligned_timing.png",
+                 "road_pub_fig1_aligned_timing.pdf",
+                 "road_pub_fig2_binned_depth.png",
+                 "road_pub_fig2_binned_depth.pdf"):
+        assert (out / name).exists()
+    vs1 = pd.read_csv(out / "road_pub_fig1_aligned_timing_a_vs1_agreement.csv")
+    # VS1 reads 10 % deeper than the sensor wherever both show water
+    assert vs1["bias_m"].item() > 0 and vs1["sensor_only_wet"].item() == 0
+    agreement = pd.read_csv(out / "road_pub_fig2_binned_depth_agreement.csv")
+    assert agreement["image_metric"].tolist() == ["Image mean depth",
+                                                  "Image maximum depth"]

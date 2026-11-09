@@ -330,6 +330,32 @@ the deepest well-segmented image or sensor depth, so they can be compared
 directly. On that shared axis, logistic curves that dip below 0 m near 0%
 coverage are cut off.
 
+### Publication figures
+
+`99_plots_for_publication.sh` runs
+`poseidon_deploy/analysis/publication_figures.py`. It uses well-segmented
+images only and writes to `data/<site>/publication/`. Each figure is saved
+as PNG and PDF, without a title (captions describe them), with CSVs of
+every number shown.
+
+- **`<roi>_pub_fig1_aligned_timing`:**
+  - **(a)** Mean water depth across events against hours since the start
+    of the window, for the in-situ sensor, VS1–VSn and the ROI mean. The
+    event sheet's start is dotted at +3 h. Below the panel, VS1 is compared
+    with the in-situ sensor image by image: the depth error where both show
+    water (bias, MAE, RMSE, r with 95% CIs), and how often they agree on
+    whether there is water.
+  - **(b), (c)** Onset lead and end lag time per event and camera
+    location, with the mean labelled in minutes.
+- **`<roi>_pub_fig2_binned_depth`:** image mean depth, image maximum depth
+  and in-situ sensor depth by coverage bin, from the same images, with the
+  error of each image metric against the sensor.
+
+In both the comparison and publication scripts, the in-situ sensor counts
+as wet above 0.02 ft (`--sensor_wet_ft`). That is the event detection
+start threshold, so the sensor is wet exactly when the event sheet would
+say so.
+
 ### Events without sensor data
 
 Stage 05 needs `flood_events.csv`, the sensor readings inside each event.

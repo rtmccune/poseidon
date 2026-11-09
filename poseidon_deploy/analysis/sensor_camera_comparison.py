@@ -43,8 +43,10 @@ the site config) in every figure.
 
 Definitions
 -----------
-* **Water.** Sensor: road water level above 0 (depth = level, clipped
-  at 0). Virtual sensor: a depth above 0. ROI: at least one ROI cell
+* **Water.** Sensor: road water level above 0.02 ft
+  (``--sensor_wet_ft``; the event detection start threshold, so the
+  sensor counts as wet exactly when the event sheet would; depth =
+  level, clipped at 0). Virtual sensor: a depth above 0. ROI: at least one ROI cell
   with depth above 0 (``FloodedPixels > 0``); its minimum can then be
   0 m. Depths are in meters.
 * **Which images.** The ``all_images`` set uses every image; the
@@ -85,6 +87,8 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
+from poseidon_utils.constants import FEET_TO_METERS  # noqa: E402
+from poseidon_utils.event_tracker import FLOOD_START_THRESHOLD_FT  # noqa: E402
 from poseidon_utils.logging_utils import setup_logging  # noqa: E402
 from poseidon_utils.naming import TIMESTAMP_FORMAT  # noqa: E402
 from poseidon_utils.site_config import load_site_config  # noqa: E402
@@ -114,6 +118,11 @@ logger = logging.getLogger(__name__)
 #: ROI depth statistics compared, with display names.
 ROI_STATS = {"MinDepth": "ROI min", "MedianDepth": "ROI median",
              "MeanDepth": "ROI mean", "MaxDepth": "ROI max"}
+
+#: Sensor depth (m) above which the in-situ sensor counts as wet: the
+#: event detection start threshold (0.02 ft), so "water at the sensor"
+#: means the same here as in the event sheet.
+SENSOR_WET_M = FLOOD_START_THRESHOLD_FT * FEET_TO_METERS
 
 #: Name of the in-situ sensor source.
 SENSOR = "In-situ sensor"
@@ -213,7 +222,7 @@ def load_virtual_sensors(event_dir, good_timestamps):
 
 # ----- Comparison ------------------------------------------------------------
 
-def sensor_state(times, sensor, match_minutes):
+def sensor_state(times, sensor, match_minutes, wet_m=SENSOR_WET_M):
     """
     The sensor's depth and state at each camera time.
 
@@ -225,6 +234,8 @@ def sensor_state(times, sensor, match_minutes):
         Readings with ``datetime_utc`` and ``SensorDepth_m``.
     match_minutes : float
         Largest gap to the nearest reading.
+    wet_m : float, optional
+        Sensor depth above which it counts as wet.
 
     Returns
     -------
@@ -247,7 +258,7 @@ def sensor_state(times, sensor, match_minutes):
                 "order")
     depth = frame["sensor_depth_m"].to_numpy()
     state = np.where(np.isnan(depth), "no sensor reading",
-                     np.where(depth > 0, "sensor wet", "sensor dry"))
+                     np.where(depth > wet_m, "sensor wet", "sensor dry"))
     return pd.DataFrame({"sensor_depth_m": depth, "sensor_state": state})
 
 
@@ -278,7 +289,7 @@ def wet_span(times, wet):
             "onset_censored": bool(wet[0]), "end_censored": bool(wet[-1])}
 
 
-def event_timing(event, camera_sources, sensor_window):
+def event_timing(event, camera_sources, sensor_window, wet_m=SENSOR_WET_M):
     """
     Onset lead and end lag of each camera source over the sensor.
 
@@ -319,7 +330,7 @@ def event_timing(event, camera_sources, sensor_window):
             row["sensor_readings_in_span"] = len(inside)
             if len(inside):
                 sensor = wet_span(inside["datetime_utc"],
-                                  inside["SensorDepth_m"] > 0)
+                                  inside["SensorDepth_m"] > wet_m)
                 row.update(sensor_first_wet=sensor["first"],
                            sensor_last_wet=sensor["last"],
                            sensor_onset_censored=sensor["onset_censored"],
@@ -359,7 +370,7 @@ def _owned(frame, keep, event):
 
 
 def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
-            padding_hours=EVENT_PADDING_HOURS):
+            padding_hours=EVENT_PADDING_HOURS, wet_m=SENSOR_WET_M):
     """
     Gather observations and timing for every event.
 
@@ -384,6 +395,9 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
         Largest gap for matching a camera time to a sensor reading.
     padding_hours : float, optional
         Padding stage 05 added around each event.
+    wet_m : float, optional
+        Sensor depth (m) above which the in-situ sensor counts as wet.
+        Default: the event detection start threshold, 0.02 ft.
 
     Returns
     -------
@@ -443,7 +457,7 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
         if roi_obs is not None and len(roi_obs):
             camera_sources["ROI"] = roi_obs[["time", "wet"]]
             wet = roi_obs[roi_obs["wet"]]
-            state = sensor_state(wet["time"], sensor, match_minutes)
+            state = sensor_state(wet["time"], sensor, match_minutes, wet_m)
             for column, name in ROI_STATS.items():
                 observations.append(pd.DataFrame({
                     "event": event, "has_sensor": has_sensor,
@@ -455,7 +469,7 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
             for source, group in vs_obs.groupby("source", sort=True):
                 camera_sources[source] = group[["time", "wet"]]
                 wet = group[group["wet"]]
-                state = sensor_state(wet["time"], sensor, match_minutes)
+                state = sensor_state(wet["time"], sensor, match_minutes, wet_m)
                 observations.append(pd.DataFrame({
                     "event": event, "has_sensor": has_sensor,
                     "time": wet["time"].to_numpy(), "source": source,
@@ -464,7 +478,7 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
                     "sensor_state": state["sensor_state"].to_numpy()}))
         if has_sensor:
             owned = _owned(sensor_window, sensor_keep, event)
-            wet = owned[owned["SensorDepth_m"] > 0]
+            wet = owned[owned["SensorDepth_m"] > wet_m]
             observations.append(pd.DataFrame({
                 "event": event, "has_sensor": True,
                 "time": wet["datetime_utc"].to_numpy(), "source": SENSOR,
@@ -472,17 +486,18 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
                 "sensor_depth_m": wet["SensorDepth_m"].to_numpy(),
                 "sensor_state": "sensor wet"}))
         timing += event_timing(event, camera_sources,
-                               sensor if has_sensor else None)
+                               sensor if has_sensor else None, wet_m)
 
     columns = ["event", "has_sensor", "time", "source", "depth_m",
                "sensor_depth_m", "sensor_state"]
     observations = (pd.concat(observations, ignore_index=True)
                     if observations else pd.DataFrame(columns=columns))
     return observations, pd.DataFrame(timing), event_series(
-        loaded, padding_hours)
+        loaded, padding_hours, wet_m)
 
 
-def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
+def event_series(loaded, padding_hours=EVENT_PADDING_HOURS,
+                 wet_m=SENSOR_WET_M):
     """
     Full depth time series of each event and source, for aligned plots.
 
@@ -499,6 +514,8 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
         :func:`collect`.
     padding_hours : float, optional
         Padding stage 05 added; removed to get the flood period.
+    wet_m : float, optional
+        Sensor depth (m) above which the in-situ sensor counts as wet.
 
     Returns
     -------
@@ -526,13 +543,13 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
             parts.append(pd.DataFrame({
                 "time": sensor_window["datetime_utc"].to_numpy(),
                 "source": SENSOR,
-                "depth_m": np.where(depth > 0, depth, np.nan)}))
+                "depth_m": np.where(depth > wet_m, depth, np.nan)}))
             flood = sensor_window[(sensor_window["datetime_utc"] >= start)
                                   & (sensor_window["datetime_utc"] <= end)]
             if flood.empty:
                 flood = sensor_window
             # Only a sensor that saw water has a peak to align on
-            if (flood["SensorDepth_m"] > 0).any():
+            if (flood["SensorDepth_m"] > wet_m).any():
                 peak = flood.loc[flood["SensorDepth_m"].idxmax(),
                                  "datetime_utc"]
         if vs_obs is not None and len(vs_obs):
@@ -1217,6 +1234,11 @@ def parse_args(argv=None):
                         default="mean",
                         help="Statistic across events in the aligned "
                              "time series plots.")
+    parser.add_argument("--sensor_wet_ft", type=float,
+                        default=FLOOD_START_THRESHOLD_FT,
+                        help="Road water level (ft) above which the in-situ "
+                             "sensor counts as wet; default is the event "
+                             "detection start threshold.")
     parser.add_argument("--start_origin", choices=("buffer", "flood"),
                         default="buffer",
                         help="Hour 0 of the start-aligned plot: the "
@@ -1288,10 +1310,10 @@ def run_image_set(args, sensor, tag, good_timestamps, label):
     int
         1 if outputs were written, 0 if there were no observations.
     """
-    observations, timing, series = collect(args.events_dir, args.roi,
-                                           sensor,
-                                   good_timestamps, args.match_minutes,
-                                   args.padding_hours)
+    observations, timing, series = collect(
+        args.events_dir, args.roi, sensor, good_timestamps,
+        args.match_minutes, args.padding_hours,
+        wet_m=args.sensor_wet_ft * FEET_TO_METERS)
     if observations.empty:
         logger.error("No camera observations for ROI '%s' under %s (%s).",
                      args.roi, args.events_dir, label)
