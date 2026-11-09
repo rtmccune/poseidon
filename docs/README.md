@@ -218,24 +218,78 @@ Stage 11 summarizes both ROIs and runs
 
 ### Roadway coverage and depth plots
 
-`99_road_access_plots.sh` runs `poseidon_deploy/analysis/access_plotter.py`.
-To predict depth from roadway coverage, use
-`<roi>_<metric>_1c_depth_by_coverage.csv`, which is built from
-well-segmented images (`1b` uses all images). It groups images into 10%
-coverage bins below 99% and puts a fully covered road in its own bin,
-because depth can keep rising after coverage reaches 100%. For each bin
-it gives:
-- the image and event counts;
-- the mean and median depth, each with a 95% confidence interval from
-  resampling whole events;
-- the 10th and 90th percentiles of depth;
-- a `low_sample` flag for bins with few images or events.
+`99_road_access_plots.sh` runs `poseidon_deploy/analysis/access_plotter.py`
+after stage 10 and writes everything to `data/<site>/plots/`. Every run
+also writes `plot_summary.md` (and `plot_summary.csv`) there. It lists
+the run settings and, for each figure, how many images and events it used
+and which ones were left out.
 
-The `_1c_binned_depth_good_only.jpg` figure shows the same table. The
-logistic fit (`_1c_reversed_fit_good_only.jpg`) is a smooth summary.
-Check its `_band_calibration.csv` before relying on it. Colors come from
-`poseidon_deploy/analysis/plot_style.py`, a colour-blind-checked
-selection from the feathers palettes.
+**Reading a filename.** Outputs are named `<roi>_<metric>_<plot>_<kind>`,
+for example `shell_hill_rd_camera_polygon_MeanDepth_1c_binned_depth_good_only.jpg`:
+
+- `<roi>` is the ROI (the LabelMe JSON's name). `shell_hill_rd_polygon` is
+  drawn on the rectified plan view; `shell_hill_rd_camera_polygon` is
+  drawn on the camera image and then rectified.
+- `<metric>` is how one image's depths over the ROI become one number.
+  Only cells labelled as water count. A water cell whose ground sits
+  above the pond's water surface has depth 0.
+  - `MaxDepth`: the deepest water cell on the ROI.
+  - `MeanDepth`: the average depth of the ROI's water cells.
+  - `MedianDepth`: the middle depth of the ROI's water cells; less
+    affected than the mean by a few deep cells.
+
+  Depths come from the `95_perc` depth maps: each pond's water surface
+  elevation is the 95th percentile of the ground elevation along its
+  waterline, and depth is that elevation minus the ground.
+- **Roadway coverage** is the percentage of the ROI's cells with depth
+  above 0.
+- `<plot>` is the plot number below. A `b` uses every image with water;
+  a `c` uses only images scored good in `segmentation_labels.csv`.
+  Images that are unreviewed or scored poor count as "other".
+
+**The plots.** Plots 1–1c have one point per image; plots 2–5 have one
+point per event.
+
+| Plot | File ending | Shows | Images and events used |
+|---|---|---|---|
+| 1 | `_1_evolution_plot.jpg` | Coverage against depth, one dot per image; good segmentations in blue, others in grey | Every image with water on the ROI |
+| 1b, 1c binned | `_1b_binned_depth.jpg`, `_1c_binned_depth_good_only.jpg` | **The prediction plot.** See below | 1b: all images with coverage > 0. 1c: good images only |
+| 1b, 1c table | `_1b_depth_by_coverage.csv`, `_1c_depth_by_coverage.csv` | The numbers behind the binned plot: the depth lookup table | Same as the plot |
+| 1b, 1c logistic | `_1b_reversed_fit.jpg`, `_1c_reversed_fit_good_only.jpg` | A smooth logistic curve of depth given coverage, its median, an 80% band and a 95% confidence band | As the binned plot; images with coverage 0 left out |
+| 1b, 1c fit files | `_fit_summary.csv`, `_band_calibration.csv` | Fit parameters with confidence intervals, R², RMSE and MAE; and, by coverage range, the share of images inside the band and below the median, plus the fit's mean error | Same as the fit |
+| 2 | `_2_summary_scatter.png` | Each event's peak coverage against its peak depth | One point per event, from its good images (all images without labels); events with none are left out |
+| 3 | `_3_depth_cdf.png` | Share of events whose peak depth is at or below each depth | Same events as plot 2 |
+| 4 | `_4_depth_pdf.png` | How event peak depths are distributed: a density histogram and a smooth density curve | Same events as plot 2 |
+| 5 | `_5_depth_exceedance.png` | Share of events whose peak depth reaches at least each depth | Same events as plot 2 |
+| 6 | `_6_sensor_1to1.jpg` | Image depth against the in-situ sensor's depth, with a 1:1 line | Good images with a sensor reading within 5 minutes; image-only events drop out |
+| 7 | `<roi>_<Max/Mean/Median>WSE_7_sensor_1to1.jpg` | The same for water surface elevation | As plot 6 |
+
+Because each plot keeps different images, the counts differ from plot to
+plot; `plot_summary.md` gives them.
+
+**The binned plot (1b, 1c).** Images are grouped into 10% coverage bins
+below 99%. Images at 99% or more (a fully covered road) go in a separate
+panel on the right, because once the road is covered, depth can keep
+rising while coverage stays at 100%. For each bin:
+- the shaded box spans the 10th to 90th percentile of depth, where 80% of
+  the images fall;
+- the blue circle is the median depth and the orange diamond the mean
+  depth, each with a 95% confidence interval from resampling whole events;
+- a hollow marker means fewer than 10 images or 3 events, so treat that
+  bin with caution.
+
+To predict depth from an observed coverage, find the bin in
+`_1c_depth_by_coverage.csv`. Use the median as the typical depth and the
+10th–90th percentiles as the expected range. In the full-coverage bin,
+coverage no longer pins down depth: read its 10th percentile as roughly
+the least depth to expect. Change the binning with `--coverage_bin_width`
+and `--full_coverage`.
+
+The logistic plots are a smooth summary, not a prediction tool. Check
+their `_band_calibration.csv` first: the share of images below the median
+should stay near 0.5, and the share inside the band near 0.8, in every
+coverage range. Colors come from `poseidon_deploy/analysis/plot_style.py`,
+a colour-blind-checked selection from the feathers palettes.
 
 ### Events without sensor data
 

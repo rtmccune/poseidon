@@ -134,6 +134,10 @@ COVERAGE_BIN_WIDTH = 10.0
 MIN_BIN_IMAGES = 10
 MIN_BIN_EVENTS = 3
 
+#: Order of plots in the run summary.
+PLOT_ORDER = ("1", "1b binned", "1b logistic", "1c binned", "1c logistic",
+              "1c", "2", "3", "4", "5", "6", "7")
+
 #: Display colours of the segmentation classes (see plot_style).
 SEGMENTATION_COLORS = {"good": BLUE, "other": CONTEXT_GREY}
 
@@ -1201,10 +1205,18 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
         Coverage bin width (%) of the binned plots.
     full_coverage : float, optional
         Coverage (%) from which the road counts as fully covered.
+
+    Returns
+    -------
+    list of dict
+        One record per plot (see :func:`_record`) for the run summary.
     """
     pretty = PRETTY_METRICS[metric]
     point_colors = data["Segmentation"].map(SEGMENTATION_COLORS)
     stem = f"{roi}_{metric}"
+    records = []
+    plotted = data.dropna(subset=["Coverage", metric])
+    n_good = int((plotted["Segmentation"] == "good").sum())
 
     # 1: coverage vs depth
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
@@ -1218,9 +1230,12 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
         ax.legend(SEGMENTATION_HANDLES,
                   ["Good Segmentation", "Standard/Poor Segmentation"])
     _save(fig, out_dir, f"{stem}_1_evolution_plot.jpg")
+    _record(records, "1", f"{stem}_1_evolution_plot.jpg", plotted,
+            f"all images with water on the ROI ({n_good} well segmented, "
+            f"{len(plotted) - n_good} other)")
 
     # 1b: depth vs coverage with logistic fit (all data)
-    fit_data = data.dropna(subset=["Coverage", metric])
+    fit_data = plotted
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
     ax.scatter(data["Coverage"], data[metric], alpha=0.6, s=12,
                c=point_colors, edgecolors="none")
@@ -1231,8 +1246,12 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
                                           fit_data["event"], n_boot, seed)
             _draw_depth_fit(ax, fit)
             write_fit_summary(fit, out_dir, f"{stem}_1b")
+            fit_note = _fit_note(fit)
         except (RuntimeError, ValueError) as err:
             logger.warning("Logistic fit failed for %s (all): %s", stem, err)
+            fit_note = f"fit failed ({err})"
+    else:
+        fit_note = "too few images to fit"
     ax.set_xlabel("Roadway Percentage Covered (%)")
     ax.set_ylabel(f"{metric} (m)")
     ax.set_title(f"{metric} vs Roadway Coverage (Logistic Fit - All "
@@ -1243,6 +1262,8 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
         labels = ["Good Seg.", "Std/Poor Seg."] + labels
     ax.legend(handles, labels)
     _save(fig, out_dir, f"{stem}_1b_reversed_fit.jpg")
+    _record(records, "1b logistic", f"{stem}_1b_reversed_fit.jpg", fit_data,
+            f"all images; {fit_note}")
 
     # 1b: depth by coverage bin (all images)
     binned = depth_by_coverage(fit_data["Coverage"], fit_data[metric],
@@ -1257,13 +1278,21 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
                                title=f"{pretty} by Roadway Coverage (all "
                                      f"images; {roi})",
                                full_coverage=full_coverage, seed=seed)
+        _record(records, "1b binned", f"{stem}_1b_binned_depth.jpg",
+                fit_data[fit_data["Coverage"] > 0],
+                "all images with coverage > 0; " + _binned_note(
+                    binned, fit_data, full_coverage))
 
     # 1c: as 1b, well-segmented images only
     good = fit_data[fit_data["Segmentation"] == "good"]
     if len(good) > 3:
-        _plot_good_only_fit(good, metric, pretty, out_dir,
-                            f"{stem}_1c_reversed_fit_good_only.jpg",
-                            f"{stem}_1c", n_boot, seed)
+        fit = _plot_good_only_fit(good, metric, pretty, out_dir,
+                                  f"{stem}_1c_reversed_fit_good_only.jpg",
+                                  f"{stem}_1c", n_boot, seed)
+        _record(records, "1c logistic",
+                f"{stem}_1c_reversed_fit_good_only.jpg", good,
+                "well-segmented images; " + (_fit_note(fit) if fit
+                                             else "fit failed"))
         binned = depth_by_coverage(good["Coverage"], good[metric],
                                    good["event"], bin_width, full_coverage,
                                    n_boot, seed)
@@ -1274,11 +1303,24 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
             plot_depth_by_coverage(good, binned, metric, pretty, out_dir,
                                    f"{stem}_1c_binned_depth_good_only.jpg",
                                    full_coverage=full_coverage, seed=seed)
-    elif has_labels:
-        logger.info("Too few well-segmented points for plot 1c (%s).", stem)
+            _record(records, "1c binned",
+                    f"{stem}_1c_binned_depth_good_only.jpg",
+                    good[good["Coverage"] > 0],
+                    "well-segmented images with coverage > 0; "
+                    + _binned_note(binned, good, full_coverage))
+    else:
+        reason = ("no segmentation labels given" if not has_labels
+                  else f"only {len(good)} well-segmented images")
+        if has_labels:
+            logger.info("Too few well-segmented points for plot 1c (%s).",
+                        stem)
+        _record(records, "1c", "(not made)", good.iloc[0:0], reason)
 
     if sensor is None:
-        return
+        for plot in ("6", "7"):
+            _record(records, plot, "(not made)", data.iloc[0:0],
+                    "no sensor CSV, or no segmentation labels")
+        return records
     green = data[data["Segmentation"] == "good"]
 
     # 6: image vs sensor depth
@@ -1290,6 +1332,9 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
                             "In-Situ Sensor Depth (m)",
                             f"Image Derived {pretty} (m)", ORANGE,
                             out_dir, f"{stem}_6_sensor_1to1.jpg")
+        _record(records, "6", f"{stem}_6_sensor_1to1.jpg" if len(rows)
+                else "(not made)", rows,
+                "well-segmented images with a sensor reading within 5 min")
 
     # 7: image vs sensor WSE
     wse_metric = metric.replace("Depth", "WSE")
@@ -1305,6 +1350,11 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
                             f"Image Derived {pretty.replace('Depth', 'WSE')}"
                             f" (m)", ORANGE, out_dir,
                             f"{roi}_{wse_metric}_7_sensor_1to1.jpg")
+        _record(records, "7", f"{roi}_{wse_metric}_7_sensor_1to1.jpg"
+                if len(rows) else "(not made)", rows,
+                f"well-segmented images with {wse_metric} and a sensor WSE "
+                f"reading within 5 min")
+    return records
 
 
 def _draw_depth_fit(ax, fit):
@@ -1364,6 +1414,11 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         Event bootstrap resamples. Default 0 (none).
     seed : int, optional
         Bootstrap random seed. Default 0.
+
+    Returns
+    -------
+    dict or None
+        The fit, or None if it failed.
     """
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
     ax.scatter(good["Coverage"], good[metric], alpha=0.6, s=12,
@@ -1375,6 +1430,7 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         write_fit_summary(fit, out_dir, stem)
     except (RuntimeError, ValueError) as err:
         logger.warning("Logistic fit failed for %s: %s", filename, err)
+        fit = None
 
     ax.set_xlabel("Roadway Percentage Covered (%)")
     ax.set_ylabel(f"{pretty} on Roadway (m)")
@@ -1382,6 +1438,7 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
     unique = dict(zip(labels, handles))  # drop duplicate legend entries
     ax.legend(unique.values(), unique.keys())
     _save(fig, out_dir, filename)
+    return fit
 
 
 def plot_event_peaks(peaks, roi, metric, basis, out_dir,
@@ -1404,14 +1461,19 @@ def plot_event_peaks(peaks, roi, metric, basis, out_dir,
         Output folder.
     plotting_position : {'empirical', 'weibull'}, optional
         Probability assigned to sorted values. Default 'empirical'.
+
+    Returns
+    -------
+    list of dict
+        One record per plot (see :func:`_record`) for the run summary.
     """
     column = f"{metric}_max"
     if column not in peaks:
-        return
+        return []
     valid = peaks.dropna(subset=[column, "Coverage_max"])
     values = valid[column].to_numpy()
     if values.size == 0:
-        return
+        return []
     stem = f"{roi}_{metric}"
     label = f"Peak Event {metric} (m)"
     subtitle = f"({roi}; {len(values)} events, {basis})"
@@ -1469,6 +1531,22 @@ def plot_event_peaks(peaks, roi, metric, basis, out_dir,
     ax.legend()
     _save(fig, out_dir, f"{stem}_4_depth_pdf.png")
 
+    dropped = len(peaks) - len(valid)
+    note = (f"one peak per event from {basis}; {dropped} of {len(peaks)} "
+            f"events left out (no qualifying image with water on the ROI)")
+    position_note = f"; plotting position {position}"
+    records = []
+    for plot, suffix, extra in (
+            ("2", "2_summary_scatter.png", ""),
+            ("3", "3_depth_cdf.png", position_note),
+            ("4", "4_depth_pdf.png",
+             f"; {len(edges) - 1} {rule} bins and reflected KDE"),
+            ("5", "5_depth_exceedance.png", position_note)):
+        records.append({"plot": plot, "file": f"{stem}_{suffix}",
+                        "images": int(valid["images"].sum()),
+                        "events": len(valid), "notes": note + extra})
+    return records
+
 
 def density_bins(values):
     """
@@ -1521,6 +1599,137 @@ def reflected_kde(values, n_points=400):
     kde = gaussian_kde(values)
     x = np.linspace(0.0, values.max() + 3 * values.std(), n_points)
     return x, kde(x) + kde(-x)
+
+
+# ----- Run summary -----------------------------------------------------------
+
+def _record(records, plot, filename, frame, notes):
+    """
+    Append one plot's image and event counts to `records`.
+
+    Parameters
+    ----------
+    records : list of dict
+        Records to extend.
+    plot : str
+        Plot number (e.g. ``"1c binned"``).
+    filename : str
+        Output file, or ``"(not made)"``.
+    frame : pandas.DataFrame
+        The images the plot used, with an ``event`` column.
+    notes : str
+        What the images are and any filters applied.
+    """
+    records.append({
+        "plot": plot, "file": filename, "images": len(frame),
+        "events": int(frame["event"].nunique()) if len(frame) else 0,
+        "notes": notes})
+
+
+def _fit_note(fit):
+    """
+    Summarize a logistic fit for the run summary.
+
+    Parameters
+    ----------
+    fit : dict
+        Output of :func:`fit_depth_from_coverage`.
+
+    Returns
+    -------
+    str
+        Images and events fitted, exclusions, and calibration.
+    """
+    return (f"fitted to {fit['n']} images from {fit['n_events']} events "
+            f"({fit['n_excluded']} zero-coverage images left out); "
+            f"R^2 {fit['r2']:.2f}, RMSE {fit['rmse']:.3f} m; "
+            f"{100 * fit['band_fraction']:.0f}% of images inside the 80% "
+            f"band (check *_band_calibration.csv)")
+
+
+def _binned_note(table, frame, full_coverage):
+    """
+    Summarize a binned depth table for the run summary.
+
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Output of :func:`depth_by_coverage`.
+    frame : pandas.DataFrame
+        The images binned.
+    full_coverage : float
+        Full-coverage threshold (%).
+
+    Returns
+    -------
+    str
+        Bin, low-sample, and full-coverage counts.
+    """
+    full = frame[frame["Coverage"] >= full_coverage]
+    return (f"{int((~table['full_coverage']).sum())} partial-coverage bins "
+            f"with images, {int(table['low_sample'].sum())} flagged "
+            f"low_sample; {len(full)} images from "
+            f"{full['event'].nunique()} events at full coverage "
+            f"(>={full_coverage:g}%)")
+
+
+def write_run_summary(out_dir, settings, overviews, records):
+    """
+    Write ``plot_summary.md`` and ``plot_summary.csv`` for a run.
+
+    Parameters
+    ----------
+    out_dir : str
+        Output folder.
+    settings : dict
+        Inputs and options of the run, shown at the top.
+    overviews : dict of str to dict
+        Per-ROI totals: ``event_folders``, ``images`` (all rows),
+        ``wet`` (images with water on the ROI), ``good`` (well-segmented
+        wet images), ``events_with_good``.
+    records : list of dict
+        Plot records with ``roi`` and ``metric`` added.
+    """
+    table = pd.DataFrame(records, columns=["roi", "metric", "plot", "file",
+                                           "images", "events", "notes"])
+    order = {name: i for i, name in enumerate(PLOT_ORDER)}
+    table = table.sort_values(
+        ["roi", "metric", "plot"], kind="stable",
+        key=lambda col: (col.map(order) if col.name == "plot" else
+                         col.map({m: i for i, m in enumerate(METRICS)})
+                         if col.name == "metric" else col))
+    table.to_csv(os.path.join(out_dir, "plot_summary.csv"), index=False)
+
+    lines = ["# Roadway accessibility plot summary", "",
+             f"Generated {pd.Timestamp.now(tz='UTC'):%Y-%m-%d %H:%M} UTC by "
+             "`access_plotter.py`. What each plot shows is described in "
+             "the README section *Roadway coverage and depth plots*.", "",
+             "## Run settings", ""]
+    lines += [f"- **{key}:** {value}" for key, value in settings.items()]
+    lines += ["", "Counts below are the images and events each plot "
+              "actually used. *Images* are those with water on the ROI "
+              "(a depth value); *events* are flood event folders.", ""]
+    for roi, overview in overviews.items():
+        lines += [f"## ROI `{roi}`", "",
+                  f"- Event folders with results: {overview['event_folders']}",
+                  f"- Images in those folders: {overview['images']}, of "
+                  f"which {overview['wet']} have water on the ROI "
+                  f"({overview['good']} well segmented, "
+                  f"{overview['wet'] - overview['good']} poor or not "
+                  f"reviewed)",
+                  f"- Events with at least one well-segmented image: "
+                  f"{overview['events_with_good']}", ""]
+        for metric, group in table[table["roi"] == roi].groupby(
+                "metric", sort=False):
+            lines += [f"### {metric}", "",
+                      "| Plot | File | Images | Events | Included |",
+                      "|---|---|---:|---:|---|"]
+            lines += [f"| {r.plot} | `{r.file}` | {r.images} | {r.events} "
+                      f"| {r.notes} |" for r in group.itertuples()]
+            lines.append("")
+    with open(os.path.join(out_dir, "plot_summary.md"), "w") as handle:
+        handle.write("\n".join(lines))
+    logger.info("Wrote plot_summary.md and plot_summary.csv to %s", out_dir)
 
 
 def parse_args(argv=None):
@@ -1594,6 +1803,7 @@ def main(argv=None):
     has_labels = bool(good_timestamps)
 
     basis = "well-segmented images" if has_labels else "all images"
+    records, overviews = [], {}
     for roi, paths in find_roi_csvs(args.events_dir).items():
         events = [load_event(path, good_timestamps, sensor)
                   for path in paths]
@@ -1605,18 +1815,37 @@ def main(argv=None):
             logger.info("%s: event peaks use well-segmented images; %d of "
                         "%d events have none and are left out.", roi,
                         skipped, len(peaks))
+        wet = data[data[[m for m in METRICS if m in data]].notna().any(
+            axis=1)]
+        good_rows = wet[wet["Segmentation"] == "good"]
+        overviews[roi] = {
+            "event_folders": len(paths), "images": len(data),
+            "wet": len(wet), "good": len(good_rows),
+            "events_with_good": int(good_rows["event"].nunique())}
         for metric in METRICS:
             if metric not in data:
                 logger.warning("No '%s' column for %s; skipped.", metric,
                                roi)
                 continue
             logger.info("Plotting %s - %s", roi, metric)
-            plot_point_metrics(data, roi, metric, has_labels, sensor,
-                               args.sensor_wse_floor, args.out_dir,
-                               args.n_boot, args.seed,
-                               args.coverage_bin_width, args.full_coverage)
-            plot_event_peaks(peaks, roi, metric, basis, args.out_dir,
-                             args.plotting_position)
+            made = plot_point_metrics(
+                data, roi, metric, has_labels, sensor,
+                args.sensor_wse_floor, args.out_dir, args.n_boot,
+                args.seed, args.coverage_bin_width, args.full_coverage)
+            made += plot_event_peaks(peaks, roi, metric, basis,
+                                     args.out_dir, args.plotting_position)
+            records += [dict(record, roi=roi, metric=metric)
+                        for record in made]
+    write_run_summary(args.out_dir, {
+        "Events folder": args.events_dir,
+        "Segmentation labels": args.labels or "none (all images 'other')",
+        "Sensor CSV": args.sensor or "none",
+        "Coverage bins": f"{args.coverage_bin_width:g}% wide below "
+                         f"{args.full_coverage:g}%; full coverage "
+                         f">={args.full_coverage:g}%",
+        "Event bootstrap": f"{args.n_boot} resamples, seed {args.seed}",
+        "Plotting position (plots 3, 5)": args.plotting_position,
+    }, overviews, records)
     logger.info("Plots saved to %s", args.out_dir)
 
 

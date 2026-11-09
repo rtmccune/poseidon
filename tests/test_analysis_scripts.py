@@ -153,6 +153,13 @@ def test_accessibility_plots_are_written_for_each_metric(tmp_path):
                        "2_summary_scatter.png", "3_depth_cdf.png",
                        "4_depth_pdf.png", "5_depth_exceedance.png"):
             assert f"road_{metric}_{suffix}" in plots
+    runs = pd.read_csv(tmp_path / "plots" / "plot_summary.csv")
+    peaks = runs[(runs["metric"] == "MaxDepth") & (runs["plot"] == "3")]
+    assert peaks["events"].item() == 4
+    first = runs[(runs["metric"] == "MaxDepth") & (runs["plot"] == "1")]
+    assert first["images"].item() == 4 * 12  # every image has a depth
+    assert runs["plot"].iloc[0] == "1"
+    assert (tmp_path / "plots" / "plot_summary.md").exists()
     summary = pd.read_csv(tmp_path / "plots" /
                           "road_MaxDepth_1b_fit_summary.csv")
     assert {"r2_depth", "rmse_depth_m", "x0_ci95_low",
