@@ -64,7 +64,6 @@ import argparse
 import glob
 import logging
 import os
-import re
 
 import matplotlib
 
@@ -81,9 +80,12 @@ from poseidon_utils.site_config import load_site_config  # noqa: E402
 from poseidon_utils.zarr_io import read_zip_arrays  # noqa: E402
 
 from access_plotter import (  # noqa: E402
+    EVENT_PADDING_HOURS,
     as_utc_ns,
+    event_window,
     load_good_timestamps,
     load_sensor_data,
+    nearest_event_mask,
 )
 from plot_style import (  # noqa: E402
     BLUE,
@@ -108,33 +110,8 @@ SENSOR = "In-situ sensor"
 STATE_COLORS = {"sensor wet": BLUE, "sensor dry": ORANGE,
                 "no sensor reading": MAGENTA}
 
-#: Event folder names end in two 14-digit UTC timestamps.
-WINDOW_PATTERN = re.compile(r"(\d{14})_(\d{14})$")
-
 
 # ----- Loading ---------------------------------------------------------------
-
-def event_window(event_dir):
-    """
-    Parse an event folder's padded UTC window from its name.
-
-    Parameters
-    ----------
-    event_dir : str
-        Event folder, named ``<sensor>_<start>_<end>``.
-
-    Returns
-    -------
-    tuple of pandas.Timestamp or None
-        ``(start, end)``, or None if the name does not match.
-    """
-    match = WINDOW_PATTERN.search(os.path.basename(os.path.normpath(
-        event_dir)))
-    if match is None:
-        return None
-    return tuple(pd.to_datetime(stamp, format=TIMESTAMP_FORMAT, utc=True)
-                 for stamp in match.groups())
-
 
 def _keep_good(times, good_timestamps):
     """
@@ -300,7 +277,7 @@ def event_timing(event, camera_sources, sensor_window):
     camera_sources : dict of str to pandas.DataFrame
         Source name to its ``time`` / ``wet`` observations.
     sensor_window : pandas.DataFrame or None
-        The event's sensor readings.
+        Sensor readings; only those within the event's image span are used.
 
     Returns
     -------
@@ -346,9 +323,40 @@ def event_timing(event, camera_sources, sensor_window):
     return rows
 
 
-def collect(events_dir, roi, sensor, good_timestamps, match_minutes):
+def _owned(frame, keep, event):
+    """
+    Rows of one event's table that it owns after de-duplication.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        Table with a ``time`` column.
+    keep : set of tuple
+        ``(event, time in ns)`` pairs kept by
+        :func:`access_plotter.nearest_event_mask`.
+    event : str
+        Event name.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The owned rows.
+    """
+    stamps = as_utc_ns(frame["time"]).astype("int64")
+    return frame[[(event, t) in keep for t in stamps]]
+
+
+def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
+            padding_hours=EVENT_PADDING_HOURS):
     """
     Gather observations and timing for every event.
+
+    Where padded event windows overlap, an image (or sensor reading)
+    sits in two event folders; it is kept once, in the event whose
+    flood period is nearest (:func:`access_plotter.nearest_event_mask`),
+    so pooled counts and depths count it once. The sensor's state at a
+    camera time is matched against every sensor reading, and timing uses
+    every reading within the event's image span.
 
     Parameters
     ----------
@@ -362,37 +370,68 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes):
         Well-segmented stamps; empty keeps every image.
     match_minutes : float
         Largest gap for matching a camera time to a sensor reading.
+    padding_hours : float, optional
+        Padding stage 05 added around each event.
 
     Returns
     -------
     observations : pandas.DataFrame
         Long table ``event``, ``has_sensor``, ``time``, ``source``,
         ``depth_m``, ``sensor_depth_m``, ``sensor_state``: every
-        observation that shows water.
+        observation that shows water, each image and reading once.
     timing : pandas.DataFrame
         One row per event and camera source (:func:`event_timing`).
     """
-    observations, timing = [], []
+    loaded = []
     for event_dir in sorted(glob.glob(os.path.join(events_dir, "*", ""))):
         event_dir = os.path.normpath(event_dir)
-        event = os.path.basename(event_dir)
         window = event_window(event_dir)
         roi_obs = load_roi(event_dir, roi, good_timestamps)
         vs_obs = load_virtual_sensors(event_dir, good_timestamps)
         if window is None or (roi_obs is None and vs_obs is None):
             continue
-
         sensor_window = None
         if sensor is not None:
             sensor_window = sensor[(sensor["datetime_utc"] >= window[0])
                                    & (sensor["datetime_utc"] <= window[1])]
+            sensor_window = sensor_window.assign(
+                time=sensor_window["datetime_utc"])
+        loaded.append((os.path.basename(event_dir), roi_obs, vs_obs,
+                       sensor_window))
+
+    def ownership(tables):
+        frames = [pd.DataFrame({"event": event, "time": as_utc_ns(
+                      table["time"]).to_numpy()}).drop_duplicates()
+                  for event, table in tables
+                  if table is not None and len(table)]
+        if not frames:
+            return set()
+        pairs = pd.concat(frames, ignore_index=True)
+        mask = nearest_event_mask(pairs["event"], pairs["time"],
+                                  padding_hours)
+        kept = pairs[mask]
+        return set(zip(kept["event"],
+                       as_utc_ns(kept["time"]).astype("int64")))
+
+    image_keep = ownership(
+        [(event, table) for event, roi_obs, vs_obs, _ in loaded
+         for table in (roi_obs, vs_obs)])
+    sensor_keep = ownership([(event, window)
+                             for event, _, _, window in loaded])
+
+    observations, timing = [], []
+    for event, roi_obs, vs_obs, sensor_window in loaded:
         has_sensor = sensor_window is not None and not sensor_window.empty
+        if roi_obs is not None:
+            roi_obs = _owned(roi_obs, image_keep, event)
+        if vs_obs is not None:
+            vs_obs = _owned(vs_obs, image_keep, event)
 
         camera_sources = {}
-        if roi_obs is not None:
+        if roi_obs is not None and len(roi_obs):
             camera_sources["ROI"] = roi_obs[["time", "wet"]]
             wet = roi_obs[roi_obs["wet"]]
-            state = sensor_state(wet["time"], sensor_window, match_minutes)
+            state = sensor_state(wet["time"], sensor, match_minutes)
             for column, name in ROI_STATS.items():
                 observations.append(pd.DataFrame({
                     "event": event, "has_sensor": has_sensor,
@@ -400,12 +439,11 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes):
                     "depth_m": wet[column].to_numpy(),
                     "sensor_depth_m": state["sensor_depth_m"].to_numpy(),
                     "sensor_state": state["sensor_state"].to_numpy()}))
-        if vs_obs is not None:
+        if vs_obs is not None and len(vs_obs):
             for source, group in vs_obs.groupby("source", sort=True):
                 camera_sources[source] = group[["time", "wet"]]
                 wet = group[group["wet"]]
-                state = sensor_state(wet["time"], sensor_window,
-                                     match_minutes)
+                state = sensor_state(wet["time"], sensor, match_minutes)
                 observations.append(pd.DataFrame({
                     "event": event, "has_sensor": has_sensor,
                     "time": wet["time"].to_numpy(), "source": source,
@@ -413,7 +451,8 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes):
                     "sensor_depth_m": state["sensor_depth_m"].to_numpy(),
                     "sensor_state": state["sensor_state"].to_numpy()}))
         if has_sensor:
-            wet = sensor_window[sensor_window["SensorDepth_m"] > 0]
+            owned = _owned(sensor_window, sensor_keep, event)
+            wet = owned[owned["SensorDepth_m"] > 0]
             observations.append(pd.DataFrame({
                 "event": event, "has_sensor": True,
                 "time": wet["datetime_utc"].to_numpy(), "source": SENSOR,
@@ -421,7 +460,7 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes):
                 "sensor_depth_m": wet["SensorDepth_m"].to_numpy(),
                 "sensor_state": "sensor wet"}))
         timing += event_timing(event, camera_sources,
-                               sensor_window if has_sensor else None)
+                               sensor if has_sensor else None)
 
     columns = ["event", "has_sensor", "time", "source", "depth_m",
                "sensor_depth_m", "sensor_state"]
@@ -557,10 +596,12 @@ def plot_timing(timing, path, seed=0, title=None):
     for ax, column, censor_cols, label in (
             (axes[0], "onset_lead_min",
              ("camera_onset_censored", "sensor_onset_censored"),
-             "Onset lead (min): > 0, camera saw water first"),
+             "Onset lead (min): water at the camera location\n"
+             "before it reached the in-situ sensor"),
             (axes[1], "end_lag_min",
              ("camera_end_censored", "sensor_end_censored"),
-             "End lag (min): > 0, camera saw water longer")):
+             "End lag (min): water stayed at the camera location\n"
+             "after it left the in-situ sensor")):
         for i, source in enumerate(sources):
             group = usable[usable["source"] == source]
             censored = group[list(censor_cols)].any(axis=1).to_numpy()
@@ -580,7 +621,7 @@ def plot_timing(timing, path, seed=0, title=None):
         ax.axhline(0, color=INK, linewidth=1, linestyle="--", zorder=1)
         ax.set_xticks(range(len(sources)))
         ax.set_xticklabels([
-            f"{'ROI (camera)' if s == 'ROI' else s}\n"
+            f"{'Anywhere on ROI' if s == 'ROI' else s}\n"
             f"({int((usable['source'] == s).sum())} events)"
             for s in sources], fontsize=8)
         ax.set_ylabel(label)
@@ -625,6 +666,8 @@ def event_peaks(observations):
             ["sensor", "roi_max", "roi_mean", source], ""))
     peaks = obs[obs["group"] != ""].pivot_table(
         index="event", columns="group", values="depth_m", aggfunc="max")
+    if "sensor" not in peaks:  # no event had sensor readings
+        peaks["sensor"] = np.nan
     has_sensor = observations.groupby("event")["has_sensor"].any()
     return peaks.join(has_sensor).reset_index()
 
@@ -837,6 +880,11 @@ def parse_args(argv=None):
                              "sensor reading matched to it.")
     parser.add_argument("--seed", type=int, default=0,
                         help="Seed of the plot jitter.")
+    parser.add_argument("--padding_hours", type=float,
+                        default=EVENT_PADDING_HOURS,
+                        help="Padding stage 05 added around each event; "
+                             "used to keep each image and reading in its "
+                             "nearest event.")
     args = parser.parse_args(argv)
     if args.roi is None and args.site:
         site = load_site_config(args.site)
@@ -900,7 +948,8 @@ def run_image_set(args, sensor, tag, good_timestamps, label):
         1 if outputs were written, 0 if there were no observations.
     """
     observations, timing = collect(args.events_dir, args.roi, sensor,
-                                   good_timestamps, args.match_minutes)
+                                   good_timestamps, args.match_minutes,
+                                   args.padding_hours)
     if observations.empty:
         logger.error("No camera observations for ROI '%s' under %s (%s).",
                      args.roi, args.events_dir, label)

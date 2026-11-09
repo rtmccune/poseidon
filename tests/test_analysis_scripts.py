@@ -550,3 +550,47 @@ def test_sensor_matching_accepts_mixed_time_resolutions(tmp_path):
     loaded = access_plotter.load_event(str(path), {"20240101120000"},
                                        sensor)
     assert loaded["SensorDepth_m"].tolist() == [0.1]
+
+
+def test_nearest_event_mask_keeps_overlap_images_once():
+    """An image in two padded windows stays in the nearer flood period."""
+    # Event A floods 12:00-13:00, B floods 17:00-18:00; with 3 h padding
+    # their windows (09-16 and 14-21) overlap from 14:00 to 16:00
+    a = "DE_01_20240101090000_20240101160000"
+    b = "DE_01_20240101140000_20240101210000"
+    times = pd.to_datetime(["2024-01-01 14:30", "2024-01-01 15:45",
+                            "2024-01-01 14:30", "2024-01-01 15:45",
+                            "2024-01-01 12:30"], utc=True)
+    keep = access_plotter.nearest_event_mask([a, a, b, b, a], times, 3)
+    # 14:30 is 1.5 h after A and 2.5 h before B: kept in A
+    # 15:45 is 2.75 h after A and 1.25 h before B: kept in B
+    assert keep.tolist() == [True, False, False, True, True]
+
+
+def test_overlapping_events_count_each_image_once(tmp_path):
+    """Plots and the sensor comparison count shared images once."""
+    import sensor_camera_comparison as sc
+
+    times = pd.date_range("2024-01-01 14:00", periods=11, freq="12min",
+                          tz="UTC")
+    depth = np.linspace(0.02, 0.2, 11)
+    for name in ("DE_01_20240101090000_20240101160000",
+                 "DE_01_20240101140000_20240101210000"):
+        write_accessibility(tmp_path / "events" / name, "road", depth,
+                            100 * depth / depth.max(), "2024-01-01 14:00")
+    access_plotter.main(["--events_dir", str(tmp_path / "events"),
+                         "--out_dir", str(tmp_path / "plots"),
+                         "--n_boot", "0"])
+    runs = pd.read_csv(tmp_path / "plots" / "plot_summary.csv")
+    first = runs[(runs["metric"] == "MaxDepth") & (runs["plot"] == "1")]
+    assert first["images"].item() == 11  # not 22
+    summary = (tmp_path / "plots" / "plot_summary.md").read_text()
+    assert "Duplicate copies removed (images in two overlapping event " \
+           "windows, kept in the nearer event): 11" in summary
+
+    out = tmp_path / "out"
+    assert sc.main(["--events_dir", str(tmp_path / "events"), "--roi",
+                    "road", "--out_dir", str(out)]) == 0
+    obs = pd.read_csv(out / "road_sensor_camera_all_images_observations.csv")
+    roi_max = obs[obs["source"] == "ROI max"]
+    assert len(roi_max) == roi_max["time"].nunique() == 11

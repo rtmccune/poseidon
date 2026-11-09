@@ -16,10 +16,13 @@ ROI and depth metric, saves:
 6.  Image vs in-situ sensor depth, 1:1 (needs ``--labels`` and
     ``--sensor``).
 7.  Image vs in-situ sensor WSE, 1:1 (same requirements).
-9.  1c and 8 on one figure: per coverage bin, the image-derived depth
-    (blue) beside the sensor depth (orange) for the same images
-    (``_9_image_vs_sensor_binned_good_only.jpg`` and
-    ``_9_depth_by_coverage.csv``; needs ``--labels`` and ``--sensor``).
+9.  1c and 8 on one figure: per coverage bin, the mean image-derived
+    depth (blue) beside the mean sensor depth (orange) for the same
+    images, with their agreement (bias, MAE, RMSE, r of image - sensor)
+    (``_9_image_vs_sensor_binned_good_only.jpg``,
+    ``_9_depth_by_coverage.csv``, ``_9_agreement_summary.csv``,
+    ``_9_agreement_by_coverage.csv``; needs ``--labels`` and
+    ``--sensor``).
 8.  As 1c, but with the in-situ sensor's depth for each well-segmented
     image instead of the image-derived depth (``<roi>_SensorDepth_8_*``;
     once per ROI, as it does not depend on the image depth metric; same
@@ -90,6 +93,7 @@ import argparse
 import glob
 import logging
 import os
+import re
 import warnings
 from collections import defaultdict
 
@@ -330,6 +334,90 @@ def as_utc_ns(times):
         ``datetime64[ns, UTC]`` times.
     """
     return pd.to_datetime(times, utc=True).astype("datetime64[ns, UTC]")
+
+
+#: Event folder names end in the padded window's two UTC timestamps.
+WINDOW_PATTERN = re.compile(r"(\d{14})_(\d{14})$")
+
+#: Hours stage 05 adds before and after each event
+#: (``--padding_hours`` in 05_flood_event_setup.sh).
+EVENT_PADDING_HOURS = 3.0
+
+
+def event_window(event):
+    """
+    Parse an event folder's padded UTC window from its name.
+
+    Parameters
+    ----------
+    event : str
+        Event folder name or path, ``<sensor>_<start>_<end>``.
+
+    Returns
+    -------
+    tuple of pandas.Timestamp or None
+        ``(start, end)``, or None if the name does not match.
+    """
+    match = WINDOW_PATTERN.search(os.path.basename(os.path.normpath(
+        str(event))))
+    if match is None:
+        return None
+    return tuple(pd.to_datetime(stamp, format="%Y%m%d%H%M%S", utc=True)
+                 for stamp in match.groups())
+
+
+def nearest_event_mask(events, times, padding_hours=EVENT_PADDING_HOURS):
+    """
+    Keep each time once, in the event whose flood period is nearest.
+
+    Stage 05 copies an image into every event whose padded window
+    contains it, so where padded windows overlap the same image (and
+    sensor reading) appears in two event folders. Pooling them would
+    count it twice and place it in two events of the event bootstrap.
+    Each time is kept only in the event whose unpadded window (the
+    folder window minus `padding_hours` on each side) is closest: 0 if
+    the time lies inside it. Ties go to the earlier event.
+
+    Parameters
+    ----------
+    events : array_like of str
+        Event folder name of each row.
+    times : array_like
+        UTC time of each row.
+    padding_hours : float, optional
+        Padding stage 05 added. Default :data:`EVENT_PADDING_HOURS`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask, aligned with the input, of the rows to keep.
+    """
+    frame = pd.DataFrame({"event": np.asarray(events, dtype=object),
+                          "time": as_utc_ns(pd.Series(times).to_numpy())})
+    if frame.empty:
+        return np.ones(0, dtype=bool)
+    pad = pd.Timedelta(hours=padding_hours)
+    bounds = {}
+    for event in frame["event"].unique():
+        window = event_window(event)
+        if window is None:
+            bounds[event] = (pd.NaT, pd.NaT)
+            continue
+        start, end = window[0] + pad, window[1] - pad
+        if start > end:  # padding wider than the window
+            start = end = window[0] + (window[1] - window[0]) / 2
+        bounds[event] = (start, end)
+    start = as_utc_ns(frame["event"].map(lambda e: bounds[e][0]))
+    end = as_utc_ns(frame["event"].map(lambda e: bounds[e][1]))
+    before = (start - frame["time"]).dt.total_seconds().clip(lower=0)
+    after = (frame["time"] - end).dt.total_seconds().clip(lower=0)
+    frame["distance"] = (before + after).fillna(0.0)
+    frame["row"] = np.arange(len(frame))
+    order = frame.sort_values(["time", "distance", "event"], kind="stable")
+    keep_rows = order.drop_duplicates("time", keep="first")["row"]
+    mask = np.zeros(len(frame), dtype=bool)
+    mask[keep_rows.to_numpy()] = True
+    return mask
 
 
 def load_good_timestamps(labels_csv):
@@ -1776,7 +1864,8 @@ def _draw_paired_bin(ax, x, width, rows):
         Bin width on the x-axis.
     rows : list of tuple
         ``(row, color, marker)`` per source, left to right; ``row`` is
-        one row of :func:`depth_by_coverage`.
+        one row of :func:`depth_by_coverage`. The mean and its 95 %
+        confidence interval are drawn over the 10th-90th percentile box.
     """
     box = width * 0.36
     for k, (row, color, marker) in enumerate(rows):
@@ -1785,15 +1874,71 @@ def _draw_paired_bin(ax, x, width, rows):
             (center - box / 2, row["p10_depth_m"]), box,
             row["p90_depth_m"] - row["p10_depth_m"], facecolor=color,
             alpha=0.18, edgecolor="none", zorder=1))
-        low, high = (row["median_depth_m_ci95_low"],
-                     row["median_depth_m_ci95_high"])
-        value = row["median_depth_m"]
+        low, high = (row["mean_depth_m_ci95_low"],
+                     row["mean_depth_m_ci95_high"])
+        value = row["mean_depth_m"]
         if np.isfinite(low) and np.isfinite(high):
             ax.errorbar(center, value, yerr=[[value - low], [high - value]],
                         color=color, linewidth=1.5, capsize=3, zorder=3)
         ax.plot(center, value, marker=marker, markersize=7, linestyle="none",
                 markerfacecolor="white" if row["low_sample"] else color,
                 markeredgecolor=color, markeredgewidth=1.5, zorder=4)
+
+
+def paired_agreement(image, sensor, events, n_boot=0, seed=0):
+    """
+    Agreement of image-derived and sensor depths for the same images.
+
+    Errors are ``image - sensor`` per image. Confidence intervals
+    resample whole events (images of one event are not independent).
+
+    Parameters
+    ----------
+    image, sensor : array_like
+        Paired depths (m).
+    events : array_like
+        Event of each pair.
+    n_boot : int, optional
+        Event resamples; 0 skips the intervals.
+    seed : int, optional
+        Bootstrap random seed.
+
+    Returns
+    -------
+    dict
+        ``images``, ``events``, ``bias_m`` (mean error), ``mae_m``,
+        ``rmse_m``, ``pearson_r``, each statistic with ``_ci95_low`` and
+        ``_ci95_high`` (NaN without a bootstrap).
+    """
+    image = np.asarray(image, dtype=float)
+    sensor = np.asarray(sensor, dtype=float)
+    events = np.asarray(events)
+
+    def stats(rows):
+        error = image[rows] - sensor[rows]
+        with np.errstate(invalid="ignore"):
+            r = (np.corrcoef(image[rows], sensor[rows])[0, 1]
+                 if len(rows) > 1 else np.nan)
+        return {"bias_m": error.mean(), "mae_m": np.abs(error).mean(),
+                "rmse_m": np.sqrt((error ** 2).mean()), "pearson_r": r}
+
+    result = {"images": len(image), "events": len(np.unique(events))}
+    result.update(stats(np.arange(len(image))))
+    names = np.unique(events)
+    draws = []
+    if n_boot > 0 and len(names) > 1:
+        rng = np.random.default_rng(seed)
+        index = [np.flatnonzero(events == name) for name in names]
+        for _ in range(n_boot):
+            picked = rng.choice(len(names), size=len(names), replace=True)
+            draws.append(stats(np.concatenate([index[i] for i in picked])))
+    for key in ("bias_m", "mae_m", "rmse_m", "pearson_r"):
+        values = np.array([d[key] for d in draws], dtype=float)
+        low, high = ((np.nanpercentile(values, 2.5),
+                      np.nanpercentile(values, 97.5)) if draws
+                     else (np.nan, np.nan))
+        result[f"{key}_ci95_low"], result[f"{key}_ci95_high"] = low, high
+    return result
 
 
 def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
@@ -1805,10 +1950,13 @@ def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
 
     Uses the same images for both sources: well-segmented images with
     coverage > 0, the image metric, and a sensor reading within 5 min.
-    Each coverage bin shows the image-derived median (blue circles,
-    solid line) beside the sensor median (orange diamonds, dashed),
-    each with its 95 % event-bootstrap confidence interval and its
-    10th-90th percentile box; full coverage has its own panel.
+    Each coverage bin shows the image-derived mean (blue circles, solid
+    line) beside the sensor mean (orange diamonds, dashed), each with
+    its 95 % event-bootstrap confidence interval and its 10th-90th
+    percentile box; full coverage has its own panel. Because both use
+    the same images, the per-image errors (image - sensor) are
+    summarized on the figure (:func:`paired_agreement`) and per bin in
+    ``_9_agreement_by_coverage.csv`` (the mean error and its CI).
 
     Parameters
     ----------
@@ -1879,7 +2027,7 @@ def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
             for table, (_, _, color, marker, _) in zip(partial, sources)])
     for k, (table, (_, _, color, _, style)) in enumerate(
             zip(partial, sources)):
-        ax.plot(centers + (k - 0.5) * widths * 0.42, table["median_depth_m"],
+        ax.plot(centers + (k - 0.5) * widths * 0.42, table["mean_depth_m"],
                 color=color, linestyle=style, linewidth=1.8, zorder=2)
     if all(len(t) for t in full):
         _draw_paired_bin(ax_full, 0.0, 1.0, [
@@ -1895,7 +2043,7 @@ def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
     ax.set_xlabel("Roadway Coverage (%)")
     ax.set_ylabel("Depth on Roadway (m)")
     tops = [t[c].max() for t in tables
-            for c in ("p90_depth_m", "median_depth_m_ci95_high")]
+            for c in ("p90_depth_m", "mean_depth_m_ci95_high")]
     ax.set_ylim(shared_ylim or (0, 1.05 * np.nanmax(tops)))
     ax_full.set_xlim(-0.6, 0.6)
     ax_full.set_xticks([0.0])
@@ -1905,7 +2053,7 @@ def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
     ax_full.grid(axis="x", visible=False)
 
     handles = [Line2D([0], [0], color=color, marker=marker, linestyle=style,
-                      markersize=7, label=f"{name}: median (95% CI)")
+                      markersize=7, label=f"{name}: mean (95% CI)")
                for name, _, color, marker, style in sources]
     handles += [Patch(facecolor=color, alpha=0.18,
                       label=f"{name}: 10th-90th percentile")
@@ -1917,12 +2065,44 @@ def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
             label=f"Hollow: <{MIN_BIN_IMAGES} images or "
                   f"<{MIN_BIN_EVENTS} events"))
     ax.legend(handles=handles, loc="upper left", fontsize=8)
+
+    # Agreement of the same images: overall on the figure, per bin in CSV
+    agreement = paired_agreement(paired[metric], paired["SensorDepth_m"],
+                                 paired["event"], n_boot, seed)
+    error = paired[metric] - paired["SensorDepth_m"]
+    by_bin = depth_by_coverage(paired["Coverage"], error, paired["event"],
+                               bin_width, full_coverage, n_boot, seed)
+    by_bin = by_bin.rename(columns=lambda c: c.replace("depth_m",
+                                                       "error_m"))
+    by_bin.to_csv(os.path.join(out_dir,
+                               f"{stem}_9_agreement_by_coverage.csv"),
+                  index=False)
+    pd.DataFrame([agreement]).to_csv(
+        os.path.join(out_dir, f"{stem}_9_agreement_summary.csv"),
+        index=False)
+
+    def interval(key, digits=3):
+        low, high = (agreement[f"{key}_ci95_low"],
+                     agreement[f"{key}_ci95_high"])
+        value = f"{agreement[key]:.{digits}f}"
+        return value if np.isnan(low) else (
+            f"{value} [{low:.{digits}f}, {high:.{digits}f}]")
+
+    ax.text(0.0, -0.2,
+            f"Image - sensor for the same {agreement['images']} images "
+            f"({agreement['events']} events), with 95% CI:\n"
+            f"bias {interval('bias_m')} m;  MAE {interval('mae_m')} m;  "
+            f"RMSE {interval('rmse_m')} m;  r {interval('pearson_r', 2)}",
+            transform=ax.transAxes, ha="left", va="top", fontsize=8,
+            color=INK)
     _save(fig, out_dir, filename, tight=False)
 
     _record(records, "9", filename, paired,
             "well-segmented images with coverage > 0 and a sensor reading "
             "within 5 min; image metric and sensor depth from the same "
-            "images; " + _binned_note(tables[0], paired, full_coverage))
+            f"images; bias {agreement['bias_m']:.3f} m, RMSE "
+            f"{agreement['rmse_m']:.3f} m, r {agreement['pearson_r']:.2f}; "
+            + _binned_note(tables[0], paired, full_coverage))
     return records
 
 
@@ -2038,7 +2218,10 @@ def write_run_summary(out_dir, settings, overviews, records):
     for roi, overview in overviews.items():
         lines += [f"## ROI `{roi}`", "",
                   f"- Event folders with results: {overview['event_folders']}",
-                  f"- Images in those folders: {overview['images']}, of "
+                  f"- Duplicate copies removed (images in two "
+                  f"overlapping event windows, kept in the nearer event): "
+                  f"{overview.get('duplicates', 0)}",
+                  f"- Distinct images: {overview['images']}, of "
                   f"which {overview['wet']} have water on the ROI "
                   f"({overview['good']} well segmented, "
                   f"{overview['wet'] - overview['good']} poor or not "
@@ -2093,6 +2276,10 @@ def parse_args(argv=None):
                              "confidence bands (0 to skip).")
     parser.add_argument("--seed", type=int, default=0,
                         help="Bootstrap random seed.")
+    parser.add_argument("--padding_hours", type=float,
+                        default=EVENT_PADDING_HOURS,
+                        help="Padding stage 05 added around each event; "
+                             "used to keep each image in its nearest event.")
     parser.add_argument("--coverage_bin_width", type=float,
                         default=COVERAGE_BIN_WIDTH,
                         help="Coverage bin width (%%) of the binned depth "
@@ -2131,9 +2318,19 @@ def main(argv=None):
     basis = "well-segmented images" if has_labels else "all images"
     records, overviews = [], {}
     for roi, paths in find_roi_csvs(args.events_dir).items():
-        events = [load_event(path, good_timestamps, sensor)
-                  for path in paths]
-        data = pd.concat(events, ignore_index=True)
+        loaded = pd.concat([load_event(path, good_timestamps, sensor)
+                            for path in paths], ignore_index=True)
+        # Images in overlapping padded windows sit in two event folders;
+        # keep each once, in the event whose flood period is nearest
+        keep = nearest_event_mask(loaded["event"],
+                                  pd.to_datetime(loaded["Time"], utc=True),
+                                  args.padding_hours)
+        data = loaded[keep].reset_index(drop=True)
+        duplicates = int((~keep).sum())
+        if duplicates:
+            logger.info("%s: %d duplicate image copies from overlapping "
+                        "event windows removed.", roi, duplicates)
+        events = [group for _, group in data.groupby("event", sort=True)]
         peaks = pd.DataFrame([summarize_event(event, has_labels)
                               for event in events])
         if has_labels:
@@ -2147,6 +2344,7 @@ def main(argv=None):
         shared_ylim = shared_depth_limits(data)
         overviews[roi] = {
             "event_folders": len(paths), "images": len(data),
+            "duplicates": duplicates,
             "wet": len(wet), "good": len(good_rows),
             "events_with_good": int(good_rows["event"].nunique())}
         for metric in METRICS:

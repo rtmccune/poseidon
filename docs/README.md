@@ -263,10 +263,12 @@ point per event.
 | 5 | `_5_depth_exceedance.png` | Share of events whose peak depth reaches at least each depth | Same events as plot 2 |
 | 6 | `_6_sensor_1to1.jpg` | Image depth against the in-situ sensor's depth, with a 1:1 line | Good images with a sensor reading within 5 minutes; image-only events drop out |
 | 7 | `<roi>_<Max/Mean/Median>WSE_7_sensor_1to1.jpg` | The same for water surface elevation | As plot 6 |
-| 9 | `_9_image_vs_sensor_binned_good_only.jpg`, `_9_depth_by_coverage.csv` | Plots 1c and 8 combined in one figure: in each coverage bin, the image-derived depth (blue) sits next to the sensor depth (orange), each with its median, 95% confidence interval and 10th–90th percentile box. One per depth metric | The same images for both: good images with coverage > 0 and a sensor reading within 5 minutes |
+| 9 | `_9_image_vs_sensor_binned_good_only.jpg`, `_9_depth_by_coverage.csv`, `_9_agreement_summary.csv`, `_9_agreement_by_coverage.csv` | Plots 1c and 8 combined in one figure: in each coverage bin, the mean image-derived depth (blue) sits next to the mean sensor depth (orange), each with its 95% confidence interval and 10th–90th percentile box. Because both use the same images, the per-image error (image minus sensor) is summarized under the plot: bias, MAE, RMSE and r, with event-resampled 95% CIs. The mean error by bin is in `_9_agreement_by_coverage.csv`. One per depth metric | The same images for both: good images with coverage > 0 and a sensor reading within 5 minutes |
 | 8 | `<roi>_SensorDepth_8_binned_depth_good_only.jpg`, `_8_depth_by_coverage.csv`, `_8_reversed_fit_good_only.jpg` (+ fit files) | The 1c plots, but with the in-situ sensor's depth for each image instead of the image-derived depth. Coverage still comes from the image. Made once per ROI, since it doesn't depend on the depth metric | Good images with coverage > 0 and a sensor reading within 5 minutes; image-only events drop out |
 
 Plot 8 compares with 1c: if the sensor's depths by coverage bin match the image-derived ones, the image depths are calibrated against an independent measurement. Bear in mind that the sensor measures at one point while the image metric covers the whole ROI.
+
+Where the padded windows of neighbouring events overlap, stage 05 copies the images in the overlap into both event folders. The plots keep each image once, in the event whose flood period (the window without its padding) is nearest. `plot_summary.md` reports how many copies were removed. Set `--padding_hours` if stage 05 used something other than 3.
 
 Because each plot keeps different images, the counts differ from plot to
 plot; `plot_summary.md` gives them.
@@ -308,12 +310,14 @@ two sets can be compared:
 - `..._good_only_*` uses well-segmented images only. This set needs
   `segmentation_labels.csv`.
 
+Both sets contain only daylight images, because stage 05 fills the event folders from the daylight folder. Each image and each sensor reading is counted once, even where event windows overlap. The `n` under each depths column counts observations with water from that source. For the sensor, that's its readings, taken every few minutes over the padded event windows, not images.
+
 The file endings are:
 
 | File | Shows |
 |---|---|
 | `_depths.jpg` | Every observation showing water, by source: sensor, `VS1`–`VSn`, and the ROI's min, median, mean and max. Boxes show quartiles and median; whiskers the 10th–90th percentiles. Each camera point is coloured by the sensor at that moment: wet (blue), dry (orange; the camera saw water the sensor did not), or no reading within 5 minutes (magenta; includes events the sensor missed). ROI min is usually 0 m, because some water cell is at depth 0 |
-| `_timing.jpg` | Per event and camera source, onset lead (how many minutes before the sensor the camera first saw water) and end lag (how many minutes after). Measured only within the span of that event's images, since the camera sees only in daylight; hollow points are censored, being wet at the edge of that span |
+| `_timing.jpg` | Per event, when water appeared at each camera location compared with the in-situ sensor's location: VS1–VSn are the pixels of the virtual sensors, and "Anywhere on ROI" is any cell of the roadway polygon. Onset lead is how many minutes earlier water appeared there than at the sensor; end lag is how many minutes longer it stayed. These are differences between places on the road, so they show how much more of an event the camera's wider view captures, not a timing error in either instrument. Measured only within the span of that event's images, since the camera sees only in daylight; hollow points are censored, being wet at the edge of that span |
 | `_peaks.jpg` | Each event's peak sensor depth against its peak ROI max, ROI mean and deepest virtual sensor, with a 1:1 line; events without sensor readings are in a side panel |
 | `_summary.md`, `_summary.csv` | Counts per source: observations, events, events without the sensor, median depth, share while the sensor was dry, median onset lead and end lag, share where the camera was first or later, and camera-only events |
 | `_observations.csv`, `_timing.csv`, `_event_peaks.csv` | The data behind the figures |
