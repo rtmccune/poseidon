@@ -76,7 +76,11 @@ from poseidon_utils.naming import TIMESTAMP_FORMAT  # noqa: E402
 from poseidon_utils.site_config import load_site_config  # noqa: E402
 from poseidon_utils.zarr_io import read_zip_arrays  # noqa: E402
 
-from access_plotter import load_good_timestamps, load_sensor_data  # noqa: E402
+from access_plotter import (  # noqa: E402
+    as_utc_ns,
+    load_good_timestamps,
+    load_sensor_data,
+)
 from plot_style import (  # noqa: E402
     BLUE,
     CONTEXT_GREY,
@@ -234,17 +238,16 @@ def sensor_state(times, sensor, match_minutes):
         ``sensor_depth_m`` and ``sensor_state`` (a key of
         :data:`STATE_COLORS`), aligned with `times`.
     """
-    frame = pd.DataFrame({"time": pd.to_datetime(times, utc=True).to_numpy(),
+    frame = pd.DataFrame({"time": as_utc_ns(pd.Series(times).to_numpy()),
                           "order": np.arange(len(times))})
-    frame["time"] = pd.to_datetime(frame["time"], utc=True)
     if sensor is None or sensor.empty:
         frame["sensor_depth_m"] = np.nan
     else:
         frame = pd.merge_asof(
             frame.sort_values("time"),
-            sensor[["datetime_utc", "SensorDepth_m"]].rename(
-                columns={"datetime_utc": "time",
-                         "SensorDepth_m": "sensor_depth_m"}),
+            pd.DataFrame({
+                "time": as_utc_ns(sensor["datetime_utc"]),
+                "sensor_depth_m": sensor["SensorDepth_m"].to_numpy()}),
             on="time", direction="nearest",
             tolerance=pd.Timedelta(minutes=match_minutes)).sort_values(
                 "order")

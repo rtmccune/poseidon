@@ -515,3 +515,28 @@ def test_sensor_camera_comparison_timing_and_states(tmp_path):
     good = pd.read_csv(out / "road_sensor_camera_good_only_observations.csv")
     assert good["time"].nunique() < obs["time"].nunique()
     assert (out / "road_sensor_camera_good_only_depths.jpg").exists()
+
+
+def test_sensor_matching_accepts_mixed_time_resolutions(tmp_path):
+    """Camera and sensor times parsed at different resolutions still match."""
+    import sensor_camera_comparison as sc
+
+    camera = pd.Series(pd.to_datetime(["2024-01-01 12:00:00"], utc=True)
+                       .astype("datetime64[s, UTC]"))
+    sensor = pd.DataFrame({
+        "datetime_utc": pd.to_datetime(["2024-01-01 12:02:00"], utc=True)
+        .astype("datetime64[us, UTC]"),
+        "SensorDepth_m": [0.1]})
+    state = sc.sensor_state(camera, sensor, 5)
+    assert state["sensor_state"].tolist() == ["sensor wet"]
+    assert state["sensor_depth_m"].tolist() == [0.1]
+
+    event = pd.DataFrame({"Time": ["2024-01-01 12:00:00+00:00"],
+                          "FloodedPixels": [1], "TotalPixels": [2],
+                          "MaxDepth": [0.2]})
+    path = tmp_path / "ev" / "road_accessibility_time_series.csv"
+    path.parent.mkdir()
+    event.to_csv(path, index=False)
+    loaded = access_plotter.load_event(str(path), {"20240101120000"},
+                                       sensor)
+    assert loaded["SensorDepth_m"].tolist() == [0.1]

@@ -307,6 +307,27 @@ def empirical_probabilities(values, plotting_position="empirical"):
 
 # ----- Inputs ----------------------------------------------------------------
 
+def as_utc_ns(times):
+    """
+    Convert times to UTC at nanosecond resolution.
+
+    pandas keeps the resolution it parses (s, ms, us or ns) and
+    ``merge_asof`` refuses keys of different resolutions, so every time
+    key is converted to one resolution before matching.
+
+    Parameters
+    ----------
+    times : array_like
+        Times (strings, datetimes, or a datetime Series).
+
+    Returns
+    -------
+    pandas.Series or pandas.DatetimeIndex
+        ``datetime64[ns, UTC]`` times.
+    """
+    return pd.to_datetime(times, utc=True).astype("datetime64[ns, UTC]")
+
+
 def load_good_timestamps(labels_csv):
     """
     Read timestamps of images scored as well segmented.
@@ -449,8 +470,11 @@ def load_event(path, good_timestamps, sensor):
     if sensor is not None:
         columns = [c for c in ("datetime_utc", "SensorDepth_m",
                                "SensorWSE_m") if c in sensor]
+        event["datetime_utc"] = as_utc_ns(event["datetime_utc"])
+        sensor = sensor[columns].assign(
+            datetime_utc=as_utc_ns(sensor["datetime_utc"]))
         event = pd.merge_asof(event.sort_values("datetime_utc"),
-                              sensor[columns], on="datetime_utc",
+                              sensor, on="datetime_utc",
                               direction="nearest",
                               tolerance=pd.Timedelta(minutes=5))
     return event
