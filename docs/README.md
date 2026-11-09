@@ -149,12 +149,19 @@ site = poseidon_utils.load_site_config("carolina_beach")
    and `SITE`. Data are read from and written to `data/$SITE/`.
 2. Submit each stage from `poseidon_deploy/hpc_submission_scripts/`.
 
-The HPC is moving from LSF to Slurm. The GPU stages (02, 07, 08 and the
-segmentation `99_*` scripts) have `#SBATCH` headers for the Slurm `gpu`
-partition and are submitted with `sbatch`, e.g. `sbatch 07_make_rectify.sh`.
-The CPU stages still have `#BSUB` headers for the LSF `ccee` queue and are
-submitted with `bsub < 05_flood_event_setup.sh`. `_common.sh` works under
-both.
+The HPC is moving from LSF to Slurm. Scripts with `#SBATCH` headers are
+submitted with `sbatch`, e.g. `sbatch 07_make_rectify.sh`:
+
+* Stage 02 and the segmentation `99_*` scripts use the GPU partitions.
+* Stages 07 and 08 run on the CPU, on idle partner nodes
+  (`--account=kanarde_cpu --partition=compute_partners --qos=short`, a
+  2-hour limit per task). They are limited by file reads and writes, so a
+  GPU does not speed them up.
+
+The other stages still have `#BSUB` headers for the LSF `ccee` queue and
+are submitted with `bsub < 05_flood_event_setup.sh`. `_common.sh` works
+under both. List the accounts and QOS you can use with
+`sacctmgr show assoc user=$USER format=Account%20,Partition%20,QOS%60`.
 
 Slurm GPU requests must name a GPU type; the scripts ask for one A100.
 Override it, or any other header, on the command line:
