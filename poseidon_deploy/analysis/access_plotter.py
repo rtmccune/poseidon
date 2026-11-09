@@ -202,7 +202,9 @@ def load_good_timestamps(labels_csv):
         ``YYYYMMDDHHMMSS`` timestamps; empty if no file is given.
     """
     if not labels_csv or not os.path.exists(labels_csv):
-        logger.info("No segmentation labels; using default colors.")
+        logger.info("No segmentation labels%s; using default colors and "
+                    "skipping the good-segmentation plots.",
+                    f" at {labels_csv}" if labels_csv else "")
         return set()
     labels = pd.read_csv(labels_csv)
     good = labels.loc[labels["Segmentation_Score"] == 1, "Filename"]
@@ -220,7 +222,9 @@ def load_sensor_data(sensor_csv):
     ----------
     sensor_csv : str or None
         SDFP CSV with ``date``, ``road_water_level_adj`` and optionally
-        ``sensor_water_level_adj`` (feet).
+        ``sensor_water_level_adj`` (feet), or a detailed event CSV from
+        ``EventTracker`` / ``run_pull_event_series.py`` with
+        ``time_UTC``, ``road_water_level`` and ``sensor_water_level``.
 
     Returns
     -------
@@ -229,8 +233,14 @@ def load_sensor_data(sensor_csv):
         and, if available, ``SensorWSE_m``, sorted by time.
     """
     if not sensor_csv or not os.path.exists(sensor_csv):
+        logger.info("No sensor CSV%s; sensor comparison plots skipped.",
+                    f" at {sensor_csv}" if sensor_csv else "")
         return None
-    sensor = pd.read_csv(sensor_csv)
+    sensor = pd.read_csv(sensor_csv).rename(columns={
+        "time_UTC": "date",
+        "road_water_level": "road_water_level_adj",
+        "sensor_water_level": "sensor_water_level_adj",
+    })
     if "road_water_level_adj" not in sensor:
         logger.warning("'road_water_level_adj' not in %s", sensor_csv)
         return None
@@ -244,6 +254,8 @@ def load_sensor_data(sensor_csv):
     sensor["datetime_utc"] = pd.to_datetime(sensor["date"], errors="coerce",
                                             utc=True)
     sensor = sensor.dropna(subset=["datetime_utc", "SensorDepth_m"])
+    # Padded event windows can overlap and repeat a reading
+    sensor = sensor.drop_duplicates(subset="datetime_utc")
     logger.info("Loaded %d sensor readings.", len(sensor))
     return sensor.sort_values("datetime_utc")
 

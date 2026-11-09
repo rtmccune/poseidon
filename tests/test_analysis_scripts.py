@@ -237,3 +237,21 @@ def test_compare_roadway_rois_pairs_images_and_footprints(tmp_path):
     assert events_table["impassable_images_a"].tolist() == [2, 2]
     assert (out / "roi_footprints.png").exists()
     assert (out / "roi_comparison_MaxDepth.png").exists()
+
+
+def test_sensor_data_accepts_detailed_event_csv(tmp_path):
+    """flood_events.csv-style readings load like SDFP downloads."""
+    path = tmp_path / "sensor_data_comparison.csv"
+    pd.DataFrame({
+        "flood_event": [1, 1, 2],
+        "sensor_ID": "DE_01",
+        "time_UTC": ["2024-01-01 12:00+00:00", "2024-01-01 12:06+00:00",
+                     "2024-01-01 12:06+00:00"],  # overlapping windows
+        "road_water_level": [-0.1, 0.5, 0.5],
+        "sensor_water_level": [1.0, 1.6, 1.6],
+    }).to_csv(path, index=False)
+    sensor = access_plotter.load_sensor_data(str(path))
+    assert len(sensor) == 2
+    assert sensor["SensorDepth_m"].tolist() == pytest.approx(
+        [0.0, 0.5 * 0.3048])
+    assert sensor["SensorWSE_m"].iloc[1] == pytest.approx(1.6 * 0.3048)
