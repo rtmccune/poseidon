@@ -1032,7 +1032,7 @@ def _draw_bin_summary(ax, x, row, width, offset):
 
 def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
                            title=None, full_coverage=FULL_COVERAGE, seed=0,
-                           ylabel=None):
+                           ylabel=None, ylim=None):
     """
     Draw depth by coverage bin, with full coverage in its own panel.
 
@@ -1064,6 +1064,9 @@ def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
         Seed of the horizontal jitter in the full-coverage panel.
     ylabel : str, optional
         Y-axis label. Default ``"<pretty> on Roadway (m)"``.
+    ylim : tuple of float, optional
+        Depth-axis limits, to share an axis between figures. Default:
+        0 to just above the deepest image or bar.
     """
     images = data.dropna(subset=["Coverage", metric])
     images = images[images["Coverage"] > 0]
@@ -1106,7 +1109,7 @@ def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
     tops = [images[metric].max()] + [
         table[column].max() for column in
         ("p90_depth_m", "mean_depth_m_ci95_high", "median_depth_m_ci95_high")]
-    ax.set_ylim(0, 1.05 * np.nanmax(tops))
+    ax.set_ylim(ylim or (0, 1.05 * np.nanmax(tops)))
     ax_full.set_xlim(-0.6, 0.6)
     ax_full.set_xticks([0.0])
     ax_full.set_xticklabels([f"Full\n(>={full_coverage:g}%)"])
@@ -1188,7 +1191,7 @@ def plot_one_to_one(sens, img, cov, x_label, y_label, trend_color,
 def plot_point_metrics(data, roi, metric, has_labels, sensor,
                        sensor_wse_floor, out_dir, n_boot=0, seed=0,
                        bin_width=COVERAGE_BIN_WIDTH,
-                       full_coverage=FULL_COVERAGE):
+                       full_coverage=FULL_COVERAGE, shared_ylim=None):
     """
     Draw the per-image plots (1, 1b, 1c, 6, 7) for one metric.
 
@@ -1216,6 +1219,9 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
         Coverage bin width (%) of the binned plots.
     full_coverage : float, optional
         Coverage (%) from which the road counts as fully covered.
+    shared_ylim : tuple of float, optional
+        Depth-axis limits of the 1c plots, shared with plot 8 (see
+        :func:`shared_depth_limits`). Default: automatic.
 
     Returns
     -------
@@ -1299,7 +1305,8 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
     if len(good) > 3:
         fit = _plot_good_only_fit(good, metric, pretty, out_dir,
                                   f"{stem}_1c_reversed_fit_good_only.jpg",
-                                  f"{stem}_1c", n_boot, seed)
+                                  f"{stem}_1c", n_boot, seed,
+                                  ylim=shared_ylim)
         _record(records, "1c logistic",
                 f"{stem}_1c_reversed_fit_good_only.jpg", good,
                 "well-segmented images; " + (_fit_note(fit) if fit
@@ -1313,7 +1320,8 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
                           index=False)
             plot_depth_by_coverage(good, binned, metric, pretty, out_dir,
                                    f"{stem}_1c_binned_depth_good_only.jpg",
-                                   full_coverage=full_coverage, seed=seed)
+                                   full_coverage=full_coverage, seed=seed,
+                                   ylim=shared_ylim)
             _record(records, "1c binned",
                     f"{stem}_1c_binned_depth_good_only.jpg",
                     good[good["Coverage"] > 0],
@@ -1403,7 +1411,7 @@ def _draw_depth_fit(ax, fit):
 
 
 def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
-                        n_boot=0, seed=0, ylabel=None):
+                        n_boot=0, seed=0, ylabel=None, ylim=None):
     """
     Draw plot 1c: logistic fit of well-segmented images only.
 
@@ -1427,6 +1435,10 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         Bootstrap random seed. Default 0.
     ylabel : str, optional
         Y-axis label. Default ``"<pretty> on Roadway (m)"``.
+    ylim : tuple of float, optional
+        Depth-axis limits, to share an axis between figures. Curves
+        outside them (e.g. below 0 m near 0 % coverage) are cut off.
+        Default: automatic.
 
     Returns
     -------
@@ -1447,6 +1459,8 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
 
     ax.set_xlabel("Roadway Percentage Covered (%)")
     ax.set_ylabel(ylabel or f"{pretty} on Roadway (m)")
+    if ylim is not None:
+        ax.set_ylim(ylim)
     handles, labels = ax.get_legend_handles_labels()
     unique = dict(zip(labels, handles))  # drop duplicate legend entries
     ax.legend(unique.values(), unique.keys())
@@ -1616,7 +1630,8 @@ def reflected_kde(values, n_points=400):
 
 def plot_sensor_depth_by_coverage(data, roi, out_dir, n_boot=0, seed=0,
                                   bin_width=COVERAGE_BIN_WIDTH,
-                                  full_coverage=FULL_COVERAGE):
+                                  full_coverage=FULL_COVERAGE,
+                                  shared_ylim=None):
     """
     Draw plot 8: in-situ sensor depth against image coverage.
 
@@ -1644,6 +1659,8 @@ def plot_sensor_depth_by_coverage(data, roi, out_dir, n_boot=0, seed=0,
         Coverage bin width (%).
     full_coverage : float, optional
         Coverage (%) from which the road counts as fully covered.
+    shared_ylim : tuple of float, optional
+        Depth-axis limits shared with the 1c plots. Default: automatic.
 
     Returns
     -------
@@ -1677,17 +1694,44 @@ def plot_sensor_depth_by_coverage(data, roi, out_dir, n_boot=0, seed=0,
     plot_depth_by_coverage(good, binned, "SensorDepth_m", pretty, out_dir,
                            f"{stem}_8_binned_depth_good_only.jpg",
                            full_coverage=full_coverage, seed=seed,
-                           ylabel=ylabel)
+                           ylabel=ylabel, ylim=shared_ylim)
     _record(records, "8 binned", f"{stem}_8_binned_depth_good_only.jpg", good,
             f"{included}; " + _binned_note(binned, good, full_coverage))
 
     fit = _plot_good_only_fit(good, "SensorDepth_m", pretty, out_dir,
                               f"{stem}_8_reversed_fit_good_only.jpg",
-                              f"{stem}_8", n_boot, seed, ylabel=ylabel)
+                              f"{stem}_8", n_boot, seed, ylabel=ylabel,
+                              ylim=shared_ylim)
     _record(records, "8 logistic", f"{stem}_8_reversed_fit_good_only.jpg",
             good, f"{included}; " + (_fit_note(fit) if fit
                                      else "fit failed"))
     return records
+
+
+def shared_depth_limits(data):
+    """
+    Depth-axis limits shared by one ROI's 1c plots and plot 8.
+
+    Runs from 0 to 5 % above the deepest well-segmented image depth
+    (any of :data:`METRICS`) or matched sensor depth, so every 1c
+    figure and plot 8 of the ROI can be compared side by side.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        All images of one ROI.
+
+    Returns
+    -------
+    tuple of float or None
+        ``(0, top)``, or None if there is nothing to plot.
+    """
+    good = data[(data["Segmentation"] == "good") & (data["Coverage"] > 0)]
+    columns = [c for c in (*METRICS, "SensorDepth_m") if c in good]
+    if good.empty or not columns:
+        return None
+    top = np.nanmax(good[columns].to_numpy(dtype=float))
+    return (0.0, 1.05 * float(top)) if np.isfinite(top) and top > 0 else None
 
 
 # ----- Run summary -----------------------------------------------------------
@@ -1908,6 +1952,7 @@ def main(argv=None):
         wet = data[data[[m for m in METRICS if m in data]].notna().any(
             axis=1)]
         good_rows = wet[wet["Segmentation"] == "good"]
+        shared_ylim = shared_depth_limits(data)
         overviews[roi] = {
             "event_folders": len(paths), "images": len(data),
             "wet": len(wet), "good": len(good_rows),
@@ -1921,7 +1966,8 @@ def main(argv=None):
             made = plot_point_metrics(
                 data, roi, metric, has_labels, sensor,
                 args.sensor_wse_floor, args.out_dir, args.n_boot,
-                args.seed, args.coverage_bin_width, args.full_coverage)
+                args.seed, args.coverage_bin_width, args.full_coverage,
+                shared_ylim)
             made += plot_event_peaks(peaks, roi, metric, basis,
                                      args.out_dir, args.plotting_position)
             records += [dict(record, roi=roi, metric=metric)
@@ -1929,7 +1975,8 @@ def main(argv=None):
         records += [dict(record, roi=roi, metric=SENSOR_DEPTH) for record in
                     plot_sensor_depth_by_coverage(
                         data, roi, args.out_dir, args.n_boot, args.seed,
-                        args.coverage_bin_width, args.full_coverage)]
+                        args.coverage_bin_width, args.full_coverage,
+                        shared_ylim)]
     write_run_summary(args.out_dir, {
         "Events folder": args.events_dir,
         "Segmentation labels": args.labels or "none (all images 'other')",

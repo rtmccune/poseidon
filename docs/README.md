@@ -294,6 +294,34 @@ should stay near 0.5, and the share inside the band near 0.8, in every
 coverage range. Colors come from `poseidon_deploy/analysis/plot_style.py`,
 a colour-blind-checked selection from the feathers palettes.
 
+### In-situ sensor vs camera
+
+`99_sensor_camera_comparison.sh` runs
+`poseidon_deploy/analysis/sensor_camera_comparison.py` after stages 09 and
+10. Across all events, it compares the in-situ sensor (one point) with the
+camera: the virtual sensors and the roadway ROI (the camera-view polygon
+when the site sets `camera_roi_json`). Events without sensor readings are
+included for the camera sources. Every output is written twice, so the
+two sets can be compared:
+- `data/<site>/plots/<roi>_sensor_camera_all_images_*` uses every image;
+- `..._good_only_*` uses well-segmented images only. This set needs
+  `segmentation_labels.csv`.
+
+The file endings are:
+
+| File | Shows |
+|---|---|
+| `_depths.jpg` | Every observation showing water, by source: sensor, `VS1`–`VSn`, and the ROI's min, median, mean and max. Boxes show quartiles and median; whiskers the 10th–90th percentiles. Each camera point is coloured by the sensor at that moment: wet (blue), dry (orange; the camera saw water the sensor did not), or no reading within 5 minutes (magenta; includes events the sensor missed). ROI min is usually 0 m, because some water cell is at depth 0 |
+| `_timing.jpg` | Per event and camera source, onset lead (how many minutes before the sensor the camera first saw water) and end lag (how many minutes after). Measured only within the span of that event's images, since the camera sees only in daylight; hollow points are censored, being wet at the edge of that span |
+| `_peaks.jpg` | Each event's peak sensor depth against its peak ROI max, ROI mean and deepest virtual sensor, with a 1:1 line; events without sensor readings are in a side panel |
+| `_summary.md`, `_summary.csv` | Counts per source: observations, events, events without the sensor, median depth, share while the sensor was dry, median onset lead and end lag, share where the camera was first or later, and camera-only events |
+| `_observations.csv`, `_timing.csv`, `_event_peaks.csv` | The data behind the figures |
+
+The 1c plots and plot 8 of one ROI share a y-axis, from 0 to just above
+the deepest well-segmented image or sensor depth, so they can be compared
+directly. On that shared axis, logistic curves that dip below 0 m near 0%
+coverage are cut off.
+
 ### Events without sensor data
 
 Stage 05 needs `flood_events.csv`, the sensor readings inside each event.

@@ -440,3 +440,78 @@ def test_sensor_depth_plot_is_made_once_per_roi(tmp_path):
     sensor_rows = runs[runs["metric"] == "SensorDepth"]
     assert set(sensor_rows["plot"]) == {"8 binned", "8 logistic"}
     assert (sensor_rows["events"] == 4).all()
+
+
+def test_shared_depth_limits_cover_image_and_sensor_depths():
+    """1c and plot 8 share 0 to just above the deepest good depth."""
+    data = pd.DataFrame({
+        "Segmentation": ["good", "good", "other"], "Coverage": [10, 50, 90],
+        "MaxDepth": [0.1, 0.2, 0.9], "MeanDepth": [0.05, 0.1, 0.5],
+        "MedianDepth": [0.05, 0.1, 0.5], "SensorDepth_m": [0.3, np.nan, 0.8]})
+    low, high = access_plotter.shared_depth_limits(data)
+    assert low == 0 and high == pytest.approx(1.05 * 0.3)  # 'other' ignored
+
+
+def test_sensor_camera_comparison_timing_and_states(tmp_path):
+    """Camera onset/end are compared with the sensor inside the image span."""
+    import sensor_camera_comparison as sc
+    from poseidon_utils.zarr_io import write_array, write_zip_group
+
+    times = pd.date_range("2024-06-01 12:00", periods=11, freq="6min",
+                          tz="UTC")
+    wet = np.array([0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0], dtype=bool)  # 12:06-12:48
+    depth = np.where(wet, 0.1, np.nan)
+    for name, has_sensor in (("DE_01_20240601110000_20240601140000", True),
+                             ("DE_01_20240602110000_20240602140000", False)):
+        folder = tmp_path / "events" / name
+        (folder / "zarr").mkdir(parents=True)
+        stamps = times + pd.Timedelta(days=0 if has_sensor else 1)
+        pd.DataFrame({"Time": stamps, "FloodedPixels": wet * 10,
+                      "TotalPixels": 20, "MaxDepth": depth,
+                      "MeanDepth": depth / 2, "MedianDepth": depth / 2,
+                      "MinDepth": np.where(wet, 0.0, np.nan)}).to_csv(
+            folder / "road_accessibility_time_series.csv", index=False)
+        with write_zip_group(folder / "zarr" / "virtual_sensor_data.zip") as g:
+            write_array(g, "timestamps",
+                        np.array(stamps.astype(str), dtype="U30"))
+            write_array(g, "vs_depth", depth[:, None])
+            write_array(g, "vs_wse", depth[:, None])
+    # Sensor wet 12:18-12:36 only: camera is 12 min earlier and later
+    sensor_wet = (times >= "2024-06-01 12:18") & (times <= "2024-06-01 12:36")
+    pd.DataFrame({"time_UTC": times,
+                  "road_water_level": np.where(sensor_wet, 0.2, -0.1)}
+                 ).to_csv(tmp_path / "sensor.csv", index=False)
+
+    out = tmp_path / "out"
+    assert sc.main(["--events_dir", str(tmp_path / "events"), "--roi", "road",
+                    "--sensor", str(tmp_path / "sensor.csv"),
+                    "--out_dir", str(out)]) == 0
+    timing = pd.read_csv(out / "road_sensor_camera_all_images_timing.csv")
+    first = timing[(timing["source"] == "ROI")
+                   & timing["event"].str.contains("0601")].iloc[0]
+    assert first["onset_lead_min"] == 12 and first["end_lag_min"] == 12
+    assert not first["camera_onset_censored"]
+    obs = pd.read_csv(
+        out / "road_sensor_camera_all_images_observations.csv")
+    roi_max = obs[obs["source"] == "ROI max"]
+    assert set(roi_max["sensor_state"]) == {"sensor wet", "sensor dry",
+                                            "no sensor reading"}
+    assert (roi_max.loc[~roi_max["has_sensor"], "sensor_state"]
+            == "no sensor reading").all()
+    peaks = pd.read_csv(
+        out / "road_sensor_camera_all_images_event_peaks.csv")
+    assert peaks["has_sensor"].tolist() == [True, False]
+    for suffix in ("depths.jpg", "timing.jpg", "peaks.jpg", "summary.md"):
+        assert (out / f"road_sensor_camera_all_images_{suffix}").exists()
+    assert not list(out.glob("*good_only*"))  # no labels, no second set
+
+    labels = tmp_path / "labels.csv"
+    pd.DataFrame({"Filename": [f"comparison_CAM_DE_01_{t:%Y%m%d%H%M%S}.jpg"
+                               for t in times[:5]],
+                  "Segmentation_Score": 1}).to_csv(labels, index=False)
+    assert sc.main(["--events_dir", str(tmp_path / "events"), "--roi", "road",
+                    "--sensor", str(tmp_path / "sensor.csv"), "--labels",
+                    str(labels), "--out_dir", str(out)]) == 0
+    good = pd.read_csv(out / "road_sensor_camera_good_only_observations.csv")
+    assert good["time"].nunique() < obs["time"].nunique()
+    assert (out / "road_sensor_camera_good_only_depths.jpg").exists()
