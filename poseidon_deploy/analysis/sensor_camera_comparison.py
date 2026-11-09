@@ -27,6 +27,15 @@ well-segmented images only (``<roi>_sensor_camera_good_only``):
 Virtual sensors keep the colours of the depth maps
 (:data:`poseidon_utils.palette.VIRTUAL_SENSOR_COLORS`, by their order in
 the site config) in every figure.
+* ``_aligned_start.jpg`` and ``_aligned_peak.jpg`` - every event's
+  depth series on a shared clock: hour 0 at the flood start (from the
+  event folder's window without its padding; every event) or at the
+  in-situ sensor's peak (events with sensor readings). One panel per
+  source (sensor, virtual sensors, ROI mean) with each event as a thin
+  line and the median across events (15-min bins, >= 3 events) in bold
+  with its interquartile range; a last panel overlays the medians
+  (``_aligned_composites.csv``). Dry moments are 0 m; camera series
+  exist only where images do (daylight).
 * ``_observations.csv``, ``_timing.csv``, ``_summary.csv`` and
   ``_summary.md`` - the data behind the figures, and counts.
 
@@ -91,6 +100,7 @@ from plot_style import (  # noqa: E402
     BLUE,
     CONTEXT_GREY,
     INK,
+    INK_STRONG,
     MAGENTA,
     ORANGE,
     apply_style,
@@ -466,7 +476,74 @@ def collect(events_dir, roi, sensor, good_timestamps, match_minutes,
                "sensor_depth_m", "sensor_state"]
     observations = (pd.concat(observations, ignore_index=True)
                     if observations else pd.DataFrame(columns=columns))
-    return observations, pd.DataFrame(timing)
+    return observations, pd.DataFrame(timing), event_series(
+        loaded, padding_hours)
+
+
+def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
+    """
+    Full depth time series of each event and source, for aligned plots.
+
+    Unlike the pooled observations, every event keeps its whole padded
+    window (an image in two overlapping windows appears in both
+    events' series, at different times relative to each). Dry moments
+    are 0 m.
+
+    Parameters
+    ----------
+    loaded : list of tuple
+        ``(event, roi_obs, vs_obs, sensor_window)`` as gathered by
+        :func:`collect`.
+    padding_hours : float, optional
+        Padding stage 05 added; removed to get the flood period.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``event``, ``time``, ``source`` (sensor, ``VS1``..., ROI mean),
+        ``depth_m``, plus the event's ``flood_start`` and ``flood_end``
+        (unpadded window) and ``sensor_peak`` (time of the sensor's
+        maximum in the flood period; NaT without sensor readings).
+    """
+    pad = pd.Timedelta(hours=padding_hours)
+    frames = []
+    for event, roi_obs, vs_obs, sensor_window in loaded:
+        window = event_window(event)
+        start, end = window[0] + pad, window[1] - pad
+        if start > end:
+            start = end = window[0] + (window[1] - window[0]) / 2
+        parts = []
+        peak = pd.NaT
+        if sensor_window is not None and len(sensor_window):
+            parts.append(pd.DataFrame({
+                "time": sensor_window["datetime_utc"].to_numpy(),
+                "source": SENSOR,
+                "depth_m": sensor_window["SensorDepth_m"].to_numpy()}))
+            flood = sensor_window[(sensor_window["datetime_utc"] >= start)
+                                  & (sensor_window["datetime_utc"] <= end)]
+            if flood.empty:
+                flood = sensor_window
+            peak = flood.loc[flood["SensorDepth_m"].idxmax(), "datetime_utc"]
+        if vs_obs is not None and len(vs_obs):
+            parts.append(vs_obs.assign(
+                depth_m=vs_obs["depth_m"].fillna(0.0))[
+                ["time", "source", "depth_m"]])
+        if roi_obs is not None and len(roi_obs):
+            parts.append(pd.DataFrame({
+                "time": roi_obs["time"].to_numpy(),
+                "source": ROI_STATS["MeanDepth"],
+                "depth_m": roi_obs["MeanDepth"].fillna(0.0).to_numpy()}))
+        for part in parts:
+            frames.append(part.assign(event=event, flood_start=start,
+                                      flood_end=end, sensor_peak=peak))
+    if not frames:
+        return pd.DataFrame(columns=["event", "time", "source", "depth_m",
+                                     "flood_start", "flood_end",
+                                     "sensor_peak"])
+    series = pd.concat(frames, ignore_index=True)
+    for column in ("time", "flood_start", "flood_end", "sensor_peak"):
+        series[column] = as_utc_ns(series[column])
+    return series
 
 
 def source_order(observations):
@@ -740,6 +817,197 @@ def plot_peaks(peaks, path, seed=0, title=None):
     plt.close(fig)
 
 
+#: Composite (median across events) time bin, minutes.
+COMPOSITE_MINUTES = 15
+
+#: Fewest events a composite bin needs to be drawn.
+MIN_COMPOSITE_EVENTS = 3
+
+
+def aligned_series(series, align):
+    """
+    Add hours relative to each event's start or sensor peak.
+
+    Parameters
+    ----------
+    series : pandas.DataFrame
+        Output of :func:`event_series`.
+    align : {'start', 'peak'}
+        ``'start'``: hour 0 is the flood start (every event).
+        ``'peak'``: hour 0 is the in-situ sensor's peak (events with
+        sensor readings only).
+
+    Returns
+    -------
+    pandas.DataFrame
+        `series` with ``hours``.
+    """
+    origin = series["flood_start"] if align == "start" else series[
+        "sensor_peak"]
+    out = series.assign(hours=(series["time"] - origin).dt.total_seconds()
+                        / 3600)
+    return out.dropna(subset=["hours"])
+
+
+def composites(aligned, minutes=COMPOSITE_MINUTES,
+               min_events=MIN_COMPOSITE_EVENTS):
+    """
+    Median and interquartile range across events, per source and bin.
+
+    Each event first contributes its mean depth in each time bin, so
+    every event counts equally however often it was sampled.
+
+    Parameters
+    ----------
+    aligned : pandas.DataFrame
+        Output of :func:`aligned_series`.
+    minutes : float, optional
+        Bin width.
+    min_events : int, optional
+        Bins with fewer contributing events are dropped.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``source``, ``hours`` (bin center), ``median_m``, ``q1_m``,
+        ``q3_m``, ``events``.
+    """
+    width = minutes / 60
+    binned = aligned.assign(
+        hours=(np.floor(aligned["hours"] / width) + 0.5) * width)
+    per_event = binned.groupby(["source", "hours", "event"])[
+        "depth_m"].mean().reset_index()
+    grouped = per_event.groupby(["source", "hours"])["depth_m"]
+    table = pd.DataFrame({
+        "median_m": grouped.median(), "q1_m": grouped.quantile(0.25),
+        "q3_m": grouped.quantile(0.75), "events": grouped.size()}
+    ).reset_index()
+    return table[table["events"] >= min_events]
+
+
+def _series_style(source):
+    """
+    Colour of a source in the aligned plots.
+
+    Parameters
+    ----------
+    source : str
+        Source name.
+
+    Returns
+    -------
+    str
+        Hex colour: dark ink for the sensor, blue for the ROI mean, the
+        map colours for virtual sensors.
+    """
+    if source == SENSOR:
+        return INK_STRONG
+    if source.startswith("VS"):
+        return virtual_sensor_color(int(source[2:]) - 1)
+    return BLUE
+
+
+def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
+                 title=None):
+    """
+    Draw every event's depth series on a shared, event-relative clock.
+
+    One panel per source (sensor, virtual sensors, ROI mean) with each
+    event as a thin line and the median across events in bold with its
+    interquartile range, and a last panel overlaying all medians.
+
+    Parameters
+    ----------
+    series : pandas.DataFrame
+        Output of :func:`event_series`.
+    align : {'start', 'peak'}
+        Event start or sensor peak at hour 0.
+    path : str
+        Output image.
+    padding_hours : float, optional
+        Padding around each event, for the x-axis range.
+    title : str, optional
+        Figure title.
+
+    Returns
+    -------
+    pandas.DataFrame or None
+        The composites drawn, or None if nothing could be aligned.
+    """
+    aligned = aligned_series(series, align)
+    if aligned.empty:
+        return None
+    present = set(aligned["source"])
+    sources = ([SENSOR] if SENSOR in present else []) + sorted(
+        (s for s in present if s.startswith("VS")),
+        key=lambda s: int(s[2:])) + [
+        s for s in (ROI_STATS["MeanDepth"],) if s in present]
+    table = composites(aligned)
+
+    if align == "start":
+        durations = (aligned["flood_end"] - aligned["flood_start"]
+                     ).dt.total_seconds() / 3600
+        xlim = (-padding_hours,
+                float(np.nanpercentile(durations, 90)) + padding_hours)
+        xlabel = "Hours Since Flood Start"
+    else:
+        reach = float(np.nanpercentile(aligned["hours"].abs(), 95))
+        xlim = (-reach, reach)
+        xlabel = "Hours From In-Situ Sensor Peak"
+    top = float(np.nanpercentile(aligned["depth_m"], 99.5)) * 1.1 or 0.1
+
+    n_panels = len(sources) + 1
+    cols = 3
+    rows = int(np.ceil(n_panels / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(13, 3.6 * rows),
+                             sharex=True, sharey=True, squeeze=False)
+    flat = axes.ravel()
+    for ax, source in zip(flat, sources):
+        color = _series_style(source)
+        group = aligned[aligned["source"] == source]
+        for _, event in group.groupby("event"):
+            event = event.sort_values("hours")
+            ax.plot(event["hours"], event["depth_m"], color=color,
+                    alpha=0.18, linewidth=0.8, zorder=1)
+        comp = table[table["source"] == source]
+        ax.fill_between(comp["hours"], comp["q1_m"], comp["q3_m"],
+                        color=color, alpha=0.25, linewidth=0, zorder=2)
+        ax.plot(comp["hours"], comp["median_m"], color=color, linewidth=2.2,
+                zorder=3)
+        ax.set_title(f"{source} ({group['event'].nunique()} events)",
+                     fontsize=10)
+    overlay = flat[len(sources)]
+    for source in sources:
+        comp = table[table["source"] == source]
+        overlay.plot(comp["hours"], comp["median_m"],
+                     color=_series_style(source), linewidth=2.2,
+                     linestyle="--" if source == SENSOR else "-",
+                     label=source)
+    overlay.set_title("Medians across events", fontsize=10)
+    overlay.legend(fontsize=8, loc="upper right")
+    for ax in flat[n_panels:]:
+        ax.set_visible(False)
+    for ax in flat[:n_panels]:
+        ax.axvline(0, color=INK, linewidth=1, linestyle=":", zorder=0)
+        ax.set_xlim(xlim)
+        ax.set_ylim(0, top)
+    for ax in axes[-1]:
+        ax.set_xlabel(xlabel)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Depth (m)")
+    note = (f"Thin lines: individual events. Bold: median across events in "
+            f"{COMPOSITE_MINUTES}-min bins (bins with >= "
+            f"{MIN_COMPOSITE_EVENTS} events); band: interquartile range. "
+            f"Dry = 0 m; camera lines only where (daylight) images exist.")
+    fig.text(0.01, -0.01, note, fontsize=8, color=INK, va="top")
+    if title:
+        fig.suptitle(title, fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return table.assign(align=align)
+
+
 # ----- Summary ---------------------------------------------------------------
 
 def summary_table(observations, timing):
@@ -947,7 +1215,8 @@ def run_image_set(args, sensor, tag, good_timestamps, label):
     int
         1 if outputs were written, 0 if there were no observations.
     """
-    observations, timing = collect(args.events_dir, args.roi, sensor,
+    observations, timing, series = collect(args.events_dir, args.roi,
+                                           sensor,
                                    good_timestamps, args.match_minutes,
                                    args.padding_hours)
     if observations.empty:
@@ -963,6 +1232,14 @@ def run_image_set(args, sensor, tag, good_timestamps, label):
     else:
         logger.warning("No event has both camera and sensor water; timing "
                        "plot skipped (%s).", label)
+    drawn = [plot_aligned(series, align, f"{prefix}_aligned_{align}.jpg",
+                          args.padding_hours, f"{title}: aligned on "
+                          f"{'flood start' if align == 'start' else 'in-situ sensor peak'}")
+             for align in ("start", "peak")]
+    drawn = [table for table in drawn if table is not None]
+    if drawn:
+        pd.concat(drawn, ignore_index=True).to_csv(
+            f"{prefix}_aligned_composites.csv", index=False)
     peaks = event_peaks(observations)
     plot_peaks(peaks, f"{prefix}_peaks.jpg", args.seed, title)
 

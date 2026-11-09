@@ -511,8 +511,29 @@ def test_sensor_camera_comparison_timing_and_states(tmp_path):
     peaks = pd.read_csv(
         out / "road_sensor_camera_all_images_event_peaks.csv")
     assert peaks["has_sensor"].tolist() == [True, False]
-    for suffix in ("depths.jpg", "timing.jpg", "peaks.jpg", "summary.md"):
+    for suffix in ("depths.jpg", "timing.jpg", "peaks.jpg", "summary.md",
+                   "aligned_start.jpg", "aligned_peak.jpg"):
         assert (out / f"road_sensor_camera_all_images_{suffix}").exists()
+
+    # Aligned series: the event folder 11:00-14:00 is shorter than its
+    # 3 h padding on each side, so its flood period collapses to the
+    # midpoint, 12:30; the sensor is at its (constant) maximum there
+    _, _, series = sc.collect(str(tmp_path / "events"), "road",
+                              sc.load_sensor_data(str(tmp_path /
+                                                      "sensor.csv")),
+                              set(), 5)
+    first = series[series["event"].str.contains("0601")]
+    assert (first["flood_start"] == pd.Timestamp("2024-06-01 12:30",
+                                                 tz="UTC")).all()
+    assert (first["sensor_peak"] == pd.Timestamp("2024-06-01 12:30",
+                                                 tz="UTC")).all()
+    vs = first[first["source"] == "VS1"]
+    assert (vs["depth_m"] >= 0).all() and len(vs) == 11  # dry = 0 m
+    peak = sc.aligned_series(first, "peak")
+    sensor_rows = peak[peak["source"] == sc.SENSOR]
+    at_zero = sensor_rows.loc[sensor_rows["hours"] == 0, "depth_m"]
+    assert at_zero.item() == sensor_rows["depth_m"].max()
+    assert sc.aligned_series(series, "peak")["event"].nunique() == 1
     assert not list(out.glob("*good_only*"))  # no labels, no second set
 
     labels = tmp_path / "labels.csv"
