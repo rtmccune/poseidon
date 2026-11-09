@@ -16,6 +16,10 @@ ROI and depth metric, saves:
 6.  Image vs in-situ sensor depth, 1:1 (needs ``--labels`` and
     ``--sensor``).
 7.  Image vs in-situ sensor WSE, 1:1 (same requirements).
+8.  As 1c, but with the in-situ sensor's depth for each well-segmented
+    image instead of the image-derived depth (``<roi>_SensorDepth_8_*``;
+    once per ROI, as it does not depend on the image depth metric; same
+    requirements as 6).
 
 Depth by coverage (1b, 1c; recommended for prediction)
 ------------------------------------------------------
@@ -136,7 +140,11 @@ MIN_BIN_EVENTS = 3
 
 #: Order of plots in the run summary.
 PLOT_ORDER = ("1", "1b binned", "1b logistic", "1c binned", "1c logistic",
-              "1c", "2", "3", "4", "5", "6", "7")
+              "1c", "2", "3", "4", "5", "6", "7", "8 binned", "8 logistic",
+              "8")
+
+#: Name used for the sensor depth in plot 8 filenames and the summary.
+SENSOR_DEPTH = "SensorDepth"
 
 #: Display colours of the segmentation classes (see plot_style).
 SEGMENTATION_COLORS = {"good": BLUE, "other": CONTEXT_GREY}
@@ -1023,7 +1031,8 @@ def _draw_bin_summary(ax, x, row, width, offset):
 
 
 def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
-                           title=None, full_coverage=FULL_COVERAGE, seed=0):
+                           title=None, full_coverage=FULL_COVERAGE, seed=0,
+                           ylabel=None):
     """
     Draw depth by coverage bin, with full coverage in its own panel.
 
@@ -1053,6 +1062,8 @@ def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
         Coverage (%) from which the road counts as fully covered.
     seed : int, optional
         Seed of the horizontal jitter in the full-coverage panel.
+    ylabel : str, optional
+        Y-axis label. Default ``"<pretty> on Roadway (m)"``.
     """
     images = data.dropna(subset=["Coverage", metric])
     images = images[images["Coverage"] > 0]
@@ -1078,7 +1089,7 @@ def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
                 color=ORANGE, linewidth=1.8, linestyle="--", zorder=2)
     ax.set_xlim(0, full_coverage)
     ax.set_xlabel("Roadway Coverage (%)")
-    ax.set_ylabel(f"{pretty} on Roadway (m)")
+    ax.set_ylabel(ylabel or f"{pretty} on Roadway (m)")
 
     rng = np.random.default_rng(seed)
     ax_full.scatter(rng.uniform(-0.35, 0.35, len(full_images)),
@@ -1392,7 +1403,7 @@ def _draw_depth_fit(ax, fit):
 
 
 def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
-                        n_boot=0, seed=0):
+                        n_boot=0, seed=0, ylabel=None):
     """
     Draw plot 1c: logistic fit of well-segmented images only.
 
@@ -1414,6 +1425,8 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         Event bootstrap resamples. Default 0 (none).
     seed : int, optional
         Bootstrap random seed. Default 0.
+    ylabel : str, optional
+        Y-axis label. Default ``"<pretty> on Roadway (m)"``.
 
     Returns
     -------
@@ -1433,7 +1446,7 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         fit = None
 
     ax.set_xlabel("Roadway Percentage Covered (%)")
-    ax.set_ylabel(f"{pretty} on Roadway (m)")
+    ax.set_ylabel(ylabel or f"{pretty} on Roadway (m)")
     handles, labels = ax.get_legend_handles_labels()
     unique = dict(zip(labels, handles))  # drop duplicate legend entries
     ax.legend(unique.values(), unique.keys())
@@ -1601,6 +1614,82 @@ def reflected_kde(values, n_points=400):
     return x, kde(x) + kde(-x)
 
 
+def plot_sensor_depth_by_coverage(data, roi, out_dir, n_boot=0, seed=0,
+                                  bin_width=COVERAGE_BIN_WIDTH,
+                                  full_coverage=FULL_COVERAGE):
+    """
+    Draw plot 8: in-situ sensor depth against image coverage.
+
+    The same binned and logistic plots as 1c, but each well-segmented
+    image's depth is the sensor's road water level at the nearest
+    reading within 5 minutes (negative levels set to 0 m), not a depth
+    derived from the image. Coverage still comes from the image. It
+    does not depend on the image depth metric, so it is drawn once per
+    ROI. Images without a sensor reading (e.g. image-only events) are
+    left out.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        All images of one ROI, with ``SensorDepth_m``.
+    roi : str
+        ROI name for filenames.
+    out_dir : str
+        Output folder.
+    n_boot : int, optional
+        Event bootstrap resamples. Default 0 (none).
+    seed : int, optional
+        Bootstrap random seed. Default 0.
+    bin_width : float, optional
+        Coverage bin width (%).
+    full_coverage : float, optional
+        Coverage (%) from which the road counts as fully covered.
+
+    Returns
+    -------
+    list of dict
+        Run-summary records.
+    """
+    records = []
+    stem = f"{roi}_{SENSOR_DEPTH}"
+    if "SensorDepth_m" not in data:
+        _record(records, "8", "(not made)", data.iloc[0:0],
+                "no sensor CSV, or no segmentation labels")
+        return records
+    good = data[(data["Segmentation"] == "good")
+                & (data["Coverage"] > 0)].dropna(
+        subset=["Coverage", "SensorDepth_m"])
+    if len(good) <= 3:
+        _record(records, "8", "(not made)", good,
+                f"only {len(good)} well-segmented images with a sensor "
+                f"reading")
+        return records
+
+    ylabel = "In-Situ Sensor Depth on Roadway (m)"
+    pretty = "Sensor Depth"
+    included = ("well-segmented images with coverage > 0 and a sensor "
+                "reading within 5 min; depth from the sensor")
+    binned = depth_by_coverage(good["Coverage"], good["SensorDepth_m"],
+                               good["event"], bin_width, full_coverage,
+                               n_boot, seed)
+    binned.to_csv(os.path.join(out_dir, f"{stem}_8_depth_by_coverage.csv"),
+                  index=False)
+    plot_depth_by_coverage(good, binned, "SensorDepth_m", pretty, out_dir,
+                           f"{stem}_8_binned_depth_good_only.jpg",
+                           full_coverage=full_coverage, seed=seed,
+                           ylabel=ylabel)
+    _record(records, "8 binned", f"{stem}_8_binned_depth_good_only.jpg", good,
+            f"{included}; " + _binned_note(binned, good, full_coverage))
+
+    fit = _plot_good_only_fit(good, "SensorDepth_m", pretty, out_dir,
+                              f"{stem}_8_reversed_fit_good_only.jpg",
+                              f"{stem}_8", n_boot, seed, ylabel=ylabel)
+    _record(records, "8 logistic", f"{stem}_8_reversed_fit_good_only.jpg",
+            good, f"{included}; " + (_fit_note(fit) if fit
+                                     else "fit failed"))
+    return records
+
+
 # ----- Run summary -----------------------------------------------------------
 
 def _record(records, plot, filename, frame, notes):
@@ -1696,7 +1785,8 @@ def write_run_summary(out_dir, settings, overviews, records):
     table = table.sort_values(
         ["roi", "metric", "plot"], kind="stable",
         key=lambda col: (col.map(order) if col.name == "plot" else
-                         col.map({m: i for i, m in enumerate(METRICS)})
+                         col.map({m: i for i, m in
+                                  enumerate([*METRICS, SENSOR_DEPTH])})
                          if col.name == "metric" else col))
     table.to_csv(os.path.join(out_dir, "plot_summary.csv"), index=False)
 
@@ -1836,6 +1926,10 @@ def main(argv=None):
                                      args.out_dir, args.plotting_position)
             records += [dict(record, roi=roi, metric=metric)
                         for record in made]
+        records += [dict(record, roi=roi, metric=SENSOR_DEPTH) for record in
+                    plot_sensor_depth_by_coverage(
+                        data, roi, args.out_dir, args.n_boot, args.seed,
+                        args.coverage_bin_width, args.full_coverage)]
     write_run_summary(args.out_dir, {
         "Events folder": args.events_dir,
         "Segmentation labels": args.labels or "none (all images 'other')",

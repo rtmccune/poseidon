@@ -405,3 +405,38 @@ def test_feathers_palette_passes_colour_checks():
         for sim in (protan, deutan):
             assert 100 * np.linalg.norm(oklab(sim @ linear(x))
                                         - oklab(sim @ linear(y))) >= 8
+
+
+def test_sensor_depth_plot_is_made_once_per_roi(tmp_path):
+    """Plot 8 bins the sensor depth of well-segmented images by coverage."""
+    labels, sensor = [], []
+    for i in range(4):
+        depth = np.linspace(0.02, 0.2 + 0.02 * i, 12)
+        start = f"2024-0{i + 1}-01"
+        write_accessibility(tmp_path / "events" / f"ev{i}", "road", depth,
+                            100 * depth / depth.max(), start)
+        times = pd.date_range(start, periods=12, freq="6min", tz="UTC")
+        labels += [(f"comparison_CAM_DE_01_{t:%Y%m%d%H%M%S}.jpg", 1)
+                   for t in times]
+        sensor += [(t, d / 0.3048) for t, d in zip(times, depth)]  # feet
+    pd.DataFrame(labels, columns=["Filename", "Segmentation_Score"]).to_csv(
+        tmp_path / "labels.csv", index=False)
+    pd.DataFrame(sensor, columns=["time_UTC", "road_water_level"]).to_csv(
+        tmp_path / "sensor.csv", index=False)
+
+    access_plotter.main(["--events_dir", str(tmp_path / "events"),
+                         "--out_dir", str(tmp_path / "plots"),
+                         "--labels", str(tmp_path / "labels.csv"),
+                         "--sensor", str(tmp_path / "sensor.csv"),
+                         "--n_boot", "20"])
+    plots = {p.name for p in (tmp_path / "plots").iterdir()}
+    for suffix in ("8_binned_depth_good_only.jpg", "8_depth_by_coverage.csv",
+                   "8_reversed_fit_good_only.jpg", "8_fit_summary.csv"):
+        assert f"road_SensorDepth_{suffix}" in plots
+    table = pd.read_csv(tmp_path / "plots" /
+                        "road_SensorDepth_8_depth_by_coverage.csv")
+    assert table["images"].sum() == 48
+    runs = pd.read_csv(tmp_path / "plots" / "plot_summary.csv")
+    sensor_rows = runs[runs["metric"] == "SensorDepth"]
+    assert set(sensor_rows["plot"]) == {"8 binned", "8 logistic"}
+    assert (sensor_rows["events"] == 4).all()

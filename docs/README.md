@@ -263,6 +263,9 @@ point per event.
 | 5 | `_5_depth_exceedance.png` | Share of events whose peak depth reaches at least each depth | Same events as plot 2 |
 | 6 | `_6_sensor_1to1.jpg` | Image depth against the in-situ sensor's depth, with a 1:1 line | Good images with a sensor reading within 5 minutes; image-only events drop out |
 | 7 | `<roi>_<Max/Mean/Median>WSE_7_sensor_1to1.jpg` | The same for water surface elevation | As plot 6 |
+| 8 | `<roi>_SensorDepth_8_binned_depth_good_only.jpg`, `_8_depth_by_coverage.csv`, `_8_reversed_fit_good_only.jpg` (+ fit files) | The 1c plots, but with the in-situ sensor's depth for each image instead of the image-derived depth. Coverage still comes from the image. Made once per ROI, since it doesn't depend on the depth metric | Good images with coverage > 0 and a sensor reading within 5 minutes; image-only events drop out |
+
+Plot 8 compares with 1c: if the sensor's depths by coverage bin match the image-derived ones, the image depths are calibrated against an independent measurement. Bear in mind that the sensor measures at one point while the image metric covers the whole ROI.
 
 Because each plot keeps different images, the counts differ from plot to
 plot; `plot_summary.md` gives them.
