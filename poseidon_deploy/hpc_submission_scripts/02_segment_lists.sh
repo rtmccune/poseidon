@@ -6,9 +6,11 @@
 # Input:  $SITE_DATA/images/daylight_all_events/job_file_lists/
 # Output: segmentation predictions written by segmentation_gym
 #
-# Slurm (GPU partition): submit with `sbatch 02_segment_lists.sh`.
-# --array must match the number of file lists. Use a different GPU type
-# with e.g. `sbatch --gres=gpu:l40s:1 02_segment_lists.sh`.
+# Slurm: submit with `sbatch 02_segment_lists.sh`. --array must match
+# the number of file lists. Runs on idle partner RTX PRO 6000 (Blackwell)
+# GPUs through the short_gpu QOS, which caps each task at 2 hours. Use a
+# different GPU type with e.g. `sbatch --gres=gpu:l40s:1 02_segment_lists.sh`,
+# or the standard queue with `--partition=gpu --qos=gpu --gres=gpu:a100:1`.
 #
 #SBATCH --job-name=seg_batch
 #SBATCH --array=1-32
@@ -16,8 +18,9 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=4G
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:a100:1
+#SBATCH --partition=gpu_partners
+#SBATCH --qos=short_gpu
+#SBATCH --gres=gpu:rtx_6000_pro:1
 #SBATCH --output=job_outputs/seg_batch.%A.%a.out
 #SBATCH --error=job_outputs/seg_batch.%A.%a.err
 
