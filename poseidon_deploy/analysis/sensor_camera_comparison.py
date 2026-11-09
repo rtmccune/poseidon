@@ -504,9 +504,13 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
     -------
     pandas.DataFrame
         ``event``, ``time``, ``source`` (sensor, ``VS1``..., ROI mean),
-        ``depth_m`` (NaN when dry), plus the event's ``flood_start`` and ``flood_end``
-        (unpadded window) and ``sensor_peak`` (time of the sensor's
-        maximum in the flood period; NaT without sensor readings).
+        ``depth_m`` (NaN when dry), plus the event's ``buffer_start``
+        (the event folder's window start, i.e. flood start minus the
+        padding), ``flood_start`` and ``flood_end`` (the window without
+        its padding: the event sheet's start and end) and
+        ``sensor_peak`` (time of the sensor's
+        maximum in the flood period; NaT if the sensor has no readings
+        or never saw water there).
     """
     pad = pd.Timedelta(hours=padding_hours)
     frames = []
@@ -527,7 +531,10 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
                                   & (sensor_window["datetime_utc"] <= end)]
             if flood.empty:
                 flood = sensor_window
-            peak = flood.loc[flood["SensorDepth_m"].idxmax(), "datetime_utc"]
+            # Only a sensor that saw water has a peak to align on
+            if (flood["SensorDepth_m"] > 0).any():
+                peak = flood.loc[flood["SensorDepth_m"].idxmax(),
+                                 "datetime_utc"]
         if vs_obs is not None and len(vs_obs):
             parts.append(vs_obs.assign(
                 depth_m=vs_obs["depth_m"].where(vs_obs["depth_m"] > 0))[
@@ -539,14 +546,16 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
                 "depth_m": roi_obs["MeanDepth"].where(
                     roi_obs["wet"]).to_numpy()}))
         for part in parts:
-            frames.append(part.assign(event=event, flood_start=start,
-                                      flood_end=end, sensor_peak=peak))
+            frames.append(part.assign(event=event, buffer_start=window[0],
+                                      flood_start=start, flood_end=end,
+                                      sensor_peak=peak))
     if not frames:
         return pd.DataFrame(columns=["event", "time", "source", "depth_m",
-                                     "flood_start", "flood_end",
-                                     "sensor_peak"])
+                                     "buffer_start", "flood_start",
+                                     "flood_end", "sensor_peak"])
     series = pd.concat(frames, ignore_index=True)
-    for column in ("time", "flood_start", "flood_end", "sensor_peak"):
+    for column in ("time", "buffer_start", "flood_start", "flood_end",
+                   "sensor_peak"):
         series[column] = as_utc_ns(series[column])
     return series
 
@@ -829,7 +838,7 @@ COMPOSITE_MINUTES = 15
 MIN_COMPOSITE_EVENTS = 3
 
 
-def aligned_series(series, align):
+def aligned_series(series, align, start_origin="buffer"):
     """
     Add hours relative to each event's start or sensor peak.
 
@@ -838,17 +847,24 @@ def aligned_series(series, align):
     series : pandas.DataFrame
         Output of :func:`event_series`.
     align : {'start', 'peak'}
-        ``'start'``: hour 0 is the flood start (every event).
-        ``'peak'``: hour 0 is the in-situ sensor's peak (events with
-        sensor readings only).
+        ``'start'``: hour 0 is the event's start (every event).
+        ``'peak'``: hour 0 is the in-situ sensor's peak (events where
+        the sensor recorded water).
+    start_origin : {'buffer', 'flood'}, optional
+        For ``'start'``: the buffered window's start (the event folder
+        name's first timestamp; default) or the flood start from the
+        event sheet (``padding`` hours later).
 
     Returns
     -------
     pandas.DataFrame
         `series` with ``hours``.
     """
-    origin = series["flood_start"] if align == "start" else series[
-        "sensor_peak"]
+    if align == "start":
+        origin = series["buffer_start" if start_origin == "buffer"
+                        else "flood_start"]
+    else:
+        origin = series["sensor_peak"]
     out = series.assign(hours=(series["time"] - origin).dt.total_seconds()
                         / 3600)
     return out.dropna(subset=["hours"])
@@ -919,7 +935,7 @@ def _series_style(source):
 
 
 def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
-                 title=None, stat="mean", dry="nan"):
+                 title=None, stat="mean", dry="nan", start_origin="buffer"):
     """
     Draw every event's depth series on a shared, event-relative clock.
 
@@ -945,6 +961,10 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         ``'nan'`` leaves dry times out, so lines break when a location
         is dry and the bold line is the typical depth among events wet
         at that time; ``'zero'`` counts dry times as 0 m.
+    start_origin : {'buffer', 'flood'}, optional
+        Hour 0 of the start-aligned plot: the buffered window's start
+        (default; the flood start is then marked at +`padding_hours`)
+        or the flood start itself.
 
     Returns
     -------
@@ -953,7 +973,7 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
     """
     if dry == "zero":
         series = series.assign(depth_m=series["depth_m"].fillna(0.0))
-    aligned = aligned_series(series, align)
+    aligned = aligned_series(series, align, start_origin)
     if aligned.empty:
         return None
     present = set(aligned["source"])
@@ -963,12 +983,18 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         s for s in (ROI_STATS["MeanDepth"],) if s in present]
     table = composites(aligned, stat=stat)
 
+    flood_start_at = None
     if align == "start":
         durations = (aligned["flood_end"] - aligned["flood_start"]
                      ).dt.total_seconds() / 3600
-        xlim = (-padding_hours,
-                float(np.nanpercentile(durations, 90)) + padding_hours)
-        xlabel = "Hours Since Flood Start"
+        span = float(np.nanpercentile(durations, 90)) + padding_hours
+        if start_origin == "buffer":
+            xlim = (0.0, span + padding_hours)
+            xlabel = "Hours Since Buffer Start (event folder window)"
+            flood_start_at = padding_hours
+        else:
+            xlim = (-padding_hours, span)
+            xlabel = "Hours Since Flood Start"
     else:
         reach = float(np.nanpercentile(aligned["hours"].abs(), 95))
         xlim = (-reach, reach)
@@ -994,7 +1020,8 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
                         color=color, alpha=0.25, linewidth=0, zorder=2)
         ax.plot(comp["hours"], comp["center_m"], color=color, linewidth=2.2,
                 zorder=3)
-        ax.set_title(f"{source} ({group['event'].nunique()} events)",
+        wet_events = group.dropna(subset=["depth_m"])["event"].nunique()
+        ax.set_title(f"{source} ({wet_events} events with water)",
                      fontsize=10)
     overlay = flat[len(sources)]
     for source in sources:
@@ -1009,16 +1036,23 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         ax.set_visible(False)
     for ax in flat[:n_panels]:
         ax.axvline(0, color=INK, linewidth=1, linestyle=":", zorder=0)
+        if flood_start_at is not None:
+            ax.axvline(flood_start_at, color=INK, linewidth=1,
+                       linestyle="--", zorder=0)
         ax.set_xlim(xlim)
         ax.set_ylim(0, top)
     for ax in axes[-1]:
         ax.set_xlabel(xlabel)
     for ax in axes[:, 0]:
         ax.set_ylabel("Depth (m)")
-    dry_note = ("Dry times left out: the bold line is the typical depth "
+    origin_note = (f"Dashed line: flood start from the event sheet "
+                   f"({padding_hours:g} h after the buffer start). "
+                   if flood_start_at is not None else "")
+    dry_note = (origin_note + "Dry times left out: the bold line is the typical depth "
                 "among events with water at that time (fewer events near "
                 "onset and recession; counts in _aligned_composites.csv)."
-                if dry == "nan" else "Dry times count as 0 m.")
+                if dry == "nan" else origin_note + "Dry times count as "
+                                                   "0 m.")
     note = (f"Thin lines: individual events. Bold: {stat} across events in "
             f"{COMPOSITE_MINUTES}-min bins (bins with >= "
             f"{MIN_COMPOSITE_EVENTS} events); band: interquartile range. "
@@ -1029,7 +1063,9 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
-    return table.assign(align=align, stat=stat, dry=dry)
+    return table.assign(align=align, stat=stat, dry=dry,
+                        start_origin=start_origin if align == "start"
+                        else "")
 
 
 # ----- Summary ---------------------------------------------------------------
@@ -1181,6 +1217,11 @@ def parse_args(argv=None):
                         default="mean",
                         help="Statistic across events in the aligned "
                              "time series plots.")
+    parser.add_argument("--start_origin", choices=("buffer", "flood"),
+                        default="buffer",
+                        help="Hour 0 of the start-aligned plot: the "
+                             "buffered window's start (event folder name) "
+                             "or the flood start from the event sheet.")
     parser.add_argument("--aligned_dry", choices=("nan", "zero"),
                         default="nan",
                         help="Aligned plots: leave dry times out (nan) or "
@@ -1266,8 +1307,9 @@ def run_image_set(args, sensor, tag, good_timestamps, label):
                        "plot skipped (%s).", label)
     drawn = [plot_aligned(series, align, f"{prefix}_aligned_{align}.jpg",
                           args.padding_hours, f"{title}: aligned on "
-                          f"{'flood start' if align == 'start' else 'in-situ sensor peak'}",
-                          args.aligned_stat, args.aligned_dry)
+                          f"{('buffer start' if args.start_origin == 'buffer' else 'flood start') if align == 'start' else 'in-situ sensor peak'}",
+                          args.aligned_stat, args.aligned_dry,
+                          args.start_origin)
              for align in ("start", "peak")]
     drawn = [table for table in drawn if table is not None]
     if drawn:

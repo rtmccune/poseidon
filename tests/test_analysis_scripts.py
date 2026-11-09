@@ -525,6 +525,12 @@ def test_sensor_camera_comparison_timing_and_states(tmp_path):
     first = series[series["event"].str.contains("0601")]
     assert (first["flood_start"] == pd.Timestamp("2024-06-01 12:30",
                                                  tz="UTC")).all()
+    assert (first["buffer_start"] == pd.Timestamp("2024-06-01 11:00",
+                                                  tz="UTC")).all()
+    from_buffer = sc.aligned_series(first, "start")
+    assert from_buffer["hours"].min() == pytest.approx(1.0)  # 12:00 - 11:00
+    from_flood = sc.aligned_series(first, "start", "flood")
+    assert from_flood["hours"].min() == pytest.approx(-0.5)  # 12:00 - 12:30
     assert (first["sensor_peak"] == pd.Timestamp("2024-06-01 12:30",
                                                  tz="UTC")).all()
     vs = first[first["source"] == "VS1"]
@@ -624,3 +630,20 @@ def test_overlapping_events_count_each_image_once(tmp_path):
     obs = pd.read_csv(out / "road_sensor_camera_all_images_observations.csv")
     roi_max = obs[obs["source"] == "ROI max"]
     assert len(roi_max) == roi_max["time"].nunique() == 11
+
+
+def test_sensor_that_never_saw_water_has_no_peak():
+    """Peak alignment skips events whose sensor stayed dry."""
+    import sensor_camera_comparison as sc
+
+    times = pd.date_range("2024-06-01 12:00", periods=5, freq="6min",
+                          tz="UTC")
+    dry = pd.DataFrame({"datetime_utc": times, "SensorDepth_m": 0.0})
+    roi = pd.DataFrame({"time": times, "wet": True, "MeanDepth": 0.05,
+                        "MinDepth": 0.0, "MedianDepth": 0.05,
+                        "MaxDepth": 0.1})
+    series = sc.event_series(
+        [("DE_01_20240601090000_20240601160000", roi, None, dry)], 3)
+    assert series["sensor_peak"].isna().all()
+    assert sc.aligned_series(series, "peak").empty
+    assert not sc.aligned_series(series, "start").empty
