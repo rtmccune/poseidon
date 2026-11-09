@@ -1,5 +1,7 @@
 """Tests for the analysis scripts and the lock-file converter."""
 
+import itertools
+
 import cv2
 import find_stat_anomalies
 import image_stitcher
@@ -147,6 +149,7 @@ def test_accessibility_plots_are_written_for_each_metric(tmp_path):
     for metric in access_plotter.METRICS:
         for suffix in ("1_evolution_plot.jpg", "1b_reversed_fit.jpg",
                        "1b_fit_summary.csv", "1b_band_calibration.csv",
+                       "1b_binned_depth.jpg", "1b_depth_by_coverage.csv",
                        "2_summary_scatter.png", "3_depth_cdf.png",
                        "4_depth_pdf.png", "5_depth_exceedance.png"):
             assert f"road_{metric}_{suffix}" in plots
@@ -329,7 +332,69 @@ def test_event_peaks_can_use_well_segmented_images_only():
     event = pd.DataFrame({"Coverage": [20.0, 90.0], "MaxDepth": [0.05, 0.4],
                           "MeanDepth": [0.02, 0.2],
                           "MedianDepth": [0.02, 0.2],
-                          "PointColor": ["green", "blue"]})
+                          "Segmentation": ["good", "other"]})
     assert access_plotter.summarize_event(event)["MaxDepth_max"] == 0.4
     good = access_plotter.summarize_event(event, good_only=True)
     assert good["MaxDepth_max"] == 0.05 and good["images"] == 1
+
+
+def test_depth_by_coverage_bins_and_full_coverage():
+    """Bins are [low, high); full coverage is its own bin with CIs."""
+    coverage = np.r_[np.full(12, 5.0), np.full(12, 15.0), np.full(12, 100.0),
+                     [9.999, 98.9, 99.0]]
+    depth = np.r_[np.linspace(0.01, 0.03, 12), np.linspace(0.04, 0.06, 12),
+                  np.linspace(0.10, 0.30, 12), [0.02, 0.09, 0.2]]
+    events = np.r_[np.tile(np.arange(4), 9), [0, 1, 2]]
+    table = access_plotter.depth_by_coverage(coverage, depth, events,
+                                             n_boot=200)
+    by_bin = table.set_index("bin")
+    assert list(by_bin.index) == ["0-<10%", "10-<20%", "90-<99%",
+                                  ">=99% (full)"]
+    assert by_bin.loc["0-<10%", "images"] == 13  # 9.999 is below 10
+    assert by_bin.loc[">=99% (full)", "images"] == 13  # 99.0 is full
+    assert by_bin.loc[">=99% (full)", "full_coverage"]
+    full = by_bin.loc[">=99% (full)"]
+    values = np.r_[np.linspace(0.10, 0.30, 12), 0.2]
+    assert full["median_depth_m"] == pytest.approx(np.median(values))
+    assert full["p10_depth_m"] == pytest.approx(np.percentile(values, 10))
+    assert (full["median_depth_m_ci95_low"] <= full["median_depth_m"]
+            <= full["median_depth_m_ci95_high"])
+    assert by_bin.loc["90-<99%", "low_sample"]  # one image
+    assert not by_bin.loc["0-<10%", "low_sample"]
+
+
+def test_feathers_palette_passes_colour_checks():
+    """Categorical slots keep contrast and CVD separation on white."""
+    import plot_style
+
+    def linear(color):
+        c = np.array([int(color[i:i + 2], 16) for i in (1, 3, 5)]) / 255
+        return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+    def oklab(rgb):
+        lms = np.cbrt(np.array([
+            [0.4122214708, 0.5363325363, 0.0514459929],
+            [0.2119034982, 0.6806995451, 0.1073969566],
+            [0.0883024619, 0.2817188376, 0.6299787005]]) @ np.clip(rgb, 0, 1))
+        return np.array([
+            [0.2104542553, 0.7936177850, -0.0040720468],
+            [1.9779984951, -2.4285922050, 0.4505937099],
+            [0.0259040371, 0.7827717662, -0.8086757660]]) @ lms
+
+    protan = np.array([[0.152286, 1.052583, -0.204868],
+                       [0.114503, 0.786281, 0.099216],
+                       [-0.003882, -0.048116, 1.051998]])
+    deutan = np.array([[0.367322, 0.860646, -0.227968],
+                       [0.280085, 0.672501, 0.047413],
+                       [-0.011820, 0.042940, 0.968881]])
+    slots = plot_style.CATEGORICAL
+    for color in slots:
+        lum = np.array([0.2126, 0.7152, 0.0722]) @ linear(color)
+        assert (1.05) / (lum + 0.05) >= 3.0
+        lightness, a, b = oklab(linear(color))
+        assert 0.43 <= lightness <= 0.77 and np.hypot(a, b) >= 0.10
+    for x, y in itertools.combinations(slots, 2):
+        assert 100 * np.linalg.norm(oklab(linear(x)) - oklab(linear(y))) >= 15
+        for sim in (protan, deutan):
+            assert 100 * np.linalg.norm(oklab(sim @ linear(x))
+                                        - oklab(sim @ linear(y))) >= 8

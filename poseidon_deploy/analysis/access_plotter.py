@@ -5,17 +5,38 @@ Reads every ``<roi>_accessibility_time_series.csv`` (and the matching
 ROI and depth metric, saves:
 
 1.  Coverage vs depth scatter (``_1_evolution_plot.jpg``).
-1b. Depth vs coverage with a logistic fit, median, and 80 % prediction
-    band (all images).
-1c. As 1b using only well-segmented images (needs ``--labels``).
+1b. Depth by coverage bin (all images): ``_1b_binned_depth.jpg`` and
+    the lookup table ``_1b_depth_by_coverage.csv``; and a logistic fit
+    with median and 80 % band (``_1b_reversed_fit.jpg``).
+1c. As 1b using only well-segmented images (needs ``--labels``):
+    ``_1c_binned_depth_good_only.jpg``, ``_1c_depth_by_coverage.csv``
+    and ``_1c_reversed_fit_good_only.jpg``.
 2.  Peak coverage vs peak depth per event.
 3.  CDF, 4. PDF, 5. exceedance probability of peak depth per event.
 6.  Image vs in-situ sensor depth, 1:1 (needs ``--labels`` and
     ``--sensor``).
 7.  Image vs in-situ sensor WSE, 1:1 (same requirements).
 
-Fits (1b, 1c)
--------------
+Depth by coverage (1b, 1c; recommended for prediction)
+------------------------------------------------------
+Images are grouped by roadway coverage into bins of
+``--coverage_bin_width`` percent below ``--full_coverage`` (left
+closed, e.g. [0, 10), ..., [90, 99)), plus one bin for a fully covered
+road (coverage >= ``--full_coverage``). Once the road is fully covered,
+coverage no longer limits depth, so that bin is reported and drawn on
+its own rather than as part of a curve. For each bin the table gives
+the image and event counts; mean and median depth with 95 % confidence
+intervals from resampling whole events (``--n_boot`` times; images of
+one event are not independent); the 10th and 90th percentiles (the
+range of 80 % of observed depths: what to expect at that coverage);
+and the minimum and maximum. Percentiles use linear interpolation
+between order statistics (numpy's default). Bins with fewer than
+:data:`MIN_BIN_IMAGES` images or :data:`MIN_BIN_EVENTS` events are
+flagged ``low_sample`` and drawn hollow. These statistics assume no
+curve shape, so they hold by construction.
+
+Logistic fits (1b, 1c; a smooth summary)
+----------------------------------------
 Depth is modeled as the inverse of a logistic coverage curve,
 ``depth = x0 + ln(c / (L - c)) / k`` (coverage ``c`` in %, ``L`` the
 coverage asymptote, ``k`` the steepness, ``x0`` the depth at half of
@@ -28,8 +49,10 @@ coverage asymptote, ``k`` the steepness, ``x0`` the depth at half of
   coverage and the band holds the middle 80 % of depths. Curves that
   cross are made monotone by sorting at each coverage (Chernozhukov,
   Fernandez-Val and Galichon, 2010, Econometrica 78:1093).
-* The share of images inside the band is checked overall and in
-  coverage bins (``*_band_calibration.csv``).
+* The share of images inside the band and below the median, and the
+  mean depth error of the fit line, are checked overall and in coverage
+  bins (``*_band_calibration.csv``). Departures there mean the logistic
+  shape does not describe the data; use the binned statistics instead.
 * Images of one event are not independent, so uncertainty comes from
   resampling whole events with replacement (``--n_boot`` times): the
   95 % confidence band of the fit line and of each parameter.
@@ -59,9 +82,9 @@ import argparse
 import glob
 import logging
 import os
+import warnings
 from collections import defaultdict
 
-import cmocean
 import matplotlib
 
 matplotlib.use("Agg")  # headless HPC nodes
@@ -70,6 +93,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
 from scipy.optimize import least_squares, minimize  # noqa: E402
 from scipy.stats import gaussian_kde  # noqa: E402
 
@@ -77,6 +101,15 @@ from poseidon_utils.constants import FEET_TO_METERS  # noqa: E402
 from poseidon_utils.logging_utils import setup_logging  # noqa: E402
 from poseidon_utils.naming import extract_timestamp  # noqa: E402
 from poseidon_utils.site_config import load_site_config  # noqa: E402
+
+from plot_style import (  # noqa: E402
+    BLUE,
+    CONTEXT_GREY,
+    INK,
+    ORANGE,
+    SEQUENTIAL_BLUE,
+    apply_style,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,28 +123,25 @@ PRETTY_METRICS = {"MaxDepth": "Maximum Depth", "MeanDepth": "Mean Depth",
 #: Quantiles fitted for the prediction band and median line.
 QUANTILES = (0.1, 0.5, 0.9)
 
-#: Okabe-Ito colors used for reference lines.
-OI_BLACK = "#000000"
-OI_ORANGE = "#E69F00"
-OI_VERMILION = "#D55E00"
+#: Default coverage (%) at or above which the road counts as fully
+#: covered.
+FULL_COVERAGE = 99.0
 
-#: "Coastal Convergence" palette (light/base/dark shades).
-COASTAL_COLORS = {
-    "oceanic_blue": {"light": "#7DA6C6", "base": "#1E6091",
-                     "dark": "#0F3048"},
-    "estuary_teal": {"light": "#81CFC6", "base": "#2A9D8F",
-                     "dark": "#154F48"},
-    "erosion_rust": {"light": "#F3B6A7", "base": "#E76F51",
-                     "dark": "#8E3621"},
-    "dune_gold": {"light": "#F4E1B3", "base": "#E9C46A", "dark": "#9A7822"},
-    "concrete_slate": {"light": "#A3AEB4", "base": "#5C6B73",
-                       "dark": "#2D3539"},
-}
+#: Default coverage bin width (%) below full coverage.
+COVERAGE_BIN_WIDTH = 10.0
 
-#: Legend proxies for good (green) and other (blue) segmentations.
+#: Bins with fewer images or events than these are flagged low_sample.
+MIN_BIN_IMAGES = 10
+MIN_BIN_EVENTS = 3
+
+#: Display colours of the segmentation classes (see plot_style).
+SEGMENTATION_COLORS = {"good": BLUE, "other": CONTEXT_GREY}
+
+#: Legend proxies for good and other segmentations.
 SEGMENTATION_HANDLES = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor=color,
-           markersize=8) for color in ("green", "blue")
+    Line2D([0], [0], marker="o", linestyle="none", markerfacecolor=color,
+           markeredgecolor="none", markersize=7)
+    for color in (SEGMENTATION_COLORS["good"], SEGMENTATION_COLORS["other"])
 ]
 
 
@@ -377,7 +407,7 @@ def load_event(path, good_timestamps, sensor):
     -------
     pandas.DataFrame
         The table with ``Coverage`` (%), WSE columns when available,
-        ``PointColor`` (green = good segmentation) and, when labels
+        ``Segmentation`` (``"good"`` or ``"other"``) and, when labels
         are given, the nearest sensor reading within 5 minutes.
     """
     event = pd.read_csv(path)
@@ -395,15 +425,15 @@ def load_event(path, good_timestamps, sensor):
         event["Coverage"] = np.nan
 
     if not good_timestamps or "Time" not in event:
-        event["PointColor"] = "blue"
+        event["Segmentation"] = "other"
         event["SensorDepth_m"] = np.nan
         return event
 
     event["datetime_utc"] = pd.to_datetime(event["Time"], errors="coerce",
                                            utc=True)
     stamps = event["datetime_utc"].dt.strftime("%Y%m%d%H%M%S")
-    event["PointColor"] = np.where(stamps.isin(good_timestamps), "green",
-                                   "blue")
+    event["Segmentation"] = np.where(stamps.isin(good_timestamps), "good",
+                                     "other")
     if sensor is not None:
         columns = [c for c in ("datetime_utc", "SensorDepth_m",
                                "SensorWSE_m") if c in sensor]
@@ -423,7 +453,7 @@ def summarize_event(event, good_only=False):
     event : pandas.DataFrame
         Output of :func:`load_event`.
     good_only : bool, optional
-        Use only well-segmented (green) images. Default False.
+        Use only well-segmented images. Default False.
 
     Returns
     -------
@@ -431,7 +461,7 @@ def summarize_event(event, good_only=False):
         ``Coverage_max`` and ``<metric>_max`` for each metric present
         (NaN if no image qualifies), and ``images`` used.
     """
-    rows = event[event["PointColor"] == "green"] if good_only else event
+    rows = event[event["Segmentation"] == "good"] if good_only else event
     summary = {"Coverage_max": rows["Coverage"].max(), "images": len(rows)}
     for metric in METRICS:
         if metric in rows:
@@ -441,7 +471,7 @@ def summarize_event(event, good_only=False):
 
 # ----- Plots -----------------------------------------------------------------
 
-def _save(fig, out_dir, filename):
+def _save(fig, out_dir, filename, tight=True):
     """
     Save and close a figure.
 
@@ -453,8 +483,12 @@ def _save(fig, out_dir, filename):
         Output folder.
     filename : str
         Output filename.
+    tight : bool, optional
+        Apply ``tight_layout`` first. Default True; pass False for
+        layouts with fixed panel spacing.
     """
-    fig.tight_layout()
+    if tight:
+        fig.tight_layout()
     fig.savefig(os.path.join(out_dir, filename))
     plt.close(fig)
 
@@ -759,13 +793,14 @@ def fit_depth_from_coverage(coverage, depth, events=None, n_boot=0, seed=0):
         result["below_median_fraction"] = float(below.mean())
         bins = pd.cut(c, CALIBRATION_BINS, include_lowest=True)
         table = pd.DataFrame({"bin": bins, "inside": inside,
-                              "below": below})
+                              "below": below, "error": d - predicted})
         grouped = table.groupby("bin", observed=False)
         result["calibration"] = pd.DataFrame({
             "coverage_bin_pct": [str(b) for b in grouped.size().index],
             "images": grouped.size().to_numpy(),
             "fraction_inside_80pct_band": grouped["inside"].mean().to_numpy(),
             "fraction_at_or_below_median": grouped["below"].mean().to_numpy(),
+            "mean_error_of_fit_m": grouped["error"].mean().to_numpy(),
         })
 
     if ev is not None and n_boot > 0 and len(np.unique(ev)) > 1:
@@ -818,6 +853,273 @@ def write_fit_summary(fit, out_dir, stem):
             index=False)
 
 
+def coverage_bins(bin_width=COVERAGE_BIN_WIDTH, full_coverage=FULL_COVERAGE):
+    """
+    Edges of the partial-coverage bins.
+
+    Parameters
+    ----------
+    bin_width : float, optional
+        Bin width (%). Default :data:`COVERAGE_BIN_WIDTH`.
+    full_coverage : float, optional
+        Coverage (%) from which the road counts as fully covered; the
+        last partial bin ends there. Default :data:`FULL_COVERAGE`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Edges ``0, w, 2w, ..., full_coverage``; bins are ``[low, high)``.
+    """
+    edges = np.arange(0.0, full_coverage, bin_width)
+    return np.append(edges, full_coverage)
+
+
+def depth_by_coverage(coverage, depth, events, bin_width=COVERAGE_BIN_WIDTH,
+                      full_coverage=FULL_COVERAGE, n_boot=1000, seed=0):
+    """
+    Summarize depth in coverage bins, with a separate full-coverage bin.
+
+    See the module docstring for the definitions.
+
+    Parameters
+    ----------
+    coverage, depth : array_like
+        Paired per-image coverage (%) and depth (m).
+    events : array_like
+        Event of each image, for the event bootstrap.
+    bin_width : float, optional
+        Partial-coverage bin width (%).
+    full_coverage : float, optional
+        Coverage (%) from which the road counts as fully covered.
+    n_boot : int, optional
+        Event resamples for the confidence intervals; 0 skips them.
+    seed : int, optional
+        Bootstrap random seed.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per bin with at least one image: ``bin``,
+        ``coverage_low``, ``coverage_high``, ``full_coverage``,
+        ``images``, ``events``, ``mean_depth_m`` and
+        ``median_depth_m`` with ``_ci95_low`` / ``_ci95_high``,
+        ``p10_depth_m``, ``p90_depth_m``, ``min_depth_m``,
+        ``max_depth_m``, ``low_sample``.
+    """
+    c = np.asarray(coverage, dtype=float)
+    d = np.asarray(depth, dtype=float)
+    ev = np.asarray(events)
+    keep = np.isfinite(c) & np.isfinite(d) & (c > 0)
+    c, d, ev = c[keep], d[keep], ev[keep]
+
+    edges = coverage_bins(bin_width, full_coverage)
+    n_partial = len(edges) - 1
+    # Bin index: 0..n_partial-1 for [low, high), n_partial for full
+    bin_of = np.where(c >= full_coverage, n_partial,
+                      np.clip(np.searchsorted(edges, c, side="right") - 1,
+                              0, n_partial - 1))
+    labels = [f"{lo:g}-<{hi:g}%" for lo, hi in zip(edges[:-1], edges[1:])]
+    labels.append(f">={full_coverage:g}% (full)")
+    lows = list(edges[:-1]) + [full_coverage]
+    highs = list(edges[1:]) + [100.0]
+
+    def bin_stats(bins, values):
+        means = np.full(n_partial + 1, np.nan)
+        medians = np.full(n_partial + 1, np.nan)
+        for k in range(n_partial + 1):
+            v = values[bins == k]
+            if v.size:
+                means[k], medians[k] = v.mean(), np.median(v)
+        return means, medians
+
+    means, medians = bin_stats(bin_of, d)
+    ci = None
+    names = np.unique(ev)
+    if n_boot > 0 and len(names) > 1:
+        rng = np.random.default_rng(seed)
+        index = [np.flatnonzero(ev == name) for name in names]
+        boot_means = np.empty((n_boot, n_partial + 1))
+        boot_medians = np.empty((n_boot, n_partial + 1))
+        for b in range(n_boot):
+            drawn = rng.choice(len(names), size=len(names), replace=True)
+            rows = np.concatenate([index[i] for i in drawn])
+            boot_means[b], boot_medians[b] = bin_stats(bin_of[rows], d[rows])
+        # A bin missing from a resample is skipped for that resample;
+        # bins with no images at all are all-NaN and never reported
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            ci = {"mean": np.nanpercentile(boot_means, [2.5, 97.5], axis=0),
+                  "median": np.nanpercentile(boot_medians, [2.5, 97.5],
+                                             axis=0)}
+
+    rows = []
+    for k in range(n_partial + 1):
+        in_bin = bin_of == k
+        if not in_bin.any():
+            continue
+        v = d[in_bin]
+        n_events = len(np.unique(ev[in_bin]))
+        row = {
+            "bin": labels[k], "coverage_low": lows[k],
+            "coverage_high": highs[k], "full_coverage": k == n_partial,
+            "images": int(in_bin.sum()), "events": n_events,
+            "mean_depth_m": means[k], "mean_depth_m_ci95_low": np.nan,
+            "mean_depth_m_ci95_high": np.nan,
+            "median_depth_m": medians[k], "median_depth_m_ci95_low": np.nan,
+            "median_depth_m_ci95_high": np.nan,
+            "p10_depth_m": np.percentile(v, 10),
+            "p90_depth_m": np.percentile(v, 90),
+            "min_depth_m": v.min(), "max_depth_m": v.max(),
+            "low_sample": bool(in_bin.sum() < MIN_BIN_IMAGES
+                               or n_events < MIN_BIN_EVENTS),
+        }
+        if ci is not None:
+            row["mean_depth_m_ci95_low"], row["mean_depth_m_ci95_high"] = (
+                ci["mean"][:, k])
+            row["median_depth_m_ci95_low"], row[
+                "median_depth_m_ci95_high"] = ci["median"][:, k]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _draw_bin_summary(ax, x, row, width, offset):
+    """
+    Draw one bin's 10-90 % range, median and mean with their CIs.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    x : float
+        Bin center on the x-axis.
+    row : pandas.Series
+        One row of :func:`depth_by_coverage`.
+    width : float
+        Width of the 10-90 % box.
+    offset : float
+        Horizontal offset between the median and mean markers.
+    """
+    ax.add_patch(plt.Rectangle(
+        (x - width / 2, row["p10_depth_m"]), width,
+        row["p90_depth_m"] - row["p10_depth_m"], facecolor=BLUE,
+        alpha=0.18, edgecolor="none", zorder=1))
+    hollow = row["low_sample"]
+    for value, low, high, color, marker, dx in (
+            (row["median_depth_m"], row["median_depth_m_ci95_low"],
+             row["median_depth_m_ci95_high"], BLUE, "o", -offset),
+            (row["mean_depth_m"], row["mean_depth_m_ci95_low"],
+             row["mean_depth_m_ci95_high"], ORANGE, "D", offset)):
+        if np.isfinite(low) and np.isfinite(high):
+            ax.errorbar(x + dx, value, yerr=[[value - low], [high - value]],
+                        color=color, linewidth=1.5, capsize=3, zorder=3)
+        ax.plot(x + dx, value, marker=marker, markersize=7,
+                markerfacecolor="white" if hollow else color,
+                markeredgecolor=color, markeredgewidth=1.5, linestyle="none",
+                zorder=4)
+
+
+def plot_depth_by_coverage(data, table, metric, pretty, out_dir, filename,
+                           title=None, full_coverage=FULL_COVERAGE, seed=0):
+    """
+    Draw depth by coverage bin, with full coverage in its own panel.
+
+    Left panel: images (grey), each bin's 10-90 % depth range (shaded),
+    median (blue circles, solid line) and mean (orange diamonds, dashed
+    line) with 95 % event-bootstrap confidence intervals. Right panel:
+    the same for a fully covered road, where coverage no longer limits
+    depth. Hollow markers flag low-sample bins.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Images with ``Coverage`` and `metric`.
+    table : pandas.DataFrame
+        Output of :func:`depth_by_coverage`.
+    metric : str
+        Depth metric column.
+    pretty : str
+        Human-readable metric name for the y-axis.
+    out_dir : str
+        Output folder.
+    filename : str
+        Output image filename.
+    title : str, optional
+        Figure title. Default None (no title).
+    full_coverage : float, optional
+        Coverage (%) from which the road counts as fully covered.
+    seed : int, optional
+        Seed of the horizontal jitter in the full-coverage panel.
+    """
+    images = data.dropna(subset=["Coverage", metric])
+    images = images[images["Coverage"] > 0]
+    partial_images = images[images["Coverage"] < full_coverage]
+    full_images = images[images["Coverage"] >= full_coverage]
+    partial = table[~table["full_coverage"]]
+    full = table[table["full_coverage"]]
+
+    fig, (ax, ax_full) = plt.subplots(
+        1, 2, figsize=(10, 5.5), sharey=True,
+        gridspec_kw={"width_ratios": [5, 1.2], "wspace": 0.06})
+
+    ax.scatter(partial_images["Coverage"], partial_images[metric], s=9,
+               color=CONTEXT_GREY, alpha=0.6, edgecolors="none", zorder=0)
+    if not partial.empty:
+        widths = partial["coverage_high"] - partial["coverage_low"]
+        centers = partial["coverage_low"] + widths / 2
+        for x, width, (_, row) in zip(centers, widths, partial.iterrows()):
+            _draw_bin_summary(ax, x, row, width * 0.9, width * 0.12)
+        ax.plot(centers - widths * 0.12, partial["median_depth_m"],
+                color=BLUE, linewidth=1.8, zorder=2)
+        ax.plot(centers + widths * 0.12, partial["mean_depth_m"],
+                color=ORANGE, linewidth=1.8, linestyle="--", zorder=2)
+    ax.set_xlim(0, full_coverage)
+    ax.set_xlabel("Roadway Coverage (%)")
+    ax.set_ylabel(f"{pretty} on Roadway (m)")
+
+    rng = np.random.default_rng(seed)
+    ax_full.scatter(rng.uniform(-0.35, 0.35, len(full_images)),
+                    full_images[metric], s=9, color=CONTEXT_GREY, alpha=0.6,
+                    edgecolors="none", zorder=0)
+    if not full.empty:
+        row = full.iloc[0]
+        _draw_bin_summary(ax_full, 0.0, row, 0.8, 0.12)
+        ax_full.text(0.5, 0.02, f"n = {row['images']} images,\n"
+                                f"{row['events']} events",
+                     transform=ax_full.transAxes, ha="center", va="bottom",
+                     fontsize=8, color=INK)
+    # Shared depth axis from 0 to the deepest image or bar in either panel
+    tops = [images[metric].max()] + [
+        table[column].max() for column in
+        ("p90_depth_m", "mean_depth_m_ci95_high", "median_depth_m_ci95_high")]
+    ax.set_ylim(0, 1.05 * np.nanmax(tops))
+    ax_full.set_xlim(-0.6, 0.6)
+    ax_full.set_xticks([0.0])
+    ax_full.set_xticklabels([f"Full\n(>={full_coverage:g}%)"])
+    ax_full.tick_params(axis="y", left=False)
+    ax_full.spines["left"].set_visible(False)
+    ax_full.grid(axis="x", visible=False)
+
+    handles = [
+        Line2D([0], [0], marker="o", linestyle="none", color=CONTEXT_GREY,
+               markersize=5, label="Images"),
+        Patch(facecolor=BLUE, alpha=0.18, label="10th-90th percentile"),
+        Line2D([0], [0], color=BLUE, marker="o", markersize=7,
+               label="Median depth (95% CI)"),
+        Line2D([0], [0], color=ORANGE, marker="D", markersize=6,
+               linestyle="--", label="Mean depth (95% CI)"),
+    ]
+    if table["low_sample"].any():
+        handles.append(Line2D(
+            [0], [0], marker="o", linestyle="none", markersize=7,
+            markerfacecolor="white", markeredgecolor=INK,
+            label=f"Hollow: <{MIN_BIN_IMAGES} images or "
+                  f"<{MIN_BIN_EVENTS} events"))
+    ax.legend(handles=handles, loc="upper left", fontsize=8)
+    if title:
+        fig.suptitle(title)
+    _save(fig, out_dir, filename, tight=False)
+
+
 def plot_one_to_one(sens, img, cov, x_label, y_label, trend_color,
                     out_dir, filename):
     """
@@ -838,12 +1140,13 @@ def plot_one_to_one(sens, img, cov, x_label, y_label, trend_color,
     """
     fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
     sizes = 40 + (cov / 100) * 100  # gentle size scaling with coverage
-    scatter = ax.scatter(sens, img, c=cov, s=sizes, cmap=cmocean.cm.deep,
-                         alpha=0.8, edgecolors="k", linewidth=0.5)
+    scatter = ax.scatter(sens, img, c=cov, s=sizes, cmap=SEQUENTIAL_BLUE,
+                         vmin=0, vmax=100, alpha=0.85, edgecolors="white",
+                         linewidth=0.5)
 
     lo = min(img.min(), sens.min()) - 0.05
     hi = max(img.max(), sens.max()) + 0.05
-    ax.plot([lo, hi], [lo, hi], color=OI_BLACK, linestyle="--", linewidth=2,
+    ax.plot([lo, hi], [lo, hi], color=INK, linestyle="--", linewidth=1.5,
             label="1:1 Line")
     if len(img) > 1:
         try:
@@ -868,7 +1171,9 @@ def plot_one_to_one(sens, img, cov, x_label, y_label, trend_color,
 
 
 def plot_point_metrics(data, roi, metric, has_labels, sensor,
-                       sensor_wse_floor, out_dir, n_boot=0, seed=0):
+                       sensor_wse_floor, out_dir, n_boot=0, seed=0,
+                       bin_width=COVERAGE_BIN_WIDTH,
+                       full_coverage=FULL_COVERAGE):
     """
     Draw the per-image plots (1, 1b, 1c, 6, 7) for one metric.
 
@@ -892,14 +1197,19 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
         Event bootstrap resamples for the fits. Default 0 (none).
     seed : int, optional
         Bootstrap random seed. Default 0.
+    bin_width : float, optional
+        Coverage bin width (%) of the binned plots.
+    full_coverage : float, optional
+        Coverage (%) from which the road counts as fully covered.
     """
     pretty = PRETTY_METRICS[metric]
+    point_colors = data["Segmentation"].map(SEGMENTATION_COLORS)
     stem = f"{roi}_{metric}"
 
     # 1: coverage vs depth
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.scatter(data[metric], data["Coverage"], alpha=0.5,
-               c=data["PointColor"])
+    ax.scatter(data[metric], data["Coverage"], alpha=0.6, s=12,
+               c=point_colors, edgecolors="none")
     ax.set_xlabel(f"{metric} on Roadway (m)")
     ax.set_ylabel("Roadway Percentage Covered (%)")
     ax.set_title(f"Roadway Coverage vs {metric}\n({roi})")
@@ -912,16 +1222,14 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
     # 1b: depth vs coverage with logistic fit (all data)
     fit_data = data.dropna(subset=["Coverage", metric])
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.scatter(data["Coverage"], data[metric], alpha=0.5,
-               c=data["PointColor"])
+    ax.scatter(data["Coverage"], data[metric], alpha=0.6, s=12,
+               c=point_colors, edgecolors="none")
     if len(fit_data) > 3:
         try:
             fit = fit_depth_from_coverage(fit_data["Coverage"],
                                           fit_data[metric],
                                           fit_data["event"], n_boot, seed)
-            _draw_depth_fit(ax, fit, line_color="black", band_color="red",
-                            band_alpha=0.15, median_color="purple",
-                            ci_color="gray")
+            _draw_depth_fit(ax, fit)
             write_fit_summary(fit, out_dir, f"{stem}_1b")
         except (RuntimeError, ValueError) as err:
             logger.warning("Logistic fit failed for %s (all): %s", stem, err)
@@ -936,18 +1244,42 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
     ax.legend(handles, labels)
     _save(fig, out_dir, f"{stem}_1b_reversed_fit.jpg")
 
+    # 1b: depth by coverage bin (all images)
+    binned = depth_by_coverage(fit_data["Coverage"], fit_data[metric],
+                               fit_data["event"], bin_width, full_coverage,
+                               n_boot, seed)
+    if not binned.empty:
+        binned.to_csv(os.path.join(out_dir,
+                                   f"{stem}_1b_depth_by_coverage.csv"),
+                      index=False)
+        plot_depth_by_coverage(fit_data, binned, metric, pretty, out_dir,
+                               f"{stem}_1b_binned_depth.jpg",
+                               title=f"{pretty} by Roadway Coverage (all "
+                                     f"images; {roi})",
+                               full_coverage=full_coverage, seed=seed)
+
     # 1c: as 1b, well-segmented images only
-    good = fit_data[fit_data["PointColor"] == "green"]
+    good = fit_data[fit_data["Segmentation"] == "good"]
     if len(good) > 3:
         _plot_good_only_fit(good, metric, pretty, out_dir,
                             f"{stem}_1c_reversed_fit_good_only.jpg",
                             f"{stem}_1c", n_boot, seed)
+        binned = depth_by_coverage(good["Coverage"], good[metric],
+                                   good["event"], bin_width, full_coverage,
+                                   n_boot, seed)
+        if not binned.empty:
+            binned.to_csv(os.path.join(out_dir,
+                                       f"{stem}_1c_depth_by_coverage.csv"),
+                          index=False)
+            plot_depth_by_coverage(good, binned, metric, pretty, out_dir,
+                                   f"{stem}_1c_binned_depth_good_only.jpg",
+                                   full_coverage=full_coverage, seed=seed)
     elif has_labels:
         logger.info("Too few well-segmented points for plot 1c (%s).", stem)
 
     if sensor is None:
         return
-    green = data[data["PointColor"] == "green"]
+    green = data[data["Segmentation"] == "good"]
 
     # 6: image vs sensor depth
     if "SensorDepth_m" in data:
@@ -956,7 +1288,7 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
             plot_one_to_one(rows["SensorDepth_m"].values, rows[metric].values,
                             rows["Coverage"].values,
                             "In-Situ Sensor Depth (m)",
-                            f"Image Derived {pretty} (m)", OI_VERMILION,
+                            f"Image Derived {pretty} (m)", ORANGE,
                             out_dir, f"{stem}_6_sensor_1to1.jpg")
 
     # 7: image vs sensor WSE
@@ -971,14 +1303,16 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
                             rows["Coverage"].values,
                             "In-Situ Sensor WSE (m)",
                             f"Image Derived {pretty.replace('Depth', 'WSE')}"
-                            f" (m)", OI_ORANGE, out_dir,
+                            f" (m)", ORANGE, out_dir,
                             f"{roi}_{wse_metric}_7_sensor_1to1.jpg")
 
 
-def _draw_depth_fit(ax, fit, line_color, band_color, band_alpha,
-                    median_color, ci_color):
+def _draw_depth_fit(ax, fit):
     """
     Draw a depth-from-coverage fit with its bands.
+
+    Blue: fit line and its 95 % confidence band. Orange (dashed):
+    median. Light blue: the 80 % prediction band.
 
     Parameters
     ----------
@@ -986,28 +1320,25 @@ def _draw_depth_fit(ax, fit, line_color, band_color, band_alpha,
         Axes with coverage on x and depth on y.
     fit : dict
         Output of :func:`fit_depth_from_coverage`.
-    line_color, band_color, median_color, ci_color : str
-        Colors of the fit line, 80 % band, median, and confidence band.
-    band_alpha : float
-        Opacity of the 80 % band.
     """
     c, curves = fit["c"], fit["quantiles"]
     if 0.1 in curves and 0.9 in curves:
         inside = fit["band_fraction"]
         note = "" if np.isnan(inside) else f", {100 * inside:.0f}% of images"
-        ax.fill_between(c, curves[0.1], curves[0.9], color=band_color,
-                        alpha=band_alpha,
+        ax.fill_between(c, curves[0.1], curves[0.9], color=BLUE, alpha=0.12,
+                        linewidth=0,
                         label=f"80% Prediction Band (0.1-0.9 quantiles{note})")
     if fit["curve_ci"] is not None:
-        ax.fill_between(c, *fit["curve_ci"], color=ci_color, alpha=0.45,
+        ax.fill_between(c, *fit["curve_ci"], color=BLUE, alpha=0.35,
+                        linewidth=0,
                         label=f"95% CI of Fit ({fit['n_boot']} event "
                               f"resamples)")
-    ax.plot(c, fit["fit"], color=line_color, linewidth=2.5,
+    ax.plot(c, fit["fit"], color=BLUE, linewidth=2,
             label=f"Logistic Fit ($R^2$={fit['r2']:.2f}, "
                   f"RMSE={fit['rmse']:.3f} m)")
     if 0.5 in curves:
-        ax.plot(c, curves[0.5], linestyle="--", color=median_color,
-                linewidth=2, label="Median Depth (0.5 Quantile)")
+        ax.plot(c, curves[0.5], linestyle="--", color=ORANGE, linewidth=2,
+                label="Median Depth (0.5 Quantile)")
 
 
 def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
@@ -1035,18 +1366,12 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         Bootstrap random seed. Default 0.
     """
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.scatter(good["Coverage"], good[metric], alpha=0.6,
-               c=COASTAL_COLORS["concrete_slate"]["light"],
-               edgecolors="none", label="Segmentation Data")
+    ax.scatter(good["Coverage"], good[metric], alpha=0.6, s=12,
+               c=CONTEXT_GREY, edgecolors="none", label="Images")
     try:
         fit = fit_depth_from_coverage(good["Coverage"], good[metric],
                                       good["event"], n_boot, seed)
-        _draw_depth_fit(ax, fit,
-                        line_color=COASTAL_COLORS["oceanic_blue"]["dark"],
-                        band_color=COASTAL_COLORS["estuary_teal"]["light"],
-                        band_alpha=0.35,
-                        median_color=COASTAL_COLORS["estuary_teal"]["base"],
-                        ci_color=COASTAL_COLORS["oceanic_blue"]["light"])
+        _draw_depth_fit(ax, fit)
         write_fit_summary(fit, out_dir, stem)
     except (RuntimeError, ValueError) as err:
         logger.warning("Logistic fit failed for %s: %s", filename, err)
@@ -1093,9 +1418,8 @@ def plot_event_peaks(peaks, roi, metric, basis, out_dir,
 
     # 2: peak coverage vs peak depth
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.scatter(values, valid["Coverage_max"],
-               c=COASTAL_COLORS["oceanic_blue"]["base"], alpha=0.7,
-               edgecolors="black", s=40)
+    ax.scatter(values, valid["Coverage_max"], color=BLUE, alpha=0.8,
+               edgecolors="white", linewidths=0.8, s=45)
     ax.set_xlabel(label)
     ax.set_ylabel("Peak Roadway Percentage Covered (%)")
     ax.set_title(f"Peak Coverage vs Peak {metric} per Event\n{subtitle}")
@@ -1111,15 +1435,16 @@ def plot_event_peaks(peaks, roi, metric, basis, out_dir,
     position = ("i/n" if plotting_position == "empirical"
                 else "Weibull i/(n+1)")
     for probs, where, color, marker, y_label, title, suffix in (
-            (cdf, "post", "blue", "bo",
+            (cdf, "post", BLUE, "o",
              "Cumulative Probability P(X <= x)", "CDF of Peak",
              "3_depth_cdf"),
-            (exceedance, "pre", "red", "ro",
+            (exceedance, "pre", BLUE, "o",
              "Exceedance Probability P(X >= x)",
              "Exceedance Probability of Peak", "5_depth_exceedance")):
         fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-        ax.step(ordered, probs, where=where, color=color, linewidth=2)
-        ax.plot(ordered, probs, marker, alpha=0.7)
+        ax.step(ordered, probs, where=where, color=color, linewidth=1.8)
+        ax.plot(ordered, probs, marker, color=color, markersize=6,
+                linestyle="none")
         ax.set_xlabel(label)
         ax.set_ylabel(f"{y_label} [{position}]")
         ax.set_title(f"{title} {metric}\n{subtitle}")
@@ -1129,13 +1454,13 @@ def plot_event_peaks(peaks, roi, metric, basis, out_dir,
     # 4: PDF as a density histogram and a boundary-corrected KDE
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
     edges, rule = density_bins(values)
-    ax.hist(values, bins=edges, density=True, color="skyblue",
-            edgecolor="black", alpha=0.9,
+    ax.hist(values, bins=edges, density=True, color=BLUE, alpha=0.35,
+            edgecolor="white", linewidth=2,
             label=f"Density Histogram ({len(edges) - 1} {rule} bins)")
     kde = reflected_kde(values)
     if kde is not None:
-        ax.plot(*kde, color=COASTAL_COLORS["oceanic_blue"]["dark"],
-                linewidth=2, label="Gaussian KDE (Scott bandwidth, "
+        ax.plot(*kde, color=ORANGE, linewidth=2,
+                label="Gaussian KDE (Scott bandwidth, "
                                    "reflected at 0 m)")
     ax.set_xlabel(label)
     ax.set_ylabel("Probability Density (1/m)")
@@ -1233,6 +1558,13 @@ def parse_args(argv=None):
                              "confidence bands (0 to skip).")
     parser.add_argument("--seed", type=int, default=0,
                         help="Bootstrap random seed.")
+    parser.add_argument("--coverage_bin_width", type=float,
+                        default=COVERAGE_BIN_WIDTH,
+                        help="Coverage bin width (%%) of the binned depth "
+                             "plots and tables.")
+    parser.add_argument("--full_coverage", type=float, default=FULL_COVERAGE,
+                        help="Coverage (%%) from which the road counts as "
+                             "fully covered.")
     parser.add_argument("--plotting_position",
                         choices=("empirical", "weibull"),
                         default="empirical",
@@ -1251,6 +1583,7 @@ def main(argv=None):
         Command-line arguments. Default reads ``sys.argv``.
     """
     setup_logging()
+    apply_style()
     args = parse_args(argv)
     if args.sensor_wse_floor is None and args.site:
         args.sensor_wse_floor = load_site_config(args.site).sensor_wse_floor
@@ -1280,7 +1613,8 @@ def main(argv=None):
             logger.info("Plotting %s - %s", roi, metric)
             plot_point_metrics(data, roi, metric, has_labels, sensor,
                                args.sensor_wse_floor, args.out_dir,
-                               args.n_boot, args.seed)
+                               args.n_boot, args.seed,
+                               args.coverage_bin_width, args.full_coverage)
             plot_event_peaks(peaks, roi, metric, basis, args.out_dir,
                              args.plotting_position)
     logger.info("Plots saved to %s", args.out_dir)

@@ -7,14 +7,19 @@
 #
 # Input:  $EVENT_DIR/<event>/<roi>_*_time_series.csv
 #         $SITE_DATA/segmentation_labels.csv (Filename, Segmentation_Score)
-#             colors well-segmented images green; without it, the
+#             marks well-segmented images (blue); without it, the
 #             good-segmentation and sensor plots are skipped
 #         $SITE_DATA/sensor_data_comparison.csv (optional) in-situ
 #             readings, e.g. from naiads/run_pull_event_series.py with
 #             --buffer_hours 3 --output $SITE_DATA/sensor_data_comparison.csv
-# Output: $SITE_DATA/plots/ (figures, and for plots 1b/1c the
-#         *_fit_summary.csv and *_band_calibration.csv files behind
-#         every number in the legends; see analysis/access_plotter.py)
+# Output: $SITE_DATA/plots/, per ROI and depth metric:
+#         *_1c_binned_depth_good_only.jpg and *_1c_depth_by_coverage.csv
+#             depth by coverage bin, with a separate full-coverage bin;
+#             the CSV is the depth lookup table (1b: all images)
+#         *_1c_reversed_fit_good_only.jpg with *_fit_summary.csv and
+#             *_band_calibration.csv (logistic summary and its checks)
+#         event-peak plots 2-5 and sensor comparisons 6-7
+#         See analysis/access_plotter.py for every definition.
 #
 #SBATCH --job-name=plot_access
 #SBATCH --time=00:30:00

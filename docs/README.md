@@ -216,6 +216,27 @@ Stage 11 summarizes both ROIs and runs
 - bias, MAE, RMSE and correlation of coverage and depth;
 - the overlap (IoU) of the two footprints, with a figure.
 
+### Roadway coverage and depth plots
+
+`99_road_access_plots.sh` runs `poseidon_deploy/analysis/access_plotter.py`.
+To predict depth from roadway coverage, use
+`<roi>_<metric>_1c_depth_by_coverage.csv`, which is built from
+well-segmented images (`1b` uses all images). It groups images into 10%
+coverage bins below 99% and puts a fully covered road in its own bin,
+because depth can keep rising after coverage reaches 100%. For each bin
+it gives:
+- the image and event counts;
+- the mean and median depth, each with a 95% confidence interval from
+  resampling whole events;
+- the 10th and 90th percentiles of depth;
+- a `low_sample` flag for bins with few images or events.
+
+The `_1c_binned_depth_good_only.jpg` figure shows the same table. The
+logistic fit (`_1c_reversed_fit_good_only.jpg`) is a smooth summary.
+Check its `_band_calibration.csv` before relying on it. Colors come from
+`poseidon_deploy/analysis/plot_style.py`, a colour-blind-checked
+selection from the feathers palettes.
+
 ### Events without sensor data
 
 Stage 05 needs `flood_events.csv`, the sensor readings inside each event.

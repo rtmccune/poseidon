@@ -50,6 +50,8 @@ from poseidon_utils.logging_utils import setup_logging  # noqa: E402
 from poseidon_utils.site_config import load_site_config  # noqa: E402
 from poseidon_utils.zarr_io import array_names, open_zip_group  # noqa: E402
 
+from plot_style import BLUE, INK, MAGENTA, ORANGE, apply_style  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 #: Accessibility CSV suffix written by stage 10.
@@ -281,20 +283,22 @@ def plot_footprints(mask_a, mask_b, background, roi_a, roi_b, path):
     path : str
         Output PNG.
     """
+    colors = (BLUE, ORANGE, MAGENTA)  # a only, b only, both
     overlay = np.zeros((*mask_a.shape, 4))
-    overlay[mask_a & ~mask_b] = (0.85, 0.2, 0.2, 0.55)
-    overlay[mask_b & ~mask_a] = (0.2, 0.4, 0.9, 0.55)
-    overlay[mask_a & mask_b] = (0.6, 0.2, 0.7, 0.55)
+    for mask, color in zip((mask_a & ~mask_b, mask_b & ~mask_a,
+                            mask_a & mask_b), colors):
+        overlay[mask] = (*matplotlib.colors.to_rgb(color), 0.6)
 
     fig, ax = plt.subplots(figsize=(8, 8))
     if background is not None:
         ax.imshow(background)
     ax.imshow(overlay)
-    handles = [plt.Rectangle((0, 0), 1, 1, color=c[:3], alpha=0.7)
-               for c in ((0.85, 0.2, 0.2), (0.2, 0.4, 0.9), (0.6, 0.2, 0.7))]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=color, alpha=0.75)
+               for color in colors]
     ax.legend(handles, [f"{roi_a} only", f"{roi_b} only", "both"],
               loc="lower right")
     ax.set_axis_off()
+    ax.grid(False)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)
@@ -320,8 +324,9 @@ def plot_scatter(timesteps, column, roi_a, roi_b, path):
     top = float(np.nanmax([a.max(), b.max(), 0.0])) or 1.0
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    ax.scatter(a, b, s=8, alpha=0.5)
-    ax.plot([0, top], [0, top], "k--", linewidth=1, label="1:1")
+    ax.scatter(a, b, s=12, alpha=0.6, color=BLUE, edgecolors="none")
+    ax.plot([0, top], [0, top], color=INK, linestyle="--", linewidth=1.5,
+            label="1:1")
     ax.set_xlabel(f"{column} ({unit}), {roi_a}")
     ax.set_ylabel(f"{column} ({unit}), {roi_b}")
     ax.set_xlim(0, top * 1.05)
@@ -391,6 +396,7 @@ def main(argv=None):
         Process exit code: 1 if no event has both ROIs, else 0.
     """
     setup_logging()
+    apply_style()
     args = parse_args(argv)
     event_dirs = sorted(glob.glob(os.path.join(args.events_dir, "*", "")))
     paired = [pair_event(os.path.normpath(d), args.roi_a, args.roi_b)
