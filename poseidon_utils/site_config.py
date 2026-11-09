@@ -105,6 +105,9 @@ class SiteConfig:
     roi_json : str or None
         LabelMe JSON of the roadway region of interest, relative to the
         repository root unless absolute.
+    camera_roi_json : str or None
+        LabelMe JSON of a roadway polygon drawn on an original camera
+        image, relative to the repository root unless absolute.
     sensor_wse_floor : float or None
         Lower clip (m) applied to in-situ sensor WSE in comparison
         plots.
@@ -123,6 +126,7 @@ class SiteConfig:
     lidar_file: str | None = None
     basemap: str | None = None
     roi_json: str | None = None
+    camera_roi_json: str | None = None
     sensor_wse_floor: float | None = None
 
     @property
@@ -235,6 +239,7 @@ def site_from_dict(data):
         lidar_file=data.get("lidar_file"),
         basemap=data.get("basemap"),
         roi_json=data.get("roi_json"),
+        camera_roi_json=data.get("camera_roi_json"),
         sensor_wse_floor=data.get("sensor_wse_floor"),
     )
 

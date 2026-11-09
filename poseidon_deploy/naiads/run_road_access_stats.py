@@ -7,7 +7,7 @@ represent the time until the next image; the first image takes the
 spacing of the second.
 
 The ROI is ``--transect_name`` or, if omitted, the stem of the site
-config's ``roi_json``.
+config's ``roi_json`` (``camera_roi_json`` with ``--roi_view camera``).
 
 Example
 -------
@@ -181,18 +181,23 @@ def main(argv=None):
     parser.add_argument("--site", default=None,
                         help="Site whose roi_json names the ROI when "
                              "--transect_name is omitted.")
+    parser.add_argument("--roi_view", choices=("rectified", "camera"),
+                        default="rectified",
+                        help="With --site: use the site's roi_json "
+                             "(rectified) or camera_roi_json (camera).")
     parser.add_argument("--resolution", type=float, default=0.05,
                         help="Grid spacing in meters.")
     parser.add_argument("--output_csv", default=None,
                         help="Also save the summary to this CSV.")
     args = cli_common.start(parser, argv)
     name = args.transect_name
+    key = "camera_roi_json" if args.roi_view == "camera" else "roi_json"
     if name is None and args.site:
-        roi_json = cli_common.load_site(args).roi_json
+        roi_json = getattr(cli_common.load_site(args), key)
         if roi_json:
             name = os.path.splitext(os.path.basename(roi_json))[0]
     if name is None:
-        cli_common.fail("Pass --transect_name, or --site with a roi_json.")
+        cli_common.fail(f"Pass --transect_name, or --site with a {key}.")
 
     summary = summarize_roadway_stats(args.event_dir, name, args.resolution)
     if summary is None:

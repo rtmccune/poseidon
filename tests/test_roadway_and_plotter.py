@@ -2,15 +2,19 @@
 
 import json
 
+import cv2
 import numpy as np
 import pandas as pd
 import pytest
+from conftest import NADIR_EXTRINSICS, NADIR_INTRINSICS, make_grid
 from pyproj import Transformer
 
 from poseidon_core.depth_map_plotter import DepthMapPlotter
+from poseidon_core.image_rectifier import ImageRectifier
 from poseidon_core.roadway_analyzer import (
     RoadwayAnalyzer,
     accessibility_table,
+    roi_pixels_from_camera_labelme,
     roi_pixels_from_labelme,
     sample_roi,
 )
@@ -172,6 +176,105 @@ def test_roadway_event_without_depth_maps_reports_failure(tmp_path):
         ("roadway", "polygon", [[0, 0], [3, 0], [3, 3]])])
     assert RoadwayAnalyzer(tmp_path / "empty_event", roi
                            ).process_single_event() is False
+
+
+# ----- Camera-view ROI -------------------------------------------------------
+# The nadir test camera sees grid cell (row r, col c) of the 40 x 50,
+# 0.25 m test grid at pixel u = 100 + 5 c, v = 250 - 5 r of its
+# 400 x 300 image, so the square u, v in [148, 202] covers grid columns
+# 10-20 and grid rows 10-20 (121 cells).
+CAMERA_SQUARE = [[148, 148], [202, 148], [202, 202], [148, 202]]
+
+
+@pytest.fixture
+def nadir_rectifier():
+    """
+    CPU rectifier for the nadir test camera over the 40 x 50 grid.
+
+    Returns
+    -------
+    ImageRectifier
+        Rectifier instance.
+    """
+    return ImageRectifier(NADIR_INTRINSICS, NADIR_EXTRINSICS, *make_grid(),
+                          use_gpu=False)
+
+
+def write_camera_labelme(path, shapes, width=400, height=300):
+    """
+    Write a LabelMe JSON drawn on a camera image of a given size.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Output path.
+    shapes : list of tuple
+        ``(label, shape_type, points)`` for each shape.
+    width, height : int, optional
+        Image size recorded in the JSON. Defaults match the test camera.
+
+    Returns
+    -------
+    pathlib.Path
+        The written path.
+    """
+    write_labelme(path, shapes)
+    data = json.loads(path.read_text())
+    data.update(imageWidth=width, imageHeight=height)
+    path.write_text(json.dumps(data))
+    return path
+
+
+def test_camera_polygon_maps_to_the_cells_that_see_it(tmp_path,
+                                                      nadir_rectifier):
+    """A camera polygon becomes the grid cells sampling its pixels."""
+    roi = write_camera_labelme(tmp_path / "cam.json", [
+        ("roadway", "polygon", CAMERA_SQUARE)])
+    coords = roi_pixels_from_camera_labelme(roi, "roadway", nadir_rectifier)
+    assert len(coords) == 11 * 11
+    # Image orientation: grid rows 10-20 are image rows 39-20 .. 39-10
+    assert set(coords[:, 0]) == set(range(19, 30))
+    assert set(coords[:, 1]) == set(range(10, 21))
+
+
+def test_camera_polygon_checks_shape_and_image_size(tmp_path,
+                                                    nadir_rectifier):
+    """Lines and JSONs drawn on other image sizes are rejected."""
+    line = write_camera_labelme(tmp_path / "line.json", [
+        ("roadway", "line", [[150, 150], [200, 200]])])
+    with pytest.raises(ValueError, match="polygons"):
+        roi_pixels_from_camera_labelme(line, "roadway", nadir_rectifier)
+    rectified = write_camera_labelme(tmp_path / "rect.json", [
+        ("roadway", "polygon", CAMERA_SQUARE)], width=50, height=40)
+    with pytest.raises(ValueError, match="drawn on a 50 x 40 image"):
+        roi_pixels_from_camera_labelme(rectified, "roadway",
+                                       nadir_rectifier)
+    outside = write_camera_labelme(tmp_path / "off.json", [
+        ("roadway", "polygon", [[0, 0], [20, 0], [20, 20], [0, 20]])])
+    with pytest.raises(ValueError, match="No grid cells"):
+        roi_pixels_from_camera_labelme(outside, "roadway", nadir_rectifier)
+
+
+def test_camera_roi_event_statistics_and_mask(tmp_path, nadir_rectifier):
+    """Stage 10 with a camera ROI counts the rectified cells only."""
+    event = tmp_path / "TS_01_event"
+    depth = np.full((40, 50), np.nan)
+    depth[10:15, :] = 0.2  # southern 5 of the ROI's 11 grid rows
+    write_depth_store(event, {TIMES[0]: depth})
+    roi = write_camera_labelme(tmp_path / "cam_road.json", [
+        ("roadway", "polygon", CAMERA_SQUARE)])
+
+    analyzer = RoadwayAnalyzer(event, roi, rectifier=nadir_rectifier)
+    assert analyzer.geom_type == "camera_polygon"
+    assert analyzer.process_single_event()
+    access = pd.read_csv(event / "cam_road_accessibility_time_series.csv")
+    assert access.loc[0, "TotalPixels"] == 121
+    assert access.loc[0, "FloodedPixels"] == 5 * 11
+
+    mask = cv2.imread(str(event / "cam_road_roi_mask.png"),
+                      cv2.IMREAD_GRAYSCALE)
+    assert mask.shape == (40, 50) and (mask > 0).sum() == 121
+    assert mask[39 - 15, 15] == 255 and mask[39 - 5, 15] == 0  # north up
 
 
 # ----- DepthMapPlotter -------------------------------------------------------

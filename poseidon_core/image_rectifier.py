@@ -123,6 +123,37 @@ class ImageRectifier:
         image = self._load_image(image_path, labels)
         return self._get_pixels(image)
 
+    def rectify_array(self, image):
+        """
+        Rectify an in-memory image or mask onto the grid.
+
+        Uses the same grid-to-pixel lookup as :meth:`merge_rectify`, so
+        a mask drawn on a camera image lands on exactly the grid cells
+        that sample those pixels.
+
+        Parameters
+        ----------
+        image : array_like
+            ``(H, W)`` or ``(H, W, C)`` array the size of the camera
+            image (``NV`` rows by ``NU`` columns).
+
+        Returns
+        -------
+        numpy.ndarray
+            ``uint8`` array of shape ``(rows, cols, C)`` in grid
+            orientation (row 0 south); 0 outside the camera view.
+
+        Raises
+        ------
+        ValueError
+            If `image` is not 2-D or 3-D.
+        """
+        image = np.asarray(image)
+        if image.ndim not in (2, 3):
+            raise ValueError("image must be 2-D or 3-D")
+        xp = get_xp(self.use_gpu)
+        return to_numpy(self._get_pixels(xp.asarray(image)))
+
     def merge_rectify_folder(self, folder_path, zarr_store_path,
                              labels=False):
         """
