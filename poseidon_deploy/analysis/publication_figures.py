@@ -11,10 +11,7 @@ Figure 1, ``<roi>_pub_fig1_aligned_timing``
     sheet's start is dashed at +``--padding_hours``) for the in-situ
     sensor, each virtual sensor and the ROI mean. Dry times are left
     out, so each line is the mean depth among events with water at
-    that time (15-min bins with >= 3 events). Below it, VS1 is compared
-    with the in-situ sensor image by image: the depth error where both
-    show water (bias, MAE, RMSE, r with event-resampled 95 % CIs) and
-    how often they agree on whether water is present.
+    that time (15-min bins with >= 3 events).
     (b), (c) Onset lead and end lag per event: minutes water appeared
     at each camera location before it reached the in-situ sensor, and
     stayed after it left, with the mean across events marked and
@@ -27,8 +24,15 @@ Figure 2, ``<roi>_pub_fig2_binned_depth``
     roadway coverage bin, from the same images (well segmented, coverage
     > 0, a sensor reading within ``--match_minutes``). Markers are bin
     means with event-resampled 95 % CIs; shading spans the 10th-90th
-    percentiles; a fully covered road has its own panel. Below it, the
-    error of each image metric against the sensor (image - sensor).
+    percentiles; a fully covered road has its own panel.
+
+Statistics, ``<roi>_pub_metrics.md``
+    The numbers to quote, kept off the figures: VS1 against the in-situ
+    sensor image by image (depth error where both show water, and how
+    often they agree on whether water is present); the mean and median
+    onset lead and end lag per location; and each image depth metric
+    against the sensor for figure 2 (bias, MAE, RMSE, r; image -
+    sensor), all with event-resampled 95 % CIs.
 
 The in-situ sensor counts as wet above ``--sensor_wet_ft`` (default the
 event detection start threshold, 0.02 ft).
@@ -118,26 +122,27 @@ def _interval(stats, key, digits=3):
         f"{value} [{low:.{digits}f}, {high:.{digits}f}]")
 
 
-def _agreement_line(name, stats):
+#: Plain-language names used in the figures.
+DISPLAY_NAMES = {sc.SENSOR: "In-Situ Sensor",
+                 sc.ROI_STATS["MeanDepth"]: "Mean on Roadway",
+                 "ROI": "Anywhere on Roadway"}
+
+
+def _display(source):
     """
-    One line of error statistics for a figure.
+    Plain-language name of a source for figure labels.
 
     Parameters
     ----------
-    name : str
-        What is compared (e.g. ``"VS1 - in-situ sensor"``).
-    stats : dict
-        Output of :func:`access_plotter.paired_agreement`.
+    source : str
+        Internal source name.
 
     Returns
     -------
     str
-        The formatted line.
+        Display name (virtual sensors keep ``VS1``...).
     """
-    return (f"{name}: bias {_interval(stats, 'bias_m')} m;  MAE "
-            f"{_interval(stats, 'mae_m')} m;  RMSE "
-            f"{_interval(stats, 'rmse_m')} m;  r "
-            f"{_interval(stats, 'pearson_r', 2)}")
+    return DISPLAY_NAMES.get(source, source)
 
 
 # ----- Figure 1 --------------------------------------------------------------
@@ -248,7 +253,7 @@ def _draw_means_panel(ax, series, padding_hours):
         ax.plot(comp["hours"], comp["center_m"],
                 color=sc._series_style(source), linewidth=2.2,
                 linestyle="--" if source == sc.SENSOR else "-",
-                label=source)
+                label=_display(source))
     ax.axvline(padding_hours, color=INK, linewidth=1, linestyle=":",
                label="Event start (event sheet)")
     durations = (aligned["flood_end"] - aligned["flood_start"]
@@ -300,16 +305,15 @@ def _draw_timing_panel(ax, timing, column, ylabel, seed):
         mean = values.mean()
         ax.plot([i - 0.3, i + 0.3], [mean, mean], color=INK, linewidth=2.2,
                 zorder=3)
-        ax.annotate(f"{mean:.0f} min", (i, mean), xytext=(0, 5),
-                    textcoords="offset points", ha="center", va="bottom",
-                    fontsize=8, color=INK, zorder=4,
-                    bbox={"boxstyle": "round,pad=0.15", "facecolor": "white",
-                          "edgecolor": "none", "alpha": 0.85})
+        # Label the mean above the plotting area so it covers no points
+        ax.text(i, 1.01, f"Mean\n{mean:.0f} min", ha="center",
+                va="bottom", fontsize=8, color=INK,
+                transform=ax.get_xaxis_transform())
         rows.append({"source": source, "events": len(values),
                      "mean_min": mean, "median_min": values.median()})
     ax.axhline(0, color=INK, linewidth=1, linestyle="--", zorder=1)
     ax.set_xticks(range(len(sources)))
-    ax.set_xticklabels([f"{'ROI' if s == 'ROI' else s}\n"
+    ax.set_xticklabels([f"{_display(s).replace('Anywhere on ', 'Anywhere on' + chr(10))}\n"
                         f"({int((usable['source'] == s).sum())} events)"
                         for s in sources], fontsize=8)
     ax.set_xlim(-0.6, len(sources) - 0.4)
@@ -333,36 +337,30 @@ def figure_aligned_timing(series, timing, sensor, args, stem):
         Parsed arguments.
     stem : str
         Output filename stem.
+
+    Returns
+    -------
+    dict
+        ``vs1`` (:func:`vs1_agreement`), and ``onset`` and ``end`` (per
+        source event counts, means and medians) for the metrics file.
     """
     fig = plt.figure(figsize=(11, 9))
-    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=0.55,
+    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=0.45,
                             wspace=0.25)
     ax_a = fig.add_subplot(grid[0, :])
     ax_b = fig.add_subplot(grid[1, 0])
-    ax_c = fig.add_subplot(grid[1, 1])
+    ax_c = fig.add_subplot(grid[1, 1], sharey=ax_b)  # one minutes scale
 
     composites = _draw_means_panel(ax_a, series, args.padding_hours)
     pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
                              args.sensor_wet_ft * FEET_TO_METERS,
                              args.padding_hours)
     agreement = vs1_agreement(pairs, args.n_boot, args.seed)
-    if "bias_m" in agreement:
-        text = (f"VS1 - in-situ sensor where both show water "
-                f"({agreement['both_wet']} images, {agreement['events']} "
-                f"events; 95% CI):\n"
-                + _agreement_line("Depth", agreement)
-                + f"\nWater present at both: {agreement['both_wet']}; VS1 only: "
-              f"{agreement['vs1_only_wet']}; sensor only: "
-              f"{agreement['sensor_only_wet']}; neither: "
-              f"{agreement['both_dry']} (of {agreement['paired_images']} "
-              f"images with a sensor reading)")
-        ax_a.text(0.0, -0.2, text, transform=ax_a.transAxes, ha="left",
-                  va="top", fontsize=8, color=INK)
-
     rows = _draw_timing_panel(ax_b, timing, "onset_lead_min",
                               "Onset Lead Time (minutes)", args.seed)
     rows_c = _draw_timing_panel(ax_c, timing, "end_lag_min",
                                 "End Lag Time (minutes)", args.seed + 1)
+    ax_c.tick_params(axis="y", labelleft=True)
     for ax, letter in ((ax_a, "a"), (ax_b, "b"), (ax_c, "c")):
         ax.text(-0.06 if ax is ax_a else -0.14, 1.02, f"({letter})",
                 transform=ax.transAxes, fontsize=11, fontweight="bold",
@@ -380,14 +378,17 @@ def figure_aligned_timing(series, timing, sensor, args, stem):
         index=False)
     timing.to_csv(os.path.join(args.out_dir, f"{stem}_timing.csv"),
                   index=False)
+    return {"vs1": agreement, "onset": rows, "end": rows_c}
 
 
 # ----- Figure 2 --------------------------------------------------------------
 
 #: Figure 2 series: label, column, colour, marker, line style.
-DEPTH_SOURCES = (("Image mean depth", "MeanDepth", BLUE, "o", "-"),
-                 ("Image maximum depth", "MaxDepth", MAGENTA, "s", "-."),
-                 ("In-situ sensor depth", "SensorDepth_m", ORANGE, "D",
+DEPTH_SOURCES = (("Mean Roadway Depth in Field of View", "MeanDepth", BLUE,
+                  "o", "-"),
+                 ("Maximum Roadway Depth in Field of View", "MaxDepth",
+                  MAGENTA, "s", "-."),
+                 ("In-Situ Sensor Depth", "SensorDepth_m", ORANGE, "D",
                   "--"))
 
 
@@ -442,8 +443,10 @@ def figure_binned_depth(data, args, stem):
 
     Returns
     -------
-    int
-        1 if the figure was made, else 0.
+    dict or None
+        ``images``, ``events`` and ``agreements`` (per image metric,
+        :func:`access_plotter.paired_agreement`) for the metrics file,
+        or None if the figure was not made.
     """
     paired = data[(data["Segmentation"] == "good")
                   & (data["Coverage"] > 0)].dropna(
@@ -451,7 +454,7 @@ def figure_binned_depth(data, args, stem):
     if len(paired) <= 3:
         logger.warning("Only %d paired images; figure 2 skipped.",
                        len(paired))
-        return 0
+        return None
     tables = [ap.depth_by_coverage(paired["Coverage"], paired[column],
                                    paired["event"], args.coverage_bin_width,
                                    args.full_coverage, args.n_boot,
@@ -510,18 +513,11 @@ def figure_binned_depth(data, args, stem):
                   f"<{ap.MIN_BIN_EVENTS} events"))
     ax.legend(handles=handles, loc="upper left", fontsize=8)
 
-    agreements = {}
-    lines = [f"Image - in-situ sensor for the same {len(paired)} images "
-             f"({paired['event'].nunique()} events), with 95% CI:"]
-    for name, column, *_ in DEPTH_SOURCES[:2]:
-        stats = ap.paired_agreement(paired[column], paired["SensorDepth_m"],
-                                    paired["event"], args.n_boot, args.seed)
-        agreements[name] = stats
-        lines.append(_agreement_line(name.replace("Image ", "").capitalize(),
-                                     stats))
-    ax.text(0.0, -0.17, "\n".join(lines), transform=ax.transAxes, ha="left",
-            va="top", fontsize=8, color=INK)
     _save(fig, args.out_dir, stem)
+
+    agreements = {name: ap.paired_agreement(
+        paired[column], paired["SensorDepth_m"], paired["event"],
+        args.n_boot, args.seed) for name, column, *_ in DEPTH_SOURCES[:2]}
 
     pd.concat([t.assign(depth_source=name)
                for (name, *_), t in zip(DEPTH_SOURCES, tables)],
@@ -530,7 +526,89 @@ def figure_binned_depth(data, args, stem):
     pd.DataFrame([dict(stats, image_metric=name)
                   for name, stats in agreements.items()]).to_csv(
         os.path.join(args.out_dir, f"{stem}_agreement.csv"), index=False)
-    return 1
+    return {"images": len(paired), "events": paired["event"].nunique(),
+            "agreements": agreements}
+
+
+# ----- Metrics file ----------------------------------------------------------
+
+def write_metrics(path, args, fig1, fig2):
+    """
+    Write the statistics behind both figures as Markdown.
+
+    Parameters
+    ----------
+    path : str
+        Output ``.md`` file.
+    args : argparse.Namespace
+        Parsed arguments.
+    fig1, fig2 : dict or None
+        Return values of :func:`figure_aligned_timing` and
+        :func:`figure_binned_depth`.
+    """
+    def stats_rows(stats):
+        return [f"| Bias (m) | {_interval(stats, 'bias_m')} |",
+                f"| MAE (m) | {_interval(stats, 'mae_m')} |",
+                f"| RMSE (m) | {_interval(stats, 'rmse_m')} |",
+                f"| Pearson r | {_interval(stats, 'pearson_r', 2)} |"]
+
+    lines = ["# Publication figure statistics", "",
+             f"Generated {pd.Timestamp.now(tz='UTC'):%Y-%m-%d %H:%M} UTC by "
+             "`publication_figures.py` for ROI "
+             f"`{args.roi}`. Well-segmented images only. Errors are "
+             "camera minus in-situ sensor; values in brackets are 95% "
+             f"confidence intervals from {args.n_boot} event resamples. The "
+             f"in-situ sensor counts as wet above {args.sensor_wet_ft:g} ft.",
+             ""]
+    if fig1:
+        vs1 = fig1["vs1"]
+        lines += ["## Figure 1: event-aligned depths and timing", "",
+                  "### VS1 against the in-situ sensor", ""]
+        if "bias_m" in vs1:
+            lines += [f"Depth error where both show water "
+                      f"({vs1['both_wet']} images, {vs1['events']} events):",
+                      "", "| Statistic | VS1 - sensor |", "|---|---|"]
+            lines += stats_rows(vs1)
+        lines += ["", f"Whether water is present, over "
+                  f"{vs1['paired_images']} images with a sensor reading "
+                  f"within {args.match_minutes:g} min:", "",
+                  "| Both | VS1 only | Sensor only | Neither |",
+                  "|---:|---:|---:|---:|",
+                  f"| {vs1['both_wet']} | {vs1['vs1_only_wet']} | "
+                  f"{vs1['sensor_only_wet']} | {vs1['both_dry']} |", "",
+                  "### Panels (b) and (c): minutes relative to the in-situ "
+                  "sensor", "",
+                  "| Location | Events | Onset lead, mean | Onset lead, "
+                  "median | End lag, mean | End lag, median |",
+                  "|---|---:|---:|---:|---:|---:|"]
+        ends = {row["source"]: row for row in fig1["end"]}
+        for row in fig1["onset"]:
+            end = ends.get(row["source"], {})
+            lines.append(
+                f"| {_display(row['source'])} | {row['events']} | "
+                f"{row['mean_min']:.1f} | {row['median_min']:.1f} | "
+                f"{end.get('mean_min', np.nan):.1f} | "
+                f"{end.get('median_min', np.nan):.1f} |")
+        lines += ["", "Events already wet at the edge of their image window "
+                  "are included; their true lead or lag may be longer "
+                  "(flags in `_fig1_aligned_timing_timing.csv`).", ""]
+    if fig2:
+        lines += ["## Figure 2: depth by roadway coverage", "",
+                  f"Same {fig2['images']} images ({fig2['events']} events) "
+                  f"for every series.", "",
+                  "| Statistic | " + " | ".join(
+                      f"{name} - sensor" for name in fig2["agreements"])
+                  + " |", "|---|" + "---|" * len(fig2["agreements"])]
+        for key, label, digits in (("bias_m", "Bias (m)", 3),
+                                   ("mae_m", "MAE (m)", 3),
+                                   ("rmse_m", "RMSE (m)", 3),
+                                   ("pearson_r", "Pearson r", 2)):
+            lines.append(f"| {label} | " + " | ".join(
+                _interval(stats, key, digits)
+                for stats in fig2["agreements"].values()) + " |")
+        lines.append("")
+    with open(path, "w") as handle:
+        handle.write("\n".join(lines))
 
 
 # ----- CLI -------------------------------------------------------------------
@@ -624,15 +702,14 @@ def main(argv=None):
     _, timing, series = sc.collect(
         args.events_dir, args.roi, sensor, good, args.match_minutes,
         args.padding_hours, wet_m=args.sensor_wet_ft * FEET_TO_METERS)
-    made = 0
+    fig1 = fig2 = None
     if series.empty:
         logger.warning("No well-segmented camera series for ROI '%s' "
                        "(event folders named <sensor>_<start>_<end>); "
                        "figure 1 skipped.", args.roi)
     else:
-        figure_aligned_timing(series, timing, sensor, args,
-                              f"{prefix}_fig1_aligned_timing")
-        made += 1
+        fig1 = figure_aligned_timing(series, timing, sensor, args,
+                                     f"{prefix}_fig1_aligned_timing")
 
     paths = ap.find_roi_csvs(args.events_dir).get(args.roi, [])
     if paths:
@@ -641,11 +718,15 @@ def main(argv=None):
         keep = ap.nearest_event_mask(
             loaded["event"], pd.to_datetime(loaded["Time"], utc=True),
             args.padding_hours)
-        made += figure_binned_depth(loaded[keep].reset_index(drop=True),
-                                    args, f"{prefix}_fig2_binned_depth")
+        fig2 = figure_binned_depth(loaded[keep].reset_index(drop=True),
+                                   args, f"{prefix}_fig2_binned_depth")
     else:
         logger.warning("No accessibility CSVs for ROI '%s'; figure 2 "
                        "skipped.", args.roi)
+    if fig1 or fig2:
+        write_metrics(os.path.join(args.out_dir, f"{prefix}_metrics.md"),
+                      args, fig1, fig2)
+    made = sum(f is not None for f in (fig1, fig2))
     logger.info("%d publication figures written to %s", made, args.out_dir)
     return 0 if made else 1
 

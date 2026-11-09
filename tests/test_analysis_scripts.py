@@ -716,5 +716,9 @@ def test_publication_figures_from_events(tmp_path):
     # VS1 reads 10 % deeper than the sensor wherever both show water
     assert vs1["bias_m"].item() > 0 and vs1["sensor_only_wet"].item() == 0
     agreement = pd.read_csv(out / "road_pub_fig2_binned_depth_agreement.csv")
-    assert agreement["image_metric"].tolist() == ["Image mean depth",
-                                                  "Image maximum depth"]
+    assert agreement["image_metric"].tolist() == [
+        "Mean Roadway Depth in Field of View",
+        "Maximum Roadway Depth in Field of View"]
+    metrics = (out / "road_pub_metrics.md").read_text()
+    assert "VS1 against the in-situ sensor" in metrics
+    assert "Anywhere on Roadway" in metrics and "Bias (m)" in metrics

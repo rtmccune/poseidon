@@ -336,20 +336,27 @@ coverage are cut off.
 `poseidon_deploy/analysis/publication_figures.py`. It uses well-segmented
 images only and writes to `data/<site>/publication/`. Each figure is saved
 as PNG and PDF, without a title (captions describe them), with CSVs of
-every number shown.
+every number shown. The statistics to quote are kept off the figures, in
+`<roi>_pub_metrics.md`:
+- VS1 against the in-situ sensor: the depth error, and how often they
+  agree on whether water is present;
+- the mean and median onset lead and end lag for each location;
+- for figure 2, the error of each depth metric against the sensor.
+
+Each statistic comes with an event-resampled 95% CI.
 
 - **`<roi>_pub_fig1_aligned_timing`:**
   - **(a)** Mean water depth across events against hours since the start
     of the window, for the in-situ sensor, VS1–VSn and the ROI mean. The
-    event sheet's start is dotted at +3 h. Below the panel, VS1 is compared
-    with the in-situ sensor image by image: the depth error where both show
-    water (bias, MAE, RMSE, r with 95% CIs), and how often they agree on
-    whether there is water.
+    event sheet's start is dotted at +3 h. The legend reads In-Situ Sensor,
+    VS1–VSn and Mean on Roadway.
   - **(b), (c)** Onset lead and end lag time per event and camera
-    location, with the mean labelled in minutes.
+    location, with the mean labelled in minutes above each column. Both
+    panels share one y-axis, and "Anywhere on Roadway" is the whole ROI.
 - **`<roi>_pub_fig2_binned_depth`:** image mean depth, image maximum depth
-  and in-situ sensor depth by coverage bin, from the same images, with the
-  error of each image metric against the sensor.
+  and in-situ sensor depth by coverage bin, from the same images. The
+  legend calls the two image metrics Mean Roadway Depth in Field of View
+  and Maximum Roadway Depth in Field of View.
 
 In both the comparison and publication scripts, the in-situ sensor counts
 as wet above 0.02 ft (`--sensor_wet_ft`). That is the event detection
