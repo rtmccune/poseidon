@@ -263,6 +263,7 @@ point per event.
 | 5 | `_5_depth_exceedance.png` | Share of events whose peak depth reaches at least each depth | Same events as plot 2 |
 | 6 | `_6_sensor_1to1.jpg` | Image depth against the in-situ sensor's depth, with a 1:1 line | Good images with a sensor reading within 5 minutes; image-only events drop out |
 | 7 | `<roi>_<Max/Mean/Median>WSE_7_sensor_1to1.jpg` | The same for water surface elevation | As plot 6 |
+| 9 | `_9_image_vs_sensor_binned_good_only.jpg`, `_9_depth_by_coverage.csv` | Plots 1c and 8 combined in one figure: in each coverage bin, the image-derived depth (blue) sits next to the sensor depth (orange), each with its median, 95% confidence interval and 10th–90th percentile box. One per depth metric | The same images for both: good images with coverage > 0 and a sensor reading within 5 minutes |
 | 8 | `<roi>_SensorDepth_8_binned_depth_good_only.jpg`, `_8_depth_by_coverage.csv`, `_8_reversed_fit_good_only.jpg` (+ fit files) | The 1c plots, but with the in-situ sensor's depth for each image instead of the image-derived depth. Coverage still comes from the image. Made once per ROI, since it doesn't depend on the depth metric | Good images with coverage > 0 and a sensor reading within 5 minutes; image-only events drop out |
 
 Plot 8 compares with 1c: if the sensor's depths by coverage bin match the image-derived ones, the image depths are calibrated against an independent measurement. Bear in mind that the sensor measures at one point while the image metric covers the whole ROI.
@@ -317,7 +318,9 @@ The file endings are:
 | `_summary.md`, `_summary.csv` | Counts per source: observations, events, events without the sensor, median depth, share while the sensor was dry, median onset lead and end lag, share where the camera was first or later, and camera-only events |
 | `_observations.csv`, `_timing.csv`, `_event_peaks.csv` | The data behind the figures |
 
-The 1c plots and plot 8 of one ROI share a y-axis, from 0 to just above
+Virtual sensors keep one colour in every figure: the depth maps, the per-event time series and these comparisons. The colours are VS1 olive, VS2 gold and VS3 pink, set by order in the site config and defined in `poseidon_utils/palette.py`. On the maps, each marker is also labelled `VS1`, `VS2` and so on, so you can match the figures to the sensors' places on the road.
+
+The 1c plots, plot 8 and plot 9 of one ROI share a y-axis, from 0 to just above
 the deepest well-segmented image or sensor depth, so they can be compared
 directly. On that shared axis, logistic curves that dip below 0 m near 0%
 coverage are cut off.

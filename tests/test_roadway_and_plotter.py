@@ -422,6 +422,22 @@ def test_sensor_markers_are_placed_at_pixel_centers(plot_event):
                 Ignored style options.
             """
             self.points = list(zip(xs, ys))
+            self.color = kwargs.get("color")
+
+        def annotate(self, text, xy, **kwargs):
+            """
+            Record the label text.
+
+            Parameters
+            ----------
+            text : str
+                Label.
+            xy : tuple of float
+                Labelled point.
+            **kwargs
+                Ignored style options.
+            """
+            self.label = text
 
     axes = Recorder()
     plotter._plot_sensor_locations(axes, plotter.sensor_marker_path,
@@ -431,3 +447,6 @@ def test_sensor_markers_are_placed_at_pixel_centers(plot_event):
                                        always_xy=True)
     expected = to_mercator.transform(712160 + 4.5 * 0.5, 33100 + 2.5 * 0.5)
     np.testing.assert_allclose(axes.points[0], expected, atol=1e-6)
+    # Colour and label follow the sensor's position in the site config
+    from poseidon_utils.palette import VIRTUAL_SENSOR_COLORS
+    assert axes.label == "VS1" and axes.color == VIRTUAL_SENSOR_COLORS[0]

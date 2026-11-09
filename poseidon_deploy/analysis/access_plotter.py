@@ -16,6 +16,10 @@ ROI and depth metric, saves:
 6.  Image vs in-situ sensor depth, 1:1 (needs ``--labels`` and
     ``--sensor``).
 7.  Image vs in-situ sensor WSE, 1:1 (same requirements).
+9.  1c and 8 on one figure: per coverage bin, the image-derived depth
+    (blue) beside the sensor depth (orange) for the same images
+    (``_9_image_vs_sensor_binned_good_only.jpg`` and
+    ``_9_depth_by_coverage.csv``; needs ``--labels`` and ``--sensor``).
 8.  As 1c, but with the in-situ sensor's depth for each well-segmented
     image instead of the image-derived depth (``<roi>_SensorDepth_8_*``;
     once per ROI, as it does not depend on the image depth metric; same
@@ -141,7 +145,7 @@ MIN_BIN_EVENTS = 3
 #: Order of plots in the run summary.
 PLOT_ORDER = ("1", "1b binned", "1b logistic", "1c binned", "1c logistic",
               "1c", "2", "3", "4", "5", "6", "7", "8 binned", "8 logistic",
-              "8")
+              "8", "9")
 
 #: Name used for the sensor depth in plot 8 filenames and the summary.
 SENSOR_DEPTH = "SensorDepth"
@@ -1758,6 +1762,170 @@ def shared_depth_limits(data):
     return (0.0, 1.05 * float(top)) if np.isfinite(top) and top > 0 else None
 
 
+def _draw_paired_bin(ax, x, width, rows):
+    """
+    Draw two depth sources side by side in one coverage bin.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    x : float
+        Bin center.
+    width : float
+        Bin width on the x-axis.
+    rows : list of tuple
+        ``(row, color, marker)`` per source, left to right; ``row`` is
+        one row of :func:`depth_by_coverage`.
+    """
+    box = width * 0.36
+    for k, (row, color, marker) in enumerate(rows):
+        center = x + (k - 0.5) * width * 0.42
+        ax.add_patch(plt.Rectangle(
+            (center - box / 2, row["p10_depth_m"]), box,
+            row["p90_depth_m"] - row["p10_depth_m"], facecolor=color,
+            alpha=0.18, edgecolor="none", zorder=1))
+        low, high = (row["median_depth_m_ci95_low"],
+                     row["median_depth_m_ci95_high"])
+        value = row["median_depth_m"]
+        if np.isfinite(low) and np.isfinite(high):
+            ax.errorbar(center, value, yerr=[[value - low], [high - value]],
+                        color=color, linewidth=1.5, capsize=3, zorder=3)
+        ax.plot(center, value, marker=marker, markersize=7, linestyle="none",
+                markerfacecolor="white" if row["low_sample"] else color,
+                markeredgecolor=color, markeredgewidth=1.5, zorder=4)
+
+
+def plot_image_vs_sensor_by_coverage(data, roi, metric, out_dir, n_boot=0,
+                                     seed=0, bin_width=COVERAGE_BIN_WIDTH,
+                                     full_coverage=FULL_COVERAGE,
+                                     shared_ylim=None):
+    """
+    Draw plot 9: image-derived and sensor depth by coverage, together.
+
+    Uses the same images for both sources: well-segmented images with
+    coverage > 0, the image metric, and a sensor reading within 5 min.
+    Each coverage bin shows the image-derived median (blue circles,
+    solid line) beside the sensor median (orange diamonds, dashed),
+    each with its 95 % event-bootstrap confidence interval and its
+    10th-90th percentile box; full coverage has its own panel.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        All images of one ROI.
+    roi : str
+        ROI name.
+    metric : str
+        Image depth metric.
+    out_dir : str
+        Output folder.
+    n_boot : int, optional
+        Event bootstrap resamples.
+    seed : int, optional
+        Bootstrap random seed.
+    bin_width : float, optional
+        Coverage bin width (%).
+    full_coverage : float, optional
+        Coverage (%) from which the road counts as fully covered.
+    shared_ylim : tuple of float, optional
+        Depth-axis limits shared with 1c and 8.
+
+    Returns
+    -------
+    list of dict
+        Run-summary records.
+    """
+    records = []
+    stem = f"{roi}_{metric}"
+    filename = f"{stem}_9_image_vs_sensor_binned_good_only.jpg"
+    if "SensorDepth_m" not in data:
+        _record(records, "9", "(not made)", data.iloc[0:0],
+                "no sensor CSV, or no segmentation labels")
+        return records
+    paired = data[(data["Segmentation"] == "good")
+                  & (data["Coverage"] > 0)].dropna(
+        subset=["Coverage", metric, "SensorDepth_m"])
+    if len(paired) <= 3:
+        _record(records, "9", "(not made)", paired,
+                f"only {len(paired)} well-segmented images with a sensor "
+                f"reading")
+        return records
+
+    pretty = PRETTY_METRICS[metric]
+    sources = (
+        (f"Image {pretty.lower()}", metric, BLUE, "o", "-"),
+        ("In-situ sensor depth", "SensorDepth_m", ORANGE, "D", "--"))
+    tables = [depth_by_coverage(paired["Coverage"], paired[column],
+                                paired["event"], bin_width, full_coverage,
+                                n_boot, seed)
+              for _, column, *_ in sources]
+    pd.concat([table.assign(depth_source=name)
+               for (name, *_), table in zip(sources, tables)],
+              ignore_index=True).to_csv(
+        os.path.join(out_dir, f"{stem}_9_depth_by_coverage.csv"),
+        index=False)
+
+    fig, (ax, ax_full) = plt.subplots(
+        1, 2, figsize=(10, 5.5), sharey=True,
+        gridspec_kw={"width_ratios": [5, 1.2], "wspace": 0.06})
+    partial = [t[~t["full_coverage"]].reset_index(drop=True) for t in tables]
+    full = [t[t["full_coverage"]] for t in tables]
+    widths = partial[0]["coverage_high"] - partial[0]["coverage_low"]
+    centers = partial[0]["coverage_low"] + widths / 2
+    for i, (x, width) in enumerate(zip(centers, widths)):
+        _draw_paired_bin(ax, x, width, [
+            (table.iloc[i], color, marker)
+            for table, (_, _, color, marker, _) in zip(partial, sources)])
+    for k, (table, (_, _, color, _, style)) in enumerate(
+            zip(partial, sources)):
+        ax.plot(centers + (k - 0.5) * widths * 0.42, table["median_depth_m"],
+                color=color, linestyle=style, linewidth=1.8, zorder=2)
+    if all(len(t) for t in full):
+        _draw_paired_bin(ax_full, 0.0, 1.0, [
+            (table.iloc[0], color, marker)
+            for table, (_, _, color, marker, _) in zip(full, sources)])
+        row = full[0].iloc[0]
+        ax_full.text(0.5, 0.02, f"n = {row['images']} images,\n"
+                                f"{row['events']} events",
+                     transform=ax_full.transAxes, ha="center", va="bottom",
+                     fontsize=8, color=INK)
+
+    ax.set_xlim(0, full_coverage)
+    ax.set_xlabel("Roadway Coverage (%)")
+    ax.set_ylabel("Depth on Roadway (m)")
+    tops = [t[c].max() for t in tables
+            for c in ("p90_depth_m", "median_depth_m_ci95_high")]
+    ax.set_ylim(shared_ylim or (0, 1.05 * np.nanmax(tops)))
+    ax_full.set_xlim(-0.6, 0.6)
+    ax_full.set_xticks([0.0])
+    ax_full.set_xticklabels([f"Full\n(>={full_coverage:g}%)"])
+    ax_full.tick_params(axis="y", left=False)
+    ax_full.spines["left"].set_visible(False)
+    ax_full.grid(axis="x", visible=False)
+
+    handles = [Line2D([0], [0], color=color, marker=marker, linestyle=style,
+                      markersize=7, label=f"{name}: median (95% CI)")
+               for name, _, color, marker, style in sources]
+    handles += [Patch(facecolor=color, alpha=0.18,
+                      label=f"{name}: 10th-90th percentile")
+                for name, _, color, _, _ in sources]
+    if any(t["low_sample"].any() for t in tables):
+        handles.append(Line2D(
+            [0], [0], marker="o", linestyle="none", markersize=7,
+            markerfacecolor="white", markeredgecolor=INK,
+            label=f"Hollow: <{MIN_BIN_IMAGES} images or "
+                  f"<{MIN_BIN_EVENTS} events"))
+    ax.legend(handles=handles, loc="upper left", fontsize=8)
+    _save(fig, out_dir, filename, tight=False)
+
+    _record(records, "9", filename, paired,
+            "well-segmented images with coverage > 0 and a sensor reading "
+            "within 5 min; image metric and sensor depth from the same "
+            "images; " + _binned_note(tables[0], paired, full_coverage))
+    return records
+
+
 # ----- Run summary -----------------------------------------------------------
 
 def _record(records, plot, filename, frame, notes):
@@ -1994,6 +2162,9 @@ def main(argv=None):
                 shared_ylim)
             made += plot_event_peaks(peaks, roi, metric, basis,
                                      args.out_dir, args.plotting_position)
+            made += plot_image_vs_sensor_by_coverage(
+                data, roi, metric, args.out_dir, args.n_boot, args.seed,
+                args.coverage_bin_width, args.full_coverage, shared_ylim)
             records += [dict(record, roi=roi, metric=metric)
                         for record in made]
         records += [dict(record, roi=roi, metric=SENSOR_DEPTH) for record in

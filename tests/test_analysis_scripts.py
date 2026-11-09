@@ -433,6 +433,16 @@ def test_sensor_depth_plot_is_made_once_per_roi(tmp_path):
     for suffix in ("8_binned_depth_good_only.jpg", "8_depth_by_coverage.csv",
                    "8_reversed_fit_good_only.jpg", "8_fit_summary.csv"):
         assert f"road_SensorDepth_{suffix}" in plots
+    for metric in access_plotter.METRICS:
+        assert f"road_{metric}_9_image_vs_sensor_binned_good_only.jpg" in plots
+    paired = pd.read_csv(tmp_path / "plots" /
+                         "road_MaxDepth_9_depth_by_coverage.csv")
+    assert set(paired["depth_source"]) == {"Image maximum depth",
+                                           "In-situ sensor depth"}
+    # Same images for both sources, bin by bin
+    counts = paired.pivot_table(index="bin", columns="depth_source",
+                                values="images")
+    assert (counts.iloc[:, 0] == counts.iloc[:, 1]).all()
     table = pd.read_csv(tmp_path / "plots" /
                         "road_SensorDepth_8_depth_by_coverage.csv")
     assert table["images"].sum() == 48

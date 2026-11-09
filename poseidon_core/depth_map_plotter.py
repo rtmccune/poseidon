@@ -28,6 +28,7 @@ from pyproj import Transformer
 from svgpath2mpl import parse_path
 
 from poseidon_utils.constants import FEET_TO_METERS
+from poseidon_utils.palette import virtual_sensor_color
 from poseidon_utils.naming import (
     extract_camera_name,
     parse_timestamp,
@@ -362,12 +363,11 @@ class DepthMapPlotter:
                     color=self.water_level_color)
 
         if self.plot_sensors and vs_data is not None:
-            n_sensors = len(self.virtual_sensor_loc)
-            colors = plt.cm.viridis(np.linspace(0, 1, n_sensors))
-            for i in range(n_sensors):
+            for i in range(len(self.virtual_sensor_loc)):
                 ax.scatter(datetimes, vs_data[:, i],
-                           label=f"Sensor {i + 1} {suffix.title()}",
-                           marker=self.sensor_marker_path, color=colors[i],
+                           label=f"VS{i + 1} {suffix.title()}",
+                           marker=self.sensor_marker_path,
+                           color=virtual_sensor_color(i),
                            s=15, zorder=5)
 
         ax.axvline(x=current_timestamp, color="k", linestyle="--", zorder=1)
@@ -741,19 +741,22 @@ class DepthMapPlotter:
         height, width = original_data_shape
         transformer = Transformer.from_crs(self.bbox_crs, PLOT_CRS,
                                            always_xy=True)
-        points = []
-        for col, row in self.virtual_sensor_loc:
+        for i, (col, row) in enumerate(self.virtual_sensor_loc):
             row_north_up = (height - 1) - row  # grid rows run south-up
             if not (0 <= row_north_up < height and 0 <= col < width):
                 continue
-            # Sample at the pixel center
-            x, y = data_affine_transform @ (col + 0.5, row_north_up + 0.5)
-            points.append(transformer.transform(x, y))
-
-        if not points:
-            return
-        xs, ys = zip(*points)
-        ax.scatter(xs, ys, marker=marker_path,
-                   c=plt.cm.viridis(np.linspace(0, 1, len(points))),
-                   edgecolors="white", s=300, linewidths=1,
-                   label="Virtual Sensors", zorder=20)
+            # Sample at the pixel center. Colours follow the sensor's
+            # position in the site config, so they match the other
+            # figures even when a sensor lies off the grid.
+            x, y = transformer.transform(
+                *(data_affine_transform @ (col + 0.5, row_north_up + 0.5)))
+            ax.scatter([x], [y], marker=marker_path,
+                       color=virtual_sensor_color(i), edgecolors="white",
+                       s=300, linewidths=1, zorder=20,
+                       label="Virtual Sensors" if i == 0 else None)
+            ax.annotate(f"VS{i + 1}", (x, y), xytext=(9, 9),
+                        textcoords="offset points", fontsize=9,
+                        fontweight="bold", color="black", zorder=21,
+                        bbox={"boxstyle": "round,pad=0.15",
+                              "facecolor": "white", "edgecolor": "none",
+                              "alpha": 0.8})

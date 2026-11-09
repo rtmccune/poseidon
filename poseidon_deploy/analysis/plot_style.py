@@ -24,16 +24,19 @@ never cycled.
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 
-#: Categorical slots, in fixed order (feathers palette in brackets).
-BLUE = "#007CBF"      # slot 1 (bee_eater)
-ORANGE = "#D36328"    # slot 2 (spotted_pardalote)
-MAGENTA = "#BD338F"   # slot 3 (rose_crowned_fruit_dove)
-CATEGORICAL = (BLUE, ORANGE, MAGENTA)
-
-#: Neutral context marks and ink (spotted_pardalote greys).
-CONTEXT_GREY = "#B4B9B3"
-INK = "#424847"
-INK_STRONG = "#000100"
+# Colours are defined once in poseidon_utils.palette (shared with the
+# depth maps); see that module for the checks behind them.
+from poseidon_utils.palette import (  # noqa: E402,F401
+    BLUE,
+    CATEGORICAL,
+    CONTEXT_GREY,
+    INK,
+    INK_STRONG,
+    MAGENTA,
+    ORANGE,
+    VIRTUAL_SENSOR_COLORS,
+    virtual_sensor_color,
+)
 
 #: Sequential blue ramp, light to dark: bee_eater ``#06ABDF`` and
 #: ``#007CBF``, blue_winged_kookaburra ``#02407c`` and ``#06213a``.

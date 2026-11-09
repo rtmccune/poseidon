@@ -21,8 +21,12 @@ well-segmented images only (``<roi>_sensor_camera_good_only``):
   earlier the camera first saw water than the sensor did (onset lead)
   and how much later it last saw water (end lag).
 * ``_peaks.jpg`` - per event, the peak sensor depth against the peak
-  ROI maximum, ROI mean and virtual sensor depths, with a 1:1 line;
-  events without sensor readings are shown in a side panel.
+  ROI maximum, ROI mean and each virtual sensor's depth, with a 1:1
+  line; events without sensor readings are shown in a side panel.
+
+Virtual sensors keep the colours of the depth maps
+(:data:`poseidon_utils.palette.VIRTUAL_SENSOR_COLORS`, by their order in
+the site config) in every figure.
 * ``_observations.csv``, ``_timing.csv``, ``_summary.csv`` and
   ``_summary.md`` - the data behind the figures, and counts.
 
@@ -88,6 +92,7 @@ from plot_style import (  # noqa: E402
     MAGENTA,
     ORANGE,
     apply_style,
+    virtual_sensor_color,
 )
 
 logger = logging.getLogger(__name__)
@@ -491,8 +496,15 @@ def plot_depths(observations, path, seed=0, title=None):
     ax.set_xticklabels([
         f"{s}\n(n={int((observations['source'] == s).sum())})"
         for s in order], fontsize=8)
+    ax.tick_params(axis="x", pad=4)
     ax.set_xlim(-0.6, len(order) - 0.4)
     ax.set_ylim(bottom=0)
+    # Map-colour swatch under each virtual sensor's label
+    for i, source in enumerate(order):
+        if source.startswith("VS"):
+            ax.plot(i, -0.13, marker="s", markersize=9, clip_on=False,
+                    color=virtual_sensor_color(int(source[2:]) - 1),
+                    transform=ax.get_xaxis_transform())
     ax.set_ylabel("Depth When Water Is Present (m)")
     ax.grid(axis="x", visible=False)
     handles = [Line2D([0], [0], marker="o", linestyle="none", color=color,
@@ -505,6 +517,11 @@ def plot_depths(observations, path, seed=0, title=None):
     handles.append(Line2D([0], [0], color=INK, linewidth=2,
                           label="Box: quartiles and median; whiskers: "
                                 "10th-90th pct."))
+    if any(source.startswith("VS") for source in order):
+        handles.append(Line2D([0], [0], marker="s", linestyle="none",
+                              color=CONTEXT_GREY, markersize=7,
+                              label="Square under VS label: its colour on "
+                                    "the depth maps"))
     ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(0, 1.01),
               ncol=2, fontsize=8)
     if title:
@@ -548,7 +565,8 @@ def plot_timing(timing, path, seed=0, title=None):
             group = usable[usable["source"] == source]
             censored = group[list(censor_cols)].any(axis=1).to_numpy()
             x = i + rng.uniform(-0.25, 0.25, len(group))
-            color = BLUE if source == "ROI" else ORANGE
+            color = (BLUE if source == "ROI"
+                     else virtual_sensor_color(int(source[2:]) - 1))
             ax.scatter(x[~censored], group[column][~censored], s=30,
                        color=color, edgecolors="white", linewidths=0.6,
                        zorder=2)
@@ -596,16 +614,15 @@ def event_peaks(observations):
     -------
     pandas.DataFrame
         One row per event: ``has_sensor``, ``sensor`` (peak sensor
-        depth), ``roi_max``, ``roi_mean`` and ``virtual_sensors`` (the
-        largest depth over all virtual sensors).
+        depth), ``roi_max``, ``roi_mean`` and one column per virtual
+        sensor (``VS1``...).
     """
+    source = observations["source"]
     obs = observations.assign(
         group=np.select(
-            [observations["source"] == SENSOR,
-             observations["source"] == ROI_STATS["MaxDepth"],
-             observations["source"] == ROI_STATS["MeanDepth"],
-             observations["source"].str.startswith("VS")],
-            ["sensor", "roi_max", "roi_mean", "virtual_sensors"], ""))
+            [source == SENSOR, source == ROI_STATS["MaxDepth"],
+             source == ROI_STATS["MeanDepth"], source.str.startswith("VS")],
+            ["sensor", "roi_max", "roi_mean", source], ""))
     peaks = obs[obs["group"] != ""].pivot_table(
         index="event", columns="group", values="depth_m", aggfunc="max")
     has_sensor = observations.groupby("event")["has_sensor"].any()
@@ -627,11 +644,15 @@ def plot_peaks(peaks, path, seed=0, title=None):
     title : str, optional
         Figure title (e.g. the image set). Default None.
     """
+    # ROI in blue and dark grey; virtual sensors in their map colours
+    vs_columns = sorted((c for c in peaks if str(c).startswith("VS")),
+                        key=lambda c: int(c[2:]))
     series = [(c, label, color, marker) for c, label, color, marker in (
         ("roi_max", "ROI max", BLUE, "o"),
-        ("roi_mean", "ROI mean", ORANGE, "D"),
-        ("virtual_sensors", "Deepest virtual sensor", MAGENTA, "s"))
-        if c in peaks]
+        ("roi_mean", "ROI mean", INK, "D"))
+        if c in peaks] + [
+        (c, c, virtual_sensor_color(int(c[2:]) - 1), "s")
+        for c in vs_columns]
     with_sensor = peaks[peaks["has_sensor"] & peaks.get(
         "sensor", pd.Series(np.nan, index=peaks.index)).notna()]
     without = peaks[~peaks.index.isin(with_sensor.index)]
