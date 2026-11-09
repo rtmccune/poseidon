@@ -32,10 +32,12 @@ the site config) in every figure.
   event folder's window without its padding; every event) or at the
   in-situ sensor's peak (events with sensor readings). One panel per
   source (sensor, virtual sensors, ROI mean) with each event as a thin
-  line and the median across events (15-min bins, >= 3 events) in bold
-  with its interquartile range; a last panel overlays the medians
-  (``_aligned_composites.csv``). Dry moments are 0 m; camera series
-  exist only where images do (daylight).
+  line and the mean (``--aligned_stat``; or median) across events
+  (15-min bins, >= 3 events) in bold with its interquartile range; a
+  last panel overlays them (``_aligned_composites.csv``). By default
+  dry moments are left out (``--aligned_dry nan``), so the bold line
+  is the typical depth among events wet at that time; ``zero`` counts
+  them as 0 m. Camera series exist only where images do (daylight).
 * ``_observations.csv``, ``_timing.csv``, ``_summary.csv`` and
   ``_summary.md`` - the data behind the figures, and counts.
 
@@ -487,7 +489,8 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
     Unlike the pooled observations, every event keeps its whole padded
     window (an image in two overlapping windows appears in both
     events' series, at different times relative to each). Dry moments
-    are 0 m.
+    are NaN (the sensor's 0 m included); :func:`plot_aligned` decides
+    whether to treat them as missing or as 0 m.
 
     Parameters
     ----------
@@ -501,7 +504,7 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
     -------
     pandas.DataFrame
         ``event``, ``time``, ``source`` (sensor, ``VS1``..., ROI mean),
-        ``depth_m``, plus the event's ``flood_start`` and ``flood_end``
+        ``depth_m`` (NaN when dry), plus the event's ``flood_start`` and ``flood_end``
         (unpadded window) and ``sensor_peak`` (time of the sensor's
         maximum in the flood period; NaT without sensor readings).
     """
@@ -515,10 +518,11 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
         parts = []
         peak = pd.NaT
         if sensor_window is not None and len(sensor_window):
+            depth = sensor_window["SensorDepth_m"].to_numpy(dtype=float)
             parts.append(pd.DataFrame({
                 "time": sensor_window["datetime_utc"].to_numpy(),
                 "source": SENSOR,
-                "depth_m": sensor_window["SensorDepth_m"].to_numpy()}))
+                "depth_m": np.where(depth > 0, depth, np.nan)}))
             flood = sensor_window[(sensor_window["datetime_utc"] >= start)
                                   & (sensor_window["datetime_utc"] <= end)]
             if flood.empty:
@@ -526,13 +530,14 @@ def event_series(loaded, padding_hours=EVENT_PADDING_HOURS):
             peak = flood.loc[flood["SensorDepth_m"].idxmax(), "datetime_utc"]
         if vs_obs is not None and len(vs_obs):
             parts.append(vs_obs.assign(
-                depth_m=vs_obs["depth_m"].fillna(0.0))[
+                depth_m=vs_obs["depth_m"].where(vs_obs["depth_m"] > 0))[
                 ["time", "source", "depth_m"]])
         if roi_obs is not None and len(roi_obs):
             parts.append(pd.DataFrame({
                 "time": roi_obs["time"].to_numpy(),
                 "source": ROI_STATS["MeanDepth"],
-                "depth_m": roi_obs["MeanDepth"].fillna(0.0).to_numpy()}))
+                "depth_m": roi_obs["MeanDepth"].where(
+                    roi_obs["wet"]).to_numpy()}))
         for part in parts:
             frames.append(part.assign(event=event, flood_start=start,
                                       flood_end=end, sensor_peak=peak))
@@ -850,12 +855,14 @@ def aligned_series(series, align):
 
 
 def composites(aligned, minutes=COMPOSITE_MINUTES,
-               min_events=MIN_COMPOSITE_EVENTS):
+               min_events=MIN_COMPOSITE_EVENTS, stat="mean"):
     """
-    Median and interquartile range across events, per source and bin.
+    Typical depth and interquartile range across events, per bin.
 
     Each event first contributes its mean depth in each time bin, so
-    every event counts equally however often it was sampled.
+    every event counts equally however often it was sampled. Dry
+    (NaN) readings are skipped, so a bin's ``events`` are those with
+    water then (unless dry times were set to 0 m beforehand).
 
     Parameters
     ----------
@@ -865,23 +872,27 @@ def composites(aligned, minutes=COMPOSITE_MINUTES,
         Bin width.
     min_events : int, optional
         Bins with fewer contributing events are dropped.
+    stat : {'mean', 'median'}, optional
+        Statistic across events drawn as the bold line. Default mean.
 
     Returns
     -------
     pandas.DataFrame
-        ``source``, ``hours`` (bin center), ``median_m``, ``q1_m``,
+        ``source``, ``hours`` (bin center), ``center_m`` (the mean or
+        median across events), ``mean_m``, ``median_m``, ``q1_m``,
         ``q3_m``, ``events``.
     """
     width = minutes / 60
-    binned = aligned.assign(
-        hours=(np.floor(aligned["hours"] / width) + 0.5) * width)
+    binned = aligned.dropna(subset=["depth_m"]).assign(
+        hours=lambda d: (np.floor(d["hours"] / width) + 0.5) * width)
     per_event = binned.groupby(["source", "hours", "event"])[
         "depth_m"].mean().reset_index()
     grouped = per_event.groupby(["source", "hours"])["depth_m"]
     table = pd.DataFrame({
-        "median_m": grouped.median(), "q1_m": grouped.quantile(0.25),
-        "q3_m": grouped.quantile(0.75), "events": grouped.size()}
-    ).reset_index()
+        "mean_m": grouped.mean(), "median_m": grouped.median(),
+        "q1_m": grouped.quantile(0.25), "q3_m": grouped.quantile(0.75),
+        "events": grouped.size()}).reset_index()
+    table["center_m"] = table[f"{stat}_m"]
     return table[table["events"] >= min_events]
 
 
@@ -908,7 +919,7 @@ def _series_style(source):
 
 
 def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
-                 title=None):
+                 title=None, stat="mean", dry="nan"):
     """
     Draw every event's depth series on a shared, event-relative clock.
 
@@ -928,12 +939,20 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         Padding around each event, for the x-axis range.
     title : str, optional
         Figure title.
+    stat : {'mean', 'median'}, optional
+        Statistic across events for the bold line. Default mean.
+    dry : {'nan', 'zero'}, optional
+        ``'nan'`` leaves dry times out, so lines break when a location
+        is dry and the bold line is the typical depth among events wet
+        at that time; ``'zero'`` counts dry times as 0 m.
 
     Returns
     -------
     pandas.DataFrame or None
         The composites drawn, or None if nothing could be aligned.
     """
+    if dry == "zero":
+        series = series.assign(depth_m=series["depth_m"].fillna(0.0))
     aligned = aligned_series(series, align)
     if aligned.empty:
         return None
@@ -942,7 +961,7 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         (s for s in present if s.startswith("VS")),
         key=lambda s: int(s[2:])) + [
         s for s in (ROI_STATS["MeanDepth"],) if s in present]
-    table = composites(aligned)
+    table = composites(aligned, stat=stat)
 
     if align == "start":
         durations = (aligned["flood_end"] - aligned["flood_start"]
@@ -954,7 +973,8 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         reach = float(np.nanpercentile(aligned["hours"].abs(), 95))
         xlim = (-reach, reach)
         xlabel = "Hours From In-Situ Sensor Peak"
-    top = float(np.nanpercentile(aligned["depth_m"], 99.5)) * 1.1 or 0.1
+    top = float(np.nanpercentile(aligned["depth_m"].dropna(), 99.5)
+                * 1.1) if aligned["depth_m"].notna().any() else 0.1
 
     n_panels = len(sources) + 1
     cols = 3
@@ -972,18 +992,18 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         comp = table[table["source"] == source]
         ax.fill_between(comp["hours"], comp["q1_m"], comp["q3_m"],
                         color=color, alpha=0.25, linewidth=0, zorder=2)
-        ax.plot(comp["hours"], comp["median_m"], color=color, linewidth=2.2,
+        ax.plot(comp["hours"], comp["center_m"], color=color, linewidth=2.2,
                 zorder=3)
         ax.set_title(f"{source} ({group['event'].nunique()} events)",
                      fontsize=10)
     overlay = flat[len(sources)]
     for source in sources:
         comp = table[table["source"] == source]
-        overlay.plot(comp["hours"], comp["median_m"],
+        overlay.plot(comp["hours"], comp["center_m"],
                      color=_series_style(source), linewidth=2.2,
                      linestyle="--" if source == SENSOR else "-",
                      label=source)
-    overlay.set_title("Medians across events", fontsize=10)
+    overlay.set_title(f"{stat.title()}s across events", fontsize=10)
     overlay.legend(fontsize=8, loc="upper right")
     for ax in flat[n_panels:]:
         ax.set_visible(False)
@@ -995,17 +1015,21 @@ def plot_aligned(series, align, path, padding_hours=EVENT_PADDING_HOURS,
         ax.set_xlabel(xlabel)
     for ax in axes[:, 0]:
         ax.set_ylabel("Depth (m)")
-    note = (f"Thin lines: individual events. Bold: median across events in "
+    dry_note = ("Dry times left out: the bold line is the typical depth "
+                "among events with water at that time (fewer events near "
+                "onset and recession; counts in _aligned_composites.csv)."
+                if dry == "nan" else "Dry times count as 0 m.")
+    note = (f"Thin lines: individual events. Bold: {stat} across events in "
             f"{COMPOSITE_MINUTES}-min bins (bins with >= "
             f"{MIN_COMPOSITE_EVENTS} events); band: interquartile range. "
-            f"Dry = 0 m; camera lines only where (daylight) images exist.")
+            f"Camera lines only where (daylight) images exist.\n{dry_note}")
     fig.text(0.01, -0.01, note, fontsize=8, color=INK, va="top")
     if title:
         fig.suptitle(title, fontsize=11)
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
-    return table.assign(align=align)
+    return table.assign(align=align, stat=stat, dry=dry)
 
 
 # ----- Summary ---------------------------------------------------------------
@@ -1153,6 +1177,14 @@ def parse_args(argv=None):
                         help="Padding stage 05 added around each event; "
                              "used to keep each image and reading in its "
                              "nearest event.")
+    parser.add_argument("--aligned_stat", choices=("mean", "median"),
+                        default="mean",
+                        help="Statistic across events in the aligned "
+                             "time series plots.")
+    parser.add_argument("--aligned_dry", choices=("nan", "zero"),
+                        default="nan",
+                        help="Aligned plots: leave dry times out (nan) or "
+                             "count them as 0 m (zero).")
     args = parser.parse_args(argv)
     if args.roi is None and args.site:
         site = load_site_config(args.site)
@@ -1234,7 +1266,8 @@ def run_image_set(args, sensor, tag, good_timestamps, label):
                        "plot skipped (%s).", label)
     drawn = [plot_aligned(series, align, f"{prefix}_aligned_{align}.jpg",
                           args.padding_hours, f"{title}: aligned on "
-                          f"{'flood start' if align == 'start' else 'in-situ sensor peak'}")
+                          f"{'flood start' if align == 'start' else 'in-situ sensor peak'}",
+                          args.aligned_stat, args.aligned_dry)
              for align in ("start", "peak")]
     drawn = [table for table in drawn if table is not None]
     if drawn:

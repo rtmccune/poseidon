@@ -528,7 +528,16 @@ def test_sensor_camera_comparison_timing_and_states(tmp_path):
     assert (first["sensor_peak"] == pd.Timestamp("2024-06-01 12:30",
                                                  tz="UTC")).all()
     vs = first[first["source"] == "VS1"]
-    assert (vs["depth_m"] >= 0).all() and len(vs) == 11  # dry = 0 m
+    assert len(vs) == 11 and vs["depth_m"].isna().sum() == 3  # dry = NaN
+    # Dry times skipped by default; counted as 0 m on request
+    aligned = sc.aligned_series(first, "start")
+    wet_only = sc.composites(aligned, min_events=1)
+    with_zero = sc.composites(aligned.fillna({"depth_m": 0.0}),
+                              min_events=1)
+    vs_bins = wet_only[wet_only["source"] == "VS1"]
+    assert vs_bins["center_m"].to_numpy() == pytest.approx(0.1)  # wet mean
+    assert (with_zero[with_zero["source"] == "VS1"]["center_m"]
+            < 0.1).any()
     peak = sc.aligned_series(first, "peak")
     sensor_rows = peak[peak["source"] == sc.SENSOR]
     at_zero = sensor_rows.loc[sensor_rows["hours"] == 0, "depth_m"]
