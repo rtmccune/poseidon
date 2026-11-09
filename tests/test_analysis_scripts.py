@@ -12,32 +12,67 @@ import run_road_access_stats
 import access_plotter
 
 
-def test_logit_inverts_the_logistic_curve():
+def test_depth_from_coverage_inverts_the_logistic_curve():
     """Depth -> coverage -> depth round-trips."""
     depth = np.linspace(0.0, 0.3, 7)
     params = (80.0, 40.0, 0.1)
     coverage = access_plotter.logistic_curve(depth, *params)
     np.testing.assert_allclose(
-        access_plotter.logit_curve(coverage, *params), depth, atol=1e-6)
+        access_plotter.depth_from_coverage(coverage, *params), depth,
+        atol=1e-9)
 
 
-def test_fit_recovers_logistic_parameters():
-    """The logistic fit reproduces noise-free synthetic data."""
-    depth = pd.Series(np.linspace(0.0, 0.3, 40))
-    coverage = pd.Series(access_plotter.logistic_curve(depth, 90, 50, 0.12))
-    fit = access_plotter.fit_logistic_with_quantiles(depth, coverage)
-    assert fit["r2"] == pytest.approx(1.0, abs=1e-6)
-    assert fit["rmse"] < 1e-3
-    assert set(fit["quantiles"]) <= {0.1, 0.5, 0.9}
+def test_fit_recovers_logistic_parameters_in_depth():
+    """A noise-free depth-from-coverage curve is recovered exactly."""
+    coverage = np.linspace(5, 85, 40)
+    depth = access_plotter.depth_from_coverage(coverage, 90, 50, 0.12)
+    fit = access_plotter.fit_depth_from_coverage(coverage, depth)
+    assert fit["r2"] == pytest.approx(1.0, abs=1e-9)
+    assert fit["rmse"] < 1e-6
+    assert [fit["params"][k] for k in ("L", "k", "x0")] == pytest.approx(
+        [90, 50, 0.12], rel=1e-4)
+    assert set(fit["quantiles"]) == {0.1, 0.5, 0.9}
+
+
+def test_quantile_curves_hold_their_share_of_depths():
+    """The median and 80 % band hold 50 % and 80 % of noisy depths."""
+    rng = np.random.default_rng(1)
+    coverage = rng.uniform(2, 98, 3000)
+    depth = (access_plotter.depth_from_coverage(coverage, 100.5, 45, 0.1)
+             + rng.normal(0, 0.02, coverage.size))
+    events = np.repeat(np.arange(60), 50)
+    fit = access_plotter.fit_depth_from_coverage(coverage, depth, events,
+                                                 n_boot=50)
+    assert fit["below_median_fraction"] == pytest.approx(0.5, abs=0.02)
+    assert fit["band_fraction"] == pytest.approx(0.8, abs=0.02)
+    calibration = fit["calibration"]
+    assert calibration["images"].sum() == 3000
+    assert np.all(np.abs(calibration["fraction_inside_80pct_band"] - 0.8)
+                  < 0.06)
+    low, high = fit["curve_ci"]
+    assert np.all(low <= fit["fit"] + 1e-12)
+    assert np.all(fit["fit"] <= high + 1e-12)
+    assert fit["param_ci"]["x0"][0] < 0.1 < fit["param_ci"]["x0"][1]
+
+
+def test_zero_coverage_images_are_left_out_of_the_fit():
+    """Coverage 0 has no finite depth on the curve and is excluded."""
+    coverage = np.r_[0.0, np.linspace(5, 85, 20)]
+    depth = np.r_[0.01, access_plotter.depth_from_coverage(
+        coverage[1:], 90, 50, 0.12)]
+    fit = access_plotter.fit_depth_from_coverage(coverage, depth)
+    assert fit["n"] == 20 and fit["n_excluded"] == 1
 
 
 def test_pinball_loss_is_smallest_at_the_quantile():
-    """Shifting a perfect fit up or down increases the loss."""
-    x = np.linspace(0, 0.3, 50)
-    y = access_plotter.logistic_curve(x, 90, 50, 0.12)
-    best = access_plotter.pinball_loss((90, 50, 0.12), x, y, 0.5)
-    assert best == pytest.approx(0.0)
-    assert access_plotter.pinball_loss((95, 50, 0.12), x, y, 0.5) > best
+    """The 0.5 pinball loss is lowest at the median."""
+    y = np.array([1.0, 2.0, 3.0, 10.0])
+    loss = [access_plotter.pinball_loss(y - m, 0.5) for m in (1, 2.5, 6)]
+    assert loss[1] < loss[0] and loss[1] < loss[2]
+    # q = 0.9 penalizes values above the curve 9x more than below
+    assert access_plotter.pinball_loss(np.array([1.0]), 0.9) == 0.9
+    assert access_plotter.pinball_loss(np.array([-1.0]), 0.9) == (
+        pytest.approx(0.1))
 
 
 def test_r2_and_rmse_reference_values():
@@ -106,13 +141,19 @@ def test_accessibility_plots_are_written_for_each_metric(tmp_path):
         write_accessibility(tmp_path / "events" / f"ev{i}", "road", depth,
                             100 * depth / depth.max(), f"2024-0{i + 1}-01")
     access_plotter.main(["--events_dir", str(tmp_path / "events"),
-                         "--out_dir", str(tmp_path / "plots")])
+                         "--out_dir", str(tmp_path / "plots"),
+                         "--n_boot", "20"])
     plots = {p.name for p in (tmp_path / "plots").iterdir()}
     for metric in access_plotter.METRICS:
         for suffix in ("1_evolution_plot.jpg", "1b_reversed_fit.jpg",
+                       "1b_fit_summary.csv", "1b_band_calibration.csv",
                        "2_summary_scatter.png", "3_depth_cdf.png",
                        "4_depth_pdf.png", "5_depth_exceedance.png"):
             assert f"road_{metric}_{suffix}" in plots
+    summary = pd.read_csv(tmp_path / "plots" /
+                          "road_MaxDepth_1b_fit_summary.csv")
+    assert {"r2_depth", "rmse_depth_m", "x0_ci95_low",
+            "fraction_inside_80pct_band"} <= set(summary["quantity"])
 
 
 def test_road_access_event_durations_and_impassable_time(tmp_path):
@@ -255,3 +296,40 @@ def test_sensor_data_accepts_detailed_event_csv(tmp_path):
     assert sensor["SensorDepth_m"].tolist() == pytest.approx(
         [0.0, 0.5 * 0.3048])
     assert sensor["SensorWSE_m"].iloc[1] == pytest.approx(1.6 * 0.3048)
+
+
+def test_empirical_probabilities_handle_ties():
+    """CDF is P(X <= x) and exceedance P(X >= x) at each distinct value."""
+    x, cdf, exceed = access_plotter.empirical_probabilities(
+        [0.3, 0.1, 0.2, 0.2])
+    assert x.tolist() == [0.1, 0.2, 0.3]
+    assert cdf.tolist() == pytest.approx([0.25, 0.75, 1.0])
+    assert exceed.tolist() == pytest.approx([1.0, 0.75, 0.25])
+    _, cdf_w, exceed_w = access_plotter.empirical_probabilities(
+        [0.3, 0.1, 0.2, 0.2], "weibull")
+    assert cdf_w.tolist() == pytest.approx([0.2, 0.6, 0.8])
+    assert exceed_w.tolist() == pytest.approx([0.8, 0.6, 0.2])
+
+
+def test_density_estimates_integrate_to_one():
+    """The histogram and the reflected KDE are proper densities."""
+    rng = np.random.default_rng(2)
+    values = rng.gamma(2.0, 0.04, 80)  # positive, piled up near 0
+    edges, rule = access_plotter.density_bins(values)
+    density, _ = np.histogram(values, bins=edges, density=True)
+    assert rule == "Freedman-Diaconis"
+    assert (density * np.diff(edges)).sum() == pytest.approx(1.0)
+    x, kde = access_plotter.reflected_kde(values, n_points=4000)
+    assert x[0] == 0.0
+    assert np.trapezoid(kde, x) == pytest.approx(1.0, abs=0.01)
+
+
+def test_event_peaks_can_use_well_segmented_images_only():
+    """A badly segmented image cannot set the event's peak."""
+    event = pd.DataFrame({"Coverage": [20.0, 90.0], "MaxDepth": [0.05, 0.4],
+                          "MeanDepth": [0.02, 0.2],
+                          "MedianDepth": [0.02, 0.2],
+                          "PointColor": ["green", "blue"]})
+    assert access_plotter.summarize_event(event)["MaxDepth_max"] == 0.4
+    good = access_plotter.summarize_event(event, good_only=True)
+    assert good["MaxDepth_max"] == 0.05 and good["images"] == 1

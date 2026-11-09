@@ -12,7 +12,9 @@
 #         $SITE_DATA/sensor_data_comparison.csv (optional) in-situ
 #             readings, e.g. from naiads/run_pull_event_series.py with
 #             --buffer_hours 3 --output $SITE_DATA/sensor_data_comparison.csv
-# Output: $SITE_DATA/plots/
+# Output: $SITE_DATA/plots/ (figures, and for plots 1b/1c the
+#         *_fit_summary.csv and *_band_calibration.csv files behind
+#         every number in the legends; see analysis/access_plotter.py)
 #
 #SBATCH --job-name=plot_access
 #SBATCH --time=00:30:00
