@@ -277,6 +277,28 @@ def test_full_event_plotting_writes_every_figure(plot_event):
     assert len(list((plots / "time_series_using_depths").glob("*.png"))) == 6
 
 
+def test_image_only_event_plots_virtual_sensors(plot_event):
+    """Without sensor observations, maps and VS series are still drawn."""
+    (plot_event / f"{plot_event.name}.csv").unlink()
+    plotter = make_plotter(plot_event, plot_sensors=True)
+    plotter.preprocess_single_event()
+    matches = pd.read_csv(plot_event / "wtr_lvl_obs_to_image_matches.csv")
+    assert matches.empty and "obs_depth_meters" in matches.columns
+
+    assert plotter.process_single_flood_event(["95_perc"]) == 6
+    assert plotter.plot_all_time_series() == 3
+    series = plot_event / "plots" / "time_series_using_depths"
+    assert len(list(series.glob("*.png"))) == 6
+
+
+def test_image_only_event_without_vs_skips_time_series(plot_event):
+    """With neither observations nor virtual sensors, nothing is drawn."""
+    (plot_event / f"{plot_event.name}.csv").unlink()
+    plotter = make_plotter(plot_event, sensors=None)
+    plotter.preprocess_single_event()
+    assert plotter.plot_all_time_series() == 0
+
+
 def test_sensor_markers_are_placed_at_pixel_centers(plot_event):
     """Marker positions match the pixel-center Web Mercator location."""
     plotter = make_plotter(plot_event, sensors=((4, 2),), plot_sensors=True)

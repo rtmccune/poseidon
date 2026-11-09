@@ -488,3 +488,49 @@ def test_constructor_validates_inputs():
         EventTracker(("user", ""), dt.date(2024, 1, 1), dt.date(2024, 1, 2))
     with pytest.raises(ValueError):
         EventTracker(("u", "p"), dt.date(2024, 1, 2), dt.date(2024, 1, 1))
+
+
+def test_pull_event_series_keeps_numbers_and_skips_image_only(
+        tmp_path, monkeypatch):
+    """The driver keeps sheet numbers and summarizes each event's last row."""
+    import run_pull_event_series as pull
+
+    abbr = tmp_path / "abbr_flood_events.csv"
+    pd.DataFrame({
+        "flood_event": [7, 8],
+        "sensor_ID": ["DE_01", "DE_01"],
+        "start_time_UTC": ["2024-09-01 12:00+00:00", "2024-09-25 18:00+00:00"],
+        "end_time_UTC": ["2024-09-01 13:00+00:00", "2024-09-26 00:00+00:00"],
+        "start_time_EST": ["a", "b"], "end_time_EST": ["c", "d"],
+        "duration_(hours)": [1.0, 6.0],
+        "max_road_water_level_(ft)": [0.3, None],
+        "max_road_water_level_(m)": [0.09, None],
+    }).to_csv(abbr, index=False)
+
+    seen = {}
+
+    class FakeTracker:
+        def __init__(self, auth, min_date, max_date):
+            seen["range"] = (min_date, max_date)
+
+        def pull_qced_time_series_bulk(self, qc_csv_path, output_csv_name,
+                                       chunk_days, time_buffer_hours):
+            times = pd.date_range("2024-09-01 12:00", periods=3,
+                                  freq="30min", tz="UTC")
+            return pd.DataFrame({
+                "flood_event": 7, "sensor_ID": "DE_01", "time_UTC": times,
+                "time_EST": times.tz_convert("EST"),
+                "road_water_level": [0.1, 0.3, 0.0],
+                "sensor_water_level": [1.0, 1.2, 0.9]})
+
+    monkeypatch.setattr(pull, "EventTracker", FakeTracker)
+    monkeypatch.setenv("SDFP_API_USERNAME", "user")
+    monkeypatch.setenv("SDFP_API_PASSWORD", "pass")
+
+    assert pull.main(["--abbr_events_csv", str(abbr)]) == 0
+    out = pd.read_csv(tmp_path / "flood_events.csv")
+    assert list(out.columns) == et_module.DETAILED_COLUMNS
+    assert out["flood_event"].unique().tolist() == [7]
+    assert out["duration_(hours)"].notna().tolist() == [False, False, True]
+    assert str(seen["range"][0]) == "2024-08-31"
+    assert str(seen["range"][1]) == "2024-09-27"

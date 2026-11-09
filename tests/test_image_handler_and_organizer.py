@@ -360,3 +360,22 @@ def test_daylight_coverage_splits_event_and_buffer_images(tmp_path):
     again = fo.summarize_event_daylight_coverage(out, images, out, CB_LAT,
                                                  CB_LON, padding_hours=3)
     assert list(again.columns) == list(cov.columns)
+
+
+def test_image_only_events_get_folders_from_images(abbr_csv, tmp_path):
+    """Events without sensor records still get image folders."""
+    records = tmp_path / "flood_events.csv"
+    pd.DataFrame({"sensor_ID": ["CB_03"],
+                  "time_UTC": ["2024-03-01 10:00+00:00"],
+                  "road_water_level": [0.1]}).to_csv(records, index=False)
+    out = tmp_path / "events"
+    assert fo.create_flood_csvs_and_subfolders(abbr_csv, records, out) == 1
+    assert fo.create_flood_csvs_and_subfolders(abbr_csv, None, out) == 0
+
+    images = touch(tmp_path / "images", "CAM_DE_01_20240715100000.jpg")
+    assert fo.organize_images_into_flood_events(images, abbr_csv, out,
+                                                "orig_images") == 1
+    de = [d for d in out.iterdir() if d.name.startswith("DE_01")]
+    assert len(de) == 1 and not (de[0] / f"{de[0].name}.csv").exists()
+    assert names_in(de[0] / "orig_images") == [
+        "CAM_DE_01_20240715100000.jpg"]

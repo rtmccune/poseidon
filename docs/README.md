@@ -189,6 +189,22 @@ Re-running a stage replaces its earlier outputs.
 The remaining `99_*` scripts run QC and analysis (overlay comparisons,
 accessibility plots, anomaly detection) and segmentation model training.
 
+### Events without sensor data
+
+Stage 05 needs `flood_events.csv`, the sensor readings inside each event.
+When the event sheet comes from QC or was edited by hand, rebuild it from
+the sheet, keeping the sheet's event numbers:
+```bash
+python poseidon_deploy/naiads/run_pull_event_series.py \
+    --abbr_events_csv data/down_east/abbr_flood_events.csv
+```
+This needs SDFP API credentials (`SDFP_API_USERNAME` and
+`SDFP_API_PASSWORD`, or `mysecrets.py`). Events with no readings, such as
+floods confirmed only from images during a sensor outage, are listed and
+left out. Stage 05 still builds their folders from the images, and every
+later stage runs on them; plots show the virtual sensors without an
+observed series.
+
 ### Reviewing segmentations
 
 `99_image_overlay_comparison.sh` stitches each daylight image beside its

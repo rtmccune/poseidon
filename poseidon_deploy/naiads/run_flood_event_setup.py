@@ -5,6 +5,8 @@ Steps:
 1. Optionally (``--hour_filter``) keep events starting within an
    Eastern-time hour window, writing ``--filtered_abbr_csv``.
 2. Write each event's sensor records to ``<event>/<event>.csv``.
+   Events with no records (confirmed only from images) get no CSV and
+   are processed from their images alone.
 3. Copy images and labels into ``<event>/<image_subfolder>`` and
    ``<event>/<label_subfolder>``.
 4. Delete event folders that received no images.
@@ -16,11 +18,14 @@ Example
 --label_dir images/labels --output_dir flood_events``
 """
 
+import logging
 import os
 
 from poseidon_utils import file_organizer
 
 import cli_common
+
+logger = logging.getLogger("poseidon.naiads")
 
 
 def main(argv=None):
@@ -35,8 +40,10 @@ def main(argv=None):
     parser = cli_common.make_parser(__doc__.splitlines()[0])
     parser.add_argument("--abbr_events_csv", required=True,
                         help="Abbreviated flood event CSV.")
-    parser.add_argument("--full_sensor_csv", required=True,
-                        help="Detailed sensor records CSV.")
+    parser.add_argument("--full_sensor_csv", default=None,
+                        help="Detailed sensor records CSV. Events without "
+                             "records, or every event if omitted or "
+                             "missing, are processed from images only.")
     parser.add_argument("--image_dir", required=True,
                         help="Folder of images to sort into events.")
     parser.add_argument("--label_dir", required=True,
@@ -68,9 +75,13 @@ def main(argv=None):
         file_organizer.filter_abbr_flood_csv_by_eastern_time(
             args.abbr_events_csv, events_csv, args.start_hour, args.end_hour)
 
+    sensor_csv = args.full_sensor_csv
+    if sensor_csv and not os.path.exists(sensor_csv):
+        logger.warning("Sensor records CSV not found: %s; treating every "
+                       "event as image-only.", sensor_csv)
+        sensor_csv = None
     file_organizer.create_flood_csvs_and_subfolders(
-        events_csv, args.full_sensor_csv, args.output_dir,
-        args.padding_hours)
+        events_csv, sensor_csv, args.output_dir, args.padding_hours)
     for source, subfolder in ((args.image_dir, args.image_subfolder),
                               (args.label_dir, args.label_subfolder)):
         file_organizer.organize_images_into_flood_events(

@@ -5,6 +5,11 @@
 #         daylight images and labels
 # Output: $EVENT_DIR/<event>/ with <event>.csv, orig_images/, labels/
 #
+# Events with no sensor readings (confirmed only from images) get no
+# <event>.csv and are processed from their images alone. For an event
+# sheet edited outside EventTracker (e.g. QC results), make
+# flood_events.csv with naiads/run_pull_event_series.py first.
+#
 #BSUB -J gen_flood_folders
 #BSUB -W 15
 #BSUB -n 1

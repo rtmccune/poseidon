@@ -49,6 +49,10 @@ VIRTUAL_SENSOR_STAT = "95_perc"
 #: Web Mercator, the CRS used for all map figures.
 PLOT_CRS = "EPSG:3857"
 
+#: Columns of ``wtr_lvl_obs_to_image_matches.csv``.
+MATCH_COLUMNS = ["image_filename", "closest_utc_time", "obs_wse_meters",
+                 "obs_depth_meters"]
+
 #: SVG path of the virtual sensor marker glyph.
 MARKER_FILE = Path(__file__).with_name("assets") / "sensor_marker.svgpath"
 
@@ -225,9 +229,15 @@ class DepthMapPlotter:
                            "series.", self.event_path)
             return 0
 
+        series = self._load_time_series_inputs()
+        datetimes, vs_wse, _, observations = series
+        if observations.empty and (vs_wse is None or not self.plot_sensors):
+            logger.warning("No observations or virtual sensor data for %s; "
+                           "skipping time series.", self.event_name)
+            return 0
+
         output_dir = self.event_path / "plots" / "time_series_using_depths"
         output_dir.mkdir(parents=True, exist_ok=True)
-        series = self._load_time_series_inputs()
 
         plotted = 0
         for file_name in sorted(os.listdir(images_dir)):
@@ -265,9 +275,13 @@ class DepthMapPlotter:
         vs_wse, vs_depth : numpy.ndarray or None
             ``(T, N)`` virtual sensor WSE and depth, or None.
         observations : pandas.DataFrame
-            Image-matched observations with parsed times.
+            Image-matched observations with parsed times; empty for
+            events without sensor data.
         """
-        observations = pd.read_csv(self._matches_csv)
+        if self._matches_csv.exists():
+            observations = pd.read_csv(self._matches_csv)
+        else:
+            observations = pd.DataFrame(columns=MATCH_COLUMNS)
         observations["closest_utc_time"] = pd.to_datetime(
             observations["closest_utc_time"], utc=True)
         if self._sensor_zip.exists():
@@ -341,9 +355,11 @@ class DepthMapPlotter:
             Quantity name used in the legend and filename.
         """
         fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(obs_df["closest_utc_time"], obs_df[obs_col],
-                label=f"Observed {suffix.upper()}",
-                color=self.water_level_color)
+        # Image-only events have no observations to draw
+        if obs_df[obs_col].notna().any():
+            ax.plot(obs_df["closest_utc_time"], obs_df[obs_col],
+                    label=f"Observed {suffix.upper()}",
+                    color=self.water_level_color)
 
         if self.plot_sensors and vs_data is not None:
             n_sensors = len(self.virtual_sensor_loc)
@@ -441,18 +457,27 @@ class DepthMapPlotter:
         Reads ``<event name>.csv`` (``sensor_ID``, ``time_UTC``,
         ``sensor_water_level``, ``road_water_level`` in feet) and writes
         ``wtr_lvl_obs_to_image_matches.csv`` with levels in meters.
+        Events without that CSV (confirmed only from images) get an
+        empty match table.
 
         Returns
         -------
         pandas.DataFrame or None
-            The match table, or None if inputs are missing.
+            The match table, or None if the event has no images.
         """
         csv_path = self.event_path / f"{self.event_name}.csv"
         images_dir = self.event_path / "orig_images"
-        if not csv_path.exists() or not images_dir.is_dir():
-            logger.warning("Observations or images missing in %s; "
-                           "skipping matching.", self.event_path)
+        if not images_dir.is_dir():
+            logger.warning("No orig_images folder in %s; skipping "
+                           "matching.", self.event_path)
             return None
+        if not csv_path.exists():
+            logger.info("No sensor observations for %s (image-only "
+                        "event); writing an empty match table.",
+                        self.event_name)
+            table = pd.DataFrame(columns=MATCH_COLUMNS)
+            table.to_csv(self._matches_csv, index=False)
+            return table
 
         observations = pd.read_csv(csv_path)
         observations["time_UTC"] = pd.to_datetime(observations["time_UTC"],
@@ -480,7 +505,7 @@ class DepthMapPlotter:
                                      * FEET_TO_METERS),
             })
 
-        table = pd.DataFrame(matches)
+        table = pd.DataFrame(matches, columns=MATCH_COLUMNS)
         table.to_csv(self._matches_csv, index=False)
         return table
 

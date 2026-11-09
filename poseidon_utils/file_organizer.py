@@ -364,13 +364,19 @@ def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path,
     """
     Write each event's sensor records into its own event folder.
 
+    Events without records (e.g. floods confirmed only from images
+    while the sensor was down) get no CSV; their folders are still
+    made when their images are sorted, and later stages run on the
+    images alone.
+
     Parameters
     ----------
     abbr_events_path : str or os.PathLike
         Abbreviated CSV (``sensor_ID``, ``start_time_UTC``,
         ``end_time_UTC``).
-    full_events_path : str or os.PathLike
-        Sensor records CSV with ``sensor_ID`` and ``time_UTC``.
+    full_events_path : str or os.PathLike or None
+        Sensor records CSV with ``sensor_ID`` and ``time_UTC``. None
+        treats every event as image-only.
     output_parent_dir : str or os.PathLike
         Parent folder for the event folders.
     padding_hours : float, optional
@@ -379,26 +385,31 @@ def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path,
     Returns
     -------
     int
-        Number of event CSVs written. Events without records are
-        skipped.
+        Number of event CSVs written.
 
     Raises
     ------
     FileNotFoundError
-        If either CSV does not exist.
+        If a given CSV does not exist.
     """
     windows = event_windows(pd.read_csv(abbr_events_path), padding_hours)
+    os.makedirs(output_parent_dir, exist_ok=True)
+    if full_events_path is None:
+        logger.info("No sensor records CSV; all %d events are image-only.",
+                    len(windows))
+        return 0
     records = pd.read_csv(full_events_path)
     records["time_UTC"] = pd.to_datetime(records["time_UTC"], utc=True)
     records["sensor_ID"] = records["sensor_ID"].astype(str)
-    os.makedirs(output_parent_dir, exist_ok=True)
 
     written = 0
+    image_only = []
     for window in windows.itertuples():
         rows = records[(records["sensor_ID"] == window.sensor_ID)
                        & (records["time_UTC"] >= window.start)
                        & (records["time_UTC"] <= window.end)]
         if rows.empty:
+            image_only.append(window.folder_name)
             continue
         folder = os.path.join(output_parent_dir, window.folder_name)
         os.makedirs(folder, exist_ok=True)
@@ -408,6 +419,9 @@ def create_flood_csvs_and_subfolders(abbr_events_path, full_events_path,
 
     logger.info("Wrote %d of %d event CSVs under %s", written, len(windows),
                 output_parent_dir)
+    if image_only:
+        logger.info("%d events have no sensor records (image-only): %s",
+                    len(image_only), ", ".join(image_only))
     return written
 
 
