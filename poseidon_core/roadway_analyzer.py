@@ -1,17 +1,26 @@
 """Summarize flooding on a roadway region of interest over a flood event.
 
-A region of interest (ROI) is drawn in LabelMe on a rectified image as
-either a line/linestrip (a transect along the road) or a polygon (the
-road surface). For every depth and water surface elevation (WSE) map
-in an event, the values inside the ROI are extracted and reduced to a
-per-timestep CSV:
+A region of interest (ROI) is drawn in LabelMe either
+
+* on a rectified (plan view) image, as a line/linestrip (a transect
+  along the road) or a polygon (the road surface)
+  (:func:`roi_pixels_from_labelme`), or
+* as a polygon on an original camera image. The polygon is rasterized
+  and rectified with the event images' own camera model, so the ROI is
+  the set of grid cells that sample road pixels, regardless of how well
+  the rectified road lines up with a plan view
+  (:func:`roi_pixels_from_camera_labelme`).
+
+For every depth and water surface elevation (WSE) map in an event, the
+values inside the ROI are extracted and reduced to a per-timestep CSV:
 
 * ``<roi>_accessibility_time_series.csv`` - flooded pixel counts,
   impassability flag, and depth statistics.
 * ``<roi>_wse_time_series.csv`` - WSE statistics.
 
 The raw ROI samples are also saved as ``zarr/<roi>_depths.zip`` and
-``zarr/<roi>_wse.zip`` for later analysis.
+``zarr/<roi>_wse.zip``, and the ROI footprint as ``<roi>_roi_mask.png``
+(north up, like the rectified images), for later analysis.
 """
 
 import json
@@ -19,6 +28,7 @@ import logging
 import os
 import warnings
 
+import cv2
 import numpy as np
 import pandas as pd
 from skimage.draw import polygon
@@ -64,13 +74,7 @@ def roi_pixels_from_labelme(json_path, label, step_size=1.0):
         If no shape has `label` or its type is unsupported.
     """
     with open(json_path) as handle:
-        shapes = json.load(handle).get("shapes", [])
-
-    shape = next((s for s in shapes if s.get("label") == label), None)
-    if shape is None:
-        found = sorted({s.get("label", "?") for s in shapes})
-        raise ValueError(f"No shape labeled '{label}' in {json_path}; "
-                         f"found {found}")
+        shape = _find_shape(json.load(handle), label, json_path)
 
     points = np.asarray(shape["points"], dtype=float)  # (x, y) vertices
     shape_type = shape["shape_type"]
@@ -93,6 +97,121 @@ def roi_pixels_from_labelme(json_path, label, step_size=1.0):
 
     raise ValueError(f"Unsupported shape_type '{shape_type}' for label "
                      f"'{label}'")
+
+
+def _find_shape(labelme, label, json_path):
+    """
+    Return the first LabelMe shape with a label.
+
+    Parameters
+    ----------
+    labelme : dict
+        Parsed LabelMe JSON.
+    label : str
+        Shape label to find.
+    json_path : str or os.PathLike
+        JSON path, for the error message.
+
+    Returns
+    -------
+    dict
+        The shape.
+
+    Raises
+    ------
+    ValueError
+        If no shape has `label`.
+    """
+    shapes = labelme.get("shapes", [])
+    shape = next((s for s in shapes if s.get("label") == label), None)
+    if shape is None:
+        found = sorted({s.get("label", "?") for s in shapes})
+        raise ValueError(f"No shape labeled '{label}' in {json_path}; "
+                         f"found {found}")
+    return shape
+
+
+def roi_pixels_from_camera_labelme(json_path, label, rectifier):
+    """
+    Rectify a polygon drawn on a camera image into grid ROI pixels.
+
+    The polygon is rasterized at the camera image size and passed
+    through the rectifier's grid-to-pixel lookup, the same one used for
+    the event images and labels. The ROI is every grid cell that
+    samples a pixel inside the polygon. Because the camera view is
+    assumed fixed, one polygon serves every image of the site.
+
+    Parameters
+    ----------
+    json_path : str or os.PathLike
+        LabelMe JSON drawn on an original (unrectified) camera image.
+    label : str
+        Label of the polygon to use.
+    rectifier : poseidon_core.image_rectifier.ImageRectifier
+        Rectifier built from the site's camera model and grid.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(N, 2)`` integer ``(row, col)`` grid pixels in image
+        orientation (row 0 at the top / northern edge), as returned by
+        :func:`roi_pixels_from_labelme`.
+
+    Raises
+    ------
+    ValueError
+        If the shape is missing or not a polygon, the JSON was drawn on
+        an image of a different size than the camera, or no grid cell
+        falls inside the polygon.
+    """
+    with open(json_path) as handle:
+        labelme = json.load(handle)
+    shape = _find_shape(labelme, label, json_path)
+    if shape["shape_type"] != "polygon":
+        raise ValueError(f"Camera-view ROIs must be polygons; '{label}' in "
+                         f"{json_path} is a {shape['shape_type']}")
+
+    width, height = (int(n) for n in rectifier.intrinsics[:2])
+    drawn = (labelme.get("imageWidth"), labelme.get("imageHeight"))
+    if None not in drawn and tuple(drawn) != (width, height):
+        raise ValueError(f"{json_path} was drawn on a {drawn[0]} x "
+                         f"{drawn[1]} image, but the camera images are "
+                         f"{width} x {height}")
+
+    points = np.asarray(shape["points"], dtype=float)  # (x, y) vertices
+    mask = np.zeros((height, width), dtype=np.uint8)
+    rows, cols = polygon(points[:, 1], points[:, 0], shape=mask.shape)
+    mask[rows, cols] = 1
+
+    grid_mask = rectifier.rectify_array(mask)[..., 0] > 0  # row 0 south
+    grid_rows, grid_cols = np.nonzero(grid_mask)
+    if grid_rows.size == 0:
+        raise ValueError(f"No grid cells fall inside the '{label}' polygon "
+                         f"of {json_path}")
+    image_rows = (grid_mask.shape[0] - 1) - grid_rows  # flip to north up
+    return np.column_stack((image_rows, grid_cols)).astype(int)
+
+
+def roi_mask(coords, shape):
+    """
+    Rasterize ROI pixels into a north-up mask.
+
+    Parameters
+    ----------
+    coords : numpy.ndarray
+        ``(N, 2)`` ``(row, col)`` pixels in image orientation, inside
+        the grid.
+    shape : tuple of int
+        ``(rows, cols)`` of the grid maps.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``uint8`` mask, 255 inside the ROI, row 0 at the north.
+    """
+    mask = np.zeros(shape, dtype=np.uint8)
+    mask[coords[:, 0], coords[:, 1]] = 255
+    return mask
 
 
 def sample_roi(grid_map, coords):
@@ -228,7 +347,8 @@ class RoadwayAnalyzer:
     target_event_dir : str or os.PathLike
         Event folder containing ``zarr/depth_maps.zip``.
     labelme_json_path : str or os.PathLike
-        LabelMe JSON defining the ROI on a rectified image.
+        LabelMe JSON defining the ROI on a rectified image, or, with
+        `rectifier`, a polygon on a camera image.
     roi_label : str, optional
         Label of the ROI shape. Default is ``"roadway"``.
     step_size : float, optional
@@ -236,6 +356,9 @@ class RoadwayAnalyzer:
     statistic : str, optional
         Depth/WSE map statistic to analyze (``"95_perc"``,
         ``"90_perc"``, ``"mean"``, ``"median"``). Default ``"95_perc"``.
+    rectifier : poseidon_core.image_rectifier.ImageRectifier, optional
+        The site's rectifier. When given, the JSON is read as a
+        camera-view polygon and rectified onto the grid.
 
     Attributes
     ----------
@@ -244,11 +367,12 @@ class RoadwayAnalyzer:
     roi_coords : numpy.ndarray
         ``(N, 2)`` ROI pixels in image orientation.
     geom_type : str
-        LabelMe shape type of the ROI.
+        LabelMe shape type of the ROI, or ``"camera_polygon"``.
     """
 
     def __init__(self, target_event_dir, labelme_json_path,
-                 roi_label="roadway", step_size=1.0, statistic="95_perc"):
+                 roi_label="roadway", step_size=1.0, statistic="95_perc",
+                 rectifier=None):
         """
         Load the ROI geometry for an event.
 
@@ -264,14 +388,22 @@ class RoadwayAnalyzer:
             Sample spacing along line ROIs. Default is 1.0.
         statistic : str, optional
             Map statistic to analyze. Default is ``"95_perc"``.
+        rectifier : ImageRectifier, optional
+            Rectifier for a camera-view polygon ROI. Default None (the
+            JSON was drawn on a rectified image).
         """
         self.event_path = os.fspath(target_event_dir)
         self.event_name = os.path.basename(os.path.normpath(self.event_path))
         self.statistic = statistic
         self.roi_name = os.path.splitext(
             os.path.basename(labelme_json_path))[0]
-        self.roi_coords, self.geom_type = roi_pixels_from_labelme(
-            labelme_json_path, roi_label, step_size)
+        if rectifier is None:
+            self.roi_coords, self.geom_type = roi_pixels_from_labelme(
+                labelme_json_path, roi_label, step_size)
+        else:
+            self.roi_coords = roi_pixels_from_camera_labelme(
+                labelme_json_path, roi_label, rectifier)
+            self.geom_type = "camera_polygon"
         logger.info("RoadwayAnalyzer: %s ROI '%s' with %d pixels "
                     "(statistic %s).", self.geom_type, self.roi_name,
                     len(self.roi_coords), statistic)
@@ -326,9 +458,16 @@ class RoadwayAnalyzer:
                 logger.warning("No maps ending in '%s' in %s",
                                suffix, in_path)
                 return None
-            coords = clip_roi_to_grid(self.roi_coords, group[names[0]].shape)
+            grid_shape = group[names[0]].shape
+            coords = clip_roi_to_grid(self.roi_coords, grid_shape)
             samples = np.stack([sample_roi(group[name][:], coords)
                                 for name in names])
+
+        if kind == "depth":
+            # Save the footprint so ROIs can be compared and checked
+            cv2.imwrite(os.path.join(self.event_path,
+                                     f"{self.roi_name}_roi_mask.png"),
+                        roi_mask(coords, grid_shape))
 
         stamps = [extract_timestamp(name) for name in names]
         times = pd.to_datetime(stamps, format="%Y%m%d%H%M%S", utc=True)

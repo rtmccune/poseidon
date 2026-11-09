@@ -153,7 +153,7 @@ The HPC is moving from LSF to Slurm. Scripts with `#SBATCH` headers are
 submitted with `sbatch`, e.g. `sbatch 07_make_rectify.sh`:
 
 * Stage 02 and the segmentation `99_*` scripts use the GPU partitions.
-* Stages 07 and 08 run on the CPU, on idle partner nodes
+* Stages 07, 08, 10 and 11 run on the CPU, on idle partner nodes
   (`--account=kanarde_cpu --partition=compute_partners --qos=short`, a
   2-hour limit per task). They are limited by file reads and writes, so a
   GPU does not speed them up.
@@ -195,6 +195,26 @@ Re-running a stage replaces its earlier outputs.
 
 The remaining `99_*` scripts run QC and analysis (overlay comparisons,
 accessibility plots, anomaly detection) and segmentation model training.
+
+### Roadway ROIs
+
+Stage 10 summarizes depths on the site's `roi_json`, a LabelMe shape
+drawn on a rectified (plan view) image. A plan-view ROI assumes the
+rectified road lines up with the plan view. To avoid that assumption,
+draw a polygon labeled `roadway` on an original camera image (the camera
+view is assumed fixed) and set `camera_roi_json` in the site config.
+Stage 10 then also rasterizes that polygon and rectifies it with the
+camera model, using the same grid-to-pixel lookup as the labels, so its
+ROI is exactly the grid cells that sample road pixels. Each ROI writes
+its own `<roi>_*_time_series.csv` and `<roi>_roi_mask.png`.
+
+Stage 11 summarizes both ROIs and runs
+`poseidon_deploy/analysis/compare_roadway_rois.py`, which writes to
+`data/<site>/roi_comparison/`:
+- per-image and per-event differences;
+- agreement on the impassable flag;
+- bias, MAE, RMSE and correlation of coverage and depth;
+- the overlap (IoU) of the two footprints, with a figure.
 
 ### Events without sensor data
 

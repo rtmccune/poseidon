@@ -188,3 +188,52 @@ def test_list_unreviewed_images_skips_scored_names(tmp_path):
         "--output", str(output)]) == 0
     assert output.read_text().split() == ["CAM_DE_01_2.jpg",
                                           "CAM_DE_01_3.jpg"]
+
+
+def write_access(folder, roi, impassable, flooded, max_depth):
+    """Write a minimal accessibility CSV for one ROI of one event."""
+    times = pd.date_range("2024-01-01 12:00", periods=len(impassable),
+                          freq="6min", tz="UTC")
+    pd.DataFrame({
+        "Time": times, "Impassable": impassable, "FloodedPixels": flooded,
+        "TotalPixels": 10, "MeanDepth": max_depth, "MedianDepth": max_depth,
+        "MaxDepth": max_depth, "MinDepth": max_depth,
+    }).to_csv(folder / f"{roi}_accessibility_time_series.csv", index=False)
+
+
+def test_compare_roadway_rois_pairs_images_and_footprints(tmp_path):
+    """Two ROIs are paired by time; agreement, bias and IoU are reported."""
+    import compare_roadway_rois as compare
+
+    events = tmp_path / "flood_events"
+    for name in ("DE_01_a", "DE_01_b"):
+        folder = events / name
+        folder.mkdir(parents=True)
+        write_access(folder, "plan", [0, 1, 1], [0, 5, 10],
+                     [np.nan, 0.1, 0.2])
+        write_access(folder, "cam", [0, 0, 1], [0, 0, 8],
+                     [np.nan, np.nan, 0.3])
+    mask_a = np.zeros((10, 10), np.uint8)
+    mask_a[:, :6] = 255  # 60 cells
+    mask_b = np.zeros((10, 10), np.uint8)
+    mask_b[:, 3:] = 255  # 70 cells, 30 shared
+    cv2.imwrite(str(events / "DE_01_a" / "plan_roi_mask.png"), mask_a)
+    cv2.imwrite(str(events / "DE_01_a" / "cam_roi_mask.png"), mask_b)
+
+    out = tmp_path / "comparison"
+    assert compare.main(["--events_dir", str(events), "--roi_a", "plan",
+                         "--roi_b", "cam", "--output_dir", str(out)]) == 0
+
+    summary = pd.read_csv(out / "roi_comparison_summary.csv").set_index(
+        "metric")["value"]
+    assert summary["images"] == 6
+    assert summary["impassable_agreement_pct"] == pytest.approx(200 / 3)
+    assert summary["impassable_a_only"] == 2
+    # Max depth b - a per image: 0, -0.1, +0.1 (dry depths count as 0)
+    assert summary["MaxDepth_bias"] == pytest.approx(0.0)
+    assert summary["MaxDepth_mae"] == pytest.approx(0.2 / 3)
+    assert summary["footprint_iou"] == pytest.approx(30 / 100)
+    events_table = pd.read_csv(out / "roi_comparison_events.csv")
+    assert events_table["impassable_images_a"].tolist() == [2, 2]
+    assert (out / "roi_footprints.png").exists()
+    assert (out / "roi_comparison_MaxDepth.png").exists()

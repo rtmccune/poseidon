@@ -61,6 +61,12 @@ require_site() {
     echo "Site: $SITE"
 }
 
+# Succeed if the site config sets key $1 (e.g. camera_roi_json).
+site_has() {
+    grep -Eq "^$1:[[:space:]]*[^[:space:]#]" \
+        "$REPO_ROOT/poseidon_deploy/configs/sites/$SITE.yaml"
+}
+
 # Echo the event folder for this array task.
 # Uses $TARGET_EVENT (a single event folder name) when set, otherwise
 # TASK_ID-th (1-based) sorted subfolder of $EVENT_DIR.

@@ -33,6 +33,12 @@ basemap: data/basemaps/DE_01_basemap.tif
 # same folder.
 roi_json: poseidon_deploy/configs/sites/rois/down_east/shell_hill_rd_polygon.json
 
+# Optional roadway polygon drawn in LabelMe on an original (unrectified)
+# camera image, labeled "roadway". Stage 10 rectifies it with the camera
+# model and analyzes it alongside roi_json; stage 11 compares the two.
+# Uncomment once the JSON exists:
+camera_roi_json: poseidon_deploy/configs/sites/rois/down_east/shell_hill_rd_camera_polygon.json
+
 # Lowest in-situ sensor WSE (m) shown in image/sensor comparison plots.
 sensor_wse_floor: 0.49
 
