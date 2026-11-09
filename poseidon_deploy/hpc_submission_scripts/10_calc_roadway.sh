@@ -12,13 +12,13 @@
 #BSUB -o job_outputs/roadway.%J.%I.out
 #BSUB -e job_outputs/roadway.%J.%I.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 export TMPDIR=/tmp
 activate_env
 
 EVENT=$(event_for_task)
-echo "Task ${LSB_JOBINDEX:-single}: $EVENT"
+echo "Task ${TASK_ID:-single}: $EVENT"
 
 python -u "$NAIADS/run_roadway_analyzer.py" \
     --site "$SITE" \

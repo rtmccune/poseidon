@@ -6,16 +6,22 @@
 # Input:  $SITE_DATA/images/daylight_all_events/job_file_lists/
 # Output: segmentation predictions written by segmentation_gym
 #
-#BSUB -J seg_batch[1-32]
-#BSUB -W 45
-#BSUB -n 1
-#BSUB -R "rusage[mem=4G]"
-#BSUB -gpu "num=1:mode=shared"
-#BSUB -q gpu
-#BSUB -o job_outputs/seg_batch.%J.%I.out
-#BSUB -e job_outputs/seg_batch.%J.%I.err
+# Slurm (GPU partition): submit with `sbatch 02_segment_lists.sh`.
+# --array must match the number of file lists. Use a different GPU type
+# with e.g. `sbatch --gres=gpu:l40s:1 02_segment_lists.sh`.
+#
+#SBATCH --job-name=seg_batch
+#SBATCH --array=1-32
+#SBATCH --time=00:45:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=4G
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:a100:1
+#SBATCH --output=job_outputs/seg_batch.%A.%a.out
+#SBATCH --error=job_outputs/seg_batch.%A.%a.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 module load cuda/12.1
 module load apptainer
@@ -25,7 +31,7 @@ export APPTAINERENV_TRANSFORMERS_CACHE="$REPO_ROOT/poseidon_deploy/segmentation/
 IMAGES_DIR="$SITE_DATA/images/daylight_all_events"
 WEIGHTS="$REPO_ROOT/data/segmentation/all_sites/weights/all_sites_5_class_v3_segformer_fullmodel.h5"
 FILE_LIST=$(file_list_for_task "$IMAGES_DIR/job_file_lists")
-echo "Task $LSB_JOBINDEX: $FILE_LIST"
+echo "Task $TASK_ID: $FILE_LIST"
 
 apptainer exec --nv --bind "$REPO_ROOT" \
     "$REPO_ROOT/poseidon_deploy/segmentation/container/seg_gym.sif" \

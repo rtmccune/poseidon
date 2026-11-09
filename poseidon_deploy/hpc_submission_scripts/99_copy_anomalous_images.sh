@@ -13,7 +13,7 @@
 #BSUB -o job_outputs/copy_imgs.%J.out
 #BSUB -e job_outputs/copy_imgs.%J.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 activate_env
 

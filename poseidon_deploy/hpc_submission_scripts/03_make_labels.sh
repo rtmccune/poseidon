@@ -17,12 +17,12 @@
 #BSUB -o job_outputs/make_labels.%J.%I.out
 #BSUB -e job_outputs/make_labels.%J.%I.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 
 PREDS_DIR="$SITE_DATA/images/daylight_all_events_preds"
 FILE_LIST=$(file_list_for_task "$PREDS_DIR/job_file_lists")
-echo "Task $LSB_JOBINDEX: running pred_label_generator on $FILE_LIST"
+echo "Task $TASK_ID: running pred_label_generator on $FILE_LIST"
 
 "$BIN_DIR/pred_label_generator" \
     "$PREDS_DIR" \

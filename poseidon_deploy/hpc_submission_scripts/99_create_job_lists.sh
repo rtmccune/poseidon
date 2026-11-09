@@ -13,7 +13,7 @@
 #BSUB -o make_jobs.%J.out
 #BSUB -e make_jobs.%J.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 activate_env
 

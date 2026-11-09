@@ -14,12 +14,12 @@
 #BSUB -o job_outputs/make_overlay.%J.%I.out
 #BSUB -e job_outputs/make_overlay.%J.%I.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 
 IMAGE_DIR="$SITE_DATA/images/daylight_all_events"
 FILE_LIST=$(file_list_for_task "$IMAGE_DIR/job_file_lists")
-echo "Task $LSB_JOBINDEX: running overlay_generator on $FILE_LIST"
+echo "Task $TASK_ID: running overlay_generator on $FILE_LIST"
 
 "$BIN_DIR/overlay_generator" \
     "$IMAGE_DIR" \

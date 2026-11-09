@@ -2,18 +2,19 @@
 # Segmentation: train a Segmentation Gym model.
 #
 # Edit DATA_DIR and CONFIG below for the dataset and model config.
+# Slurm (GPU partition): submit with `sbatch 99_train_model.sh`.
 #
-#BSUB -J train_model
-#BSUB -W 60
-#BSUB -n 12
-#BSUB -R "rusage[mem=10G]"
-#BSUB -R "select[a100 || l40 || l40s || h100]"
-#BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -q gpu
-#BSUB -o train_model.%J.out
-#BSUB -e train_model.%J.err
+#SBATCH --job-name=train_model
+#SBATCH --time=01:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=10G
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:a100:1
+#SBATCH --output=train_model.%j.out
+#SBATCH --error=train_model.%j.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 module load cuda/12.1
 module load apptainer
 export APPTAINERENV_TRANSFORMERS_OFFLINE=1

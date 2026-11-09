@@ -12,7 +12,7 @@
 #BSUB -o stitch_images.%J.out
 #BSUB -e stitch_images.%J.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 activate_env
 
@@ -20,4 +20,4 @@ python -u "$ANALYSIS/image_stitcher.py" \
     "$SITE_DATA/images/daylight_all_events" \
     "$SITE_DATA/images/daylight_all_events_overlays" \
     "$SITE_DATA/images/stitched_comparisons" \
-    --workers "$LSB_DJOB_NUMPROC"
+    --workers "$NPROC"

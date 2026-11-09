@@ -3,17 +3,19 @@
 # labels.
 #
 # Edit DATA_DIR and CONFIG below for the dataset to build.
+# Slurm (GPU partition): submit with `sbatch 99_make_training_dataset.sh`.
 #
-#BSUB -J make_data
-#BSUB -W 60
-#BSUB -n 12
-#BSUB -R "rusage[mem=12G]"
-#BSUB -gpu "num=1"
-#BSUB -q gpu
-#BSUB -o make_data.%J.out
-#BSUB -e make_data.%J.err
+#SBATCH --job-name=make_data
+#SBATCH --time=01:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=12G
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:a100:1
+#SBATCH --output=make_data.%j.out
+#SBATCH --error=make_data.%j.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 module load cuda/12.1
 module load apptainer
 

@@ -14,7 +14,7 @@
 #BSUB -o image_filter.%J.out
 #BSUB -e image_filter.%J.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 activate_env
 

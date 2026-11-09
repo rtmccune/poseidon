@@ -12,7 +12,7 @@
 #BSUB -o summary_stats.%J.out
 #BSUB -e summary_stats.%J.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 export TMPDIR=/tmp
 activate_env

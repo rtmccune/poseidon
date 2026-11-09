@@ -11,7 +11,7 @@
 #BSUB -o image_pull.%J.out
 #BSUB -e image_pull.%J.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 [ -n "$IMAGE_DRIVE" ] || die "IMAGE_DRIVE is not set in hpc_paths.env"
 activate_env

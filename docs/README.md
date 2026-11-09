@@ -147,8 +147,21 @@ site = poseidon_utils.load_site_config("carolina_beach")
 1. Copy `poseidon_deploy/hpc_paths.template.env` to
    `poseidon_deploy/hpc_paths.env` and set `POSEIDON_ENV`, `IMAGE_DRIVE`,
    and `SITE`. Data are read from and written to `data/$SITE/`.
-2. Submit each stage from `poseidon_deploy/hpc_submission_scripts/`, e.g.
-   `bsub < 07_make_rectify.sh`.
+2. Submit each stage from `poseidon_deploy/hpc_submission_scripts/`.
+
+The HPC is moving from LSF to Slurm. The GPU stages (02, 07, 08 and the
+segmentation `99_*` scripts) have `#SBATCH` headers for the Slurm `gpu`
+partition and are submitted with `sbatch`, e.g. `sbatch 07_make_rectify.sh`.
+The CPU stages still have `#BSUB` headers for the LSF `ccee` queue and are
+submitted with `bsub < 05_flood_event_setup.sh`. `_common.sh` works under
+both.
+
+Slurm GPU requests must name a GPU type; the scripts ask for one A100.
+Override it, or any other header, on the command line:
+`sbatch --gres=gpu:l40s:1 02_segment_lists.sh`. Jobs under two hours can
+also use idle partner GPUs with
+`sbatch --partition=gpu_partners --qos=short_gpu ...`. Check free GPUs
+with `si --gpus` and your jobs with `squeue -u $USER`.
 
 | Stage | Script | Purpose |
 |---|---|---|
@@ -166,13 +179,28 @@ site = poseidon_utils.load_site_config("carolina_beach")
 | 10 | `10_calc_roadway.sh` | Roadway accessibility time series (per event) |
 | 11 | `11_summarize_road_stats.sh` | Summarize roadway statistics over events |
 
-Per-event stages are job arrays: set `#BSUB -J name[1-N]` to the number of
-event folders. Rerun one event with, for example,
-`TARGET_EVENT=<event folder> bsub -J rectify_one < 07_make_rectify.sh`.
+Per-event stages are job arrays: set the array size to the number of
+event folders (`#SBATCH --array=1-N` or `#BSUB -J name[1-N]`). Rerun one
+event with, for example,
+`TARGET_EVENT=<event folder> sbatch --array=1 07_make_rectify.sh`
+(LSF: `TARGET_EVENT=<event folder> bsub -J one < 09_make_plots.sh`).
 Re-running a stage replaces its earlier outputs.
 
 The remaining `99_*` scripts run QC and analysis (overlay comparisons,
 accessibility plots, anomaly detection) and segmentation model training.
+
+### Reviewing segmentations
+
+`99_image_overlay_comparison.sh` stitches each daylight image beside its
+overlay into `images/stitched_comparisons/comparison_<image name>`. To list
+the images not yet scored in a review CSV (`Filename`,
+`Segmentation_Score`), run from the repository root:
+```bash
+python poseidon_deploy/analysis/list_unreviewed_images.py \
+    --site down_east --labels data/segmentation_labels.csv
+```
+This writes `data/down_east/images_to_review.txt` and logs reviewed and
+remaining counts for the daylight and `all_events_during_FOV` folders.
 
 ## Example notebooks
 

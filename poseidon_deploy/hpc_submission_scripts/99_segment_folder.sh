@@ -2,19 +2,19 @@
 # Segmentation: segment every image in one folder (no job array).
 #
 # Edit IMAGES_DIR and WEIGHTS below for the folder and model to use.
+# Slurm (GPU partition): submit with `sbatch 99_segment_folder.sh`.
 #
-#BSUB -J seg_folder
-#BSUB -W 360
-#BSUB -n 1
-#BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=4G]"
-#BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -R "select[a100 || l40 || l40s || h100]"
-#BSUB -q gpu
-#BSUB -o seg_folder.%J.out
-#BSUB -e seg_folder.%J.err
+#SBATCH --job-name=seg_folder
+#SBATCH --time=06:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=4G
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:a100:1
+#SBATCH --output=seg_folder.%j.out
+#SBATCH --error=seg_folder.%j.err
 
-source "${LS_SUBCWD:-$PWD}/_common.sh"
+source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 module load cuda/12.1
 module load apptainer
 export APPTAINERENV_TRANSFORMERS_OFFLINE=1

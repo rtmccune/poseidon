@@ -1,10 +1,15 @@
 #!/bin/bash
-# Shared setup sourced by every POSEIDON LSF submission script.
+# Shared setup sourced by every POSEIDON submission script.
 #
-# Submit scripts from this folder (e.g. `bsub < 07_make_rectify.sh`).
+# Works under both schedulers while the HPC moves from LSF to Slurm.
+# Submit scripts from this folder: `sbatch 02_segment_lists.sh` for
+# scripts with #SBATCH lines (the GPU stages), `bsub < 05_...sh` for
+# scripts with #BSUB lines.
 # Sourcing this file:
 #   * loads ~/.bashrc (for conda) and ../hpc_paths.env
 #   * defines SUBMIT_DIR, REPO_ROOT, NAIADS, ANALYSIS, BIN_DIR
+#   * defines TASK_ID (this array task's 1-based index, empty outside
+#     an array) and NPROC (CPUs given to the job) for either scheduler
 #   * defines SITE_DATA=$REPO_ROOT/data/$SITE and EVENT_DIR when SITE is
 #     set in hpc_paths.env
 #   * creates job_outputs/ for array-job logs
@@ -13,7 +18,9 @@
 source ~/.bashrc
 set -e  # stop the job at the first failing command
 
-SUBMIT_DIR="${LS_SUBCWD:-$PWD}"
+SUBMIT_DIR="${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}"
+TASK_ID="${SLURM_ARRAY_TASK_ID:-$LSB_JOBINDEX}"
+NPROC="${SLURM_CPUS_PER_TASK:-${SLURM_NTASKS:-${LSB_DJOB_NUMPROC:-1}}}"
 REPO_ROOT="$(cd "$SUBMIT_DIR/../.." && pwd)"
 NAIADS="$REPO_ROOT/poseidon_deploy/naiads"
 ANALYSIS="$REPO_ROOT/poseidon_deploy/analysis"
@@ -56,16 +63,16 @@ require_site() {
 
 # Echo the event folder for this array task.
 # Uses $TARGET_EVENT (a single event folder name) when set, otherwise
-# the LSB_JOBINDEX-th (1-based) sorted subfolder of $EVENT_DIR.
+# TASK_ID-th (1-based) sorted subfolder of $EVENT_DIR.
 event_for_task() {
     local event
     if [ -n "$TARGET_EVENT" ]; then
         event="$EVENT_DIR/$TARGET_EVENT"
     else
-        [ -n "$LSB_JOBINDEX" ] || die "Not an array job; set TARGET_EVENT"
+        [ -n "$TASK_ID" ] || die "Not an array job; set TARGET_EVENT"
         local events=($(find "$EVENT_DIR" -mindepth 1 -maxdepth 1 -type d \
             | sort))
-        event="${events[$((LSB_JOBINDEX - 1))]}"
+        event="${events[$((TASK_ID - 1))]}"
     fi
     [ -d "$event" ] || die "Event folder not found: $event"
     echo "$event"
@@ -73,7 +80,7 @@ event_for_task() {
 
 # Echo this array task's file list inside folder $1.
 file_list_for_task() {
-    local list="$1/file_list_${LSB_JOBINDEX}.txt"
+    local list="$1/file_list_${TASK_ID}.txt"
     [ -f "$list" ] || die "File list not found: $list"
     echo "$list"
 }

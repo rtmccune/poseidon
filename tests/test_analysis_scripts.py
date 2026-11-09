@@ -166,3 +166,25 @@ def test_lock_file_becomes_an_explicit_spec():
     lines, pip = parse_lock.explicit_spec(lock)
     assert lines == ["@EXPLICIT", "https://x/a-1!1.0.conda#abc"]
     assert pip == ["c==2.0"]
+
+
+def test_list_unreviewed_images_skips_scored_names(tmp_path):
+    """Scored comparisons (mixed line endings) are excluded by name."""
+    import list_unreviewed_images
+
+    images = tmp_path / "daylight"
+    images.mkdir()
+    for name in ("CAM_DE_01_1.jpg", "CAM_DE_01_2.jpg", "CAM_DE_01_3.jpg",
+                 "notes.txt"):
+        (images / name).write_text("x")
+    labels = tmp_path / "labels.csv"
+    labels.write_bytes(b"Filename,Segmentation_Score\n"
+                       b"comparison_CAM_DE_01_1.jpg,0\r\n"
+                       b"comparison_CAM_DE_01_9.jpg,1\n")
+    output = tmp_path / "todo.txt"
+
+    assert list_unreviewed_images.main([
+        "--labels", str(labels), "--image_dir", str(images),
+        "--output", str(output)]) == 0
+    assert output.read_text().split() == ["CAM_DE_01_2.jpg",
+                                          "CAM_DE_01_3.jpg"]
