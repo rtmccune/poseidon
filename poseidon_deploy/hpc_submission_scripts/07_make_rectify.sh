@@ -8,13 +8,13 @@
 # Output: $EVENT_DIR/<event>/zarr/{orig_image_rects,labels_rects}.zip
 #
 #SBATCH --job-name=rectify_batch
-#SBATCH --array=1-19
+#SBATCH --array=1-77
 #SBATCH --time=00:10:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=4G
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:a30:1
 #SBATCH --output=job_outputs/rectify.%A.%a.out
 #SBATCH --error=job_outputs/rectify.%A.%a.err
 
