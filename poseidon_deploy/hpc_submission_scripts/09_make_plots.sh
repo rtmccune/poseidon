@@ -4,7 +4,7 @@
 # The basemap and virtual sensors come from the site config.
 # Output: $EVENT_DIR/<event>/plots/
 #
-#BSUB -J plot_batch[1-19]
+#BSUB -J plot_batch[1-77]
 #BSUB -W 30
 #BSUB -n 4
 #BSUB -R "rusage[mem=12G]"
