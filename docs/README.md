@@ -415,6 +415,25 @@ sheet to each panel, for both sites. The daylight steps need stage 01's
 Each site's `<roi>_pub_metrics.md` still holds the statistics to quote,
 because the alignment does not change them.
 
+### Methods figure
+
+`99_methods_figure.sh` makes the material for the methods process diagram:
+- **`methods_figure_assets.py`** exports example panels for one
+  well-segmented image to `data/<site>/methods_figure/assets/`. By default
+  it picks an image whose roadway coverage is near 60%; choose another
+  with `--event` and `--timestamp`.
+  - Camera view: the original image, the segmentation overlay, a
+    class map, a water mask and the camera-view roadway polygon.
+  - Plan view (north up, one shared size, so they stack): the LiDAR
+    elevation grid, the rectified image, the rectified water mask, and
+    the depth map with an SVG colour bar. Also the depth map with the
+    roadway outline and virtual sensors.
+- **`methods_process_diagram.py`** writes `process_diagram.svg`, which
+  links those panels. Panel (a) is a workflow overview, (b) zooms in on
+  segmentation and (c) on georectification and depth. Each part is a
+  named Inkscape layer, and all text is live, so the figure can be
+  finished in Inkscape. Missing panels appear as labelled placeholders.
+
 ### Events without sensor data
 
 Stage 05 needs `flood_events.csv`, the sensor readings inside each event.

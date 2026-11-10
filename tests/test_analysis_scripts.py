@@ -808,3 +808,62 @@ def test_event_membership_reasons():
     assert table["no_peak"] == ("in (b)-(c) only: no sensor peak in the "
                                 "event period")
     assert table["no_images"] == "in neither: no well-segmented images"
+
+
+def test_methods_figure_assets_and_diagram(tmp_path):
+    """Every panel is exported for one image and the SVG links them."""
+    import json
+
+    import methods_figure_assets as assets
+    import methods_process_diagram as diagram
+    from poseidon_utils.zarr_io import write_array, write_zip_group
+
+    stamp = "20240601120000"
+    event = tmp_path / "events" / "CB_03_20240601090000_20240601160000"
+    (event / "orig_images").mkdir(parents=True)
+    (event / "labels").mkdir()
+    (event / "zarr").mkdir()
+    image = np.full((80, 60, 3), 120, dtype=np.uint8)
+    cv2.imwrite(str(event / "orig_images" / f"CAM_CB_03_{stamp}.jpg"), image)
+    labels = np.zeros((80, 60), dtype=np.uint8)
+    labels[50:, :] = 1  # water in the lower part
+    cv2.imwrite(str(event / "labels" / f"CAM_CB_03_{stamp}_predseg.png"),
+                labels)
+    plan = np.zeros((40, 30), dtype=np.uint8)
+    plan[:15] = 1  # water along the southern rows
+    with write_zip_group(event / "zarr" / "orig_image_rects.zip") as g:
+        write_array(g, f"CAM_CB_03_{stamp}_rectified",
+                    np.full((40, 30, 3), 90, dtype=np.uint8))
+    with write_zip_group(event / "zarr" / "labels_rects.zip") as g:
+        write_array(g, f"CAM_CB_03_{stamp}_predseg_rectified", plan)
+    with write_zip_group(event / "zarr" / "depth_maps.zip") as g:
+        write_array(g, f"CAM_CB_03_{stamp}_predseg_rectified_depth_map_"
+                       "95_perc", np.where(plan == 1, 0.1, 0.0))
+    z = np.linspace(0, 1, 40 * 30).reshape(40, 30)
+    np.savez(tmp_path / "grid.npz", x=z, y=z, z=z)
+
+    out = tmp_path / "assets"
+    assert assets.main([
+        "--site", "carolina_beach", "--events_dir", str(tmp_path / "events"),
+        "--images_dir", str(tmp_path / "images"), "--labels", "unused",
+        "--sensor", "unused", "--grid", str(tmp_path / "grid.npz"),
+        "--out_dir", str(out), "--event", event.name, "--timestamp", stamp,
+        "--plan_scale", "1"]) == 0
+    manifest = json.loads((out / "manifest.json").read_text())
+    for name in ("01_original.jpg", "02_overlay.jpg", "03_classes.png",
+                 "04_water_mask.png", "06_dem.png", "07_rectified.png",
+                 "08_rectified_water.png", "09_depth.png",
+                 "09_depth_colorbar.svg", "10_roi_sensors.png"):
+        assert (out / name).exists() and name in manifest["files"]
+    # Plan-view panels share the grid's size, north up
+    assert manifest["pixel_sizes"]["09_depth.png"] == [30, 40]
+    rectified_water = cv2.imread(str(out / "08_rectified_water.png"))
+    assert rectified_water[-1, 0, 0] > rectified_water[0, 0, 0]  # blue south
+
+    svg = tmp_path / "diagram.svg"
+    assert diagram.main(["--site", "carolina_beach", "--assets", str(out),
+                         "--out", str(svg)]) == 0
+    text = svg.read_text()
+    assert 'xlink:href="assets/09_depth.png"' in text
+    assert 'inkscape:label="Georect zoom"' in text
+    assert "(not found)" not in text  # every panel was exported
