@@ -764,6 +764,10 @@ def test_combined_publication_figures_side_by_side(tmp_path):
         out / "left_site_combined_fig1_aligned_timing_event_membership.csv")
     assert set(membership["source"]) == {"ROI", "VS1"}
     assert (membership["reason"] == "in (a) and (b)-(c)").all()
+    funnel = (out / "event_funnel.md").read_text()
+    assert "| Event folders (stage 05) | 4 | 4 |" in funnel
+    assert "| Figure 1 (a): sensor peak and a well-segmented image | 4 | 4 |" \
+        in funnel
     assert (out / "right_site_combined_fig2_depth_by_coverage_1c_mean_depth"
                   "_fit_summary.csv").exists()
 

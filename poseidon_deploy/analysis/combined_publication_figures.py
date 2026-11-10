@@ -47,6 +47,14 @@ whether it is in panel (a), panels (b)-(c), both or neither, and why
 statistics in each site's ``<roi>_pub_metrics.md`` still apply; they do
 not depend on the alignment.
 
+``event_funnel.md``
+    Events left after each step from the event sheet to each panel, for
+    both sites: sheet rows; events with any image, any daylight image
+    (from stage 01's ``abbr_flood_events_daylight.csv``, if copied into
+    the site folder) and sensor records; event folders; folders with a
+    sensor peak and with a well-segmented image; and the events behind
+    figure 1 (a), each column of (b)-(c) and figure 2.
+
 Example
 -------
 ``python combined_publication_figures.py --sites carolina_beach
@@ -54,6 +62,7 @@ down_east --data_root data --out_dir data/publication_combined``
 """
 
 import argparse
+import glob
 import logging
 import os
 
@@ -63,6 +72,7 @@ matplotlib.use("Agg")  # headless HPC nodes
 
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 from poseidon_utils.constants import FEET_TO_METERS  # noqa: E402
 from poseidon_utils.logging_utils import setup_logging  # noqa: E402
@@ -125,9 +135,139 @@ def load_site(site, args, roi=None):
     logger.info("%s: ROI %s, %d events with camera series, %d images",
                 site, roi, series["event"].nunique() if len(series) else 0,
                 0 if images is None else len(images))
-    return {"site": site, "roi": roi,
+    return {"site": site, "roi": roi, "site_dir": site_dir,
+            "events_dir": events_dir,
             "sensor": sensor, "series": series, "timing": timing,
             "images": images}
+
+
+def _sheet_counts(site_dir):
+    """
+    Event sheet steps of :func:`event_funnel`.
+
+    Parameters
+    ----------
+    site_dir : str
+        Site data folder.
+
+    Returns
+    -------
+    list of tuple
+        ``(step, events)``; daylight steps need stage 01's
+        ``abbr_flood_events_daylight.csv``.
+    """
+    daylight = os.path.join(site_dir, "abbr_flood_events_daylight.csv")
+    sheet = os.path.join(site_dir, "abbr_flood_events.csv")
+    steps = []
+    if os.path.exists(daylight):
+        events = pd.read_csv(daylight)
+        steps.append(("Events on the event sheet", len(events)))
+        for column, step in (
+                ("has_images", "Camera recorded any image within 3 h of "
+                               "the event"),
+                ("has_daylight_images", "Any daylight image within 3 h "
+                                        "(gets an event folder)"),
+                ("has_event_daylight_images", "Any daylight image during "
+                                              "the event itself")):
+            if column in events:
+                flags = events[column].astype(str).str.lower() == "true"
+                steps.append((step, int(flags.sum())))
+        if "event_daylight_hours" in events:
+            hours = pd.to_numeric(events["event_daylight_hours"],
+                                  errors="coerce")
+            steps.append(("Event overlaps daylight at all (sun only, "
+                          "camera or not)", int((hours > 0).sum())))
+    elif os.path.exists(sheet):
+        steps.append(("Events on the event sheet", len(pd.read_csv(sheet))))
+        logger.warning("No %s; daylight steps of the event funnel left out "
+                       "(copy it from the HPC; stage 01 writes it).",
+                       daylight)
+    full = os.path.join(site_dir, "flood_events.csv")
+    if os.path.exists(full):
+        steps.append(("Sheet events with sensor records in "
+                      "flood_events.csv",
+                      int(pd.read_csv(full, usecols=["flood_event"])[
+                          "flood_event"].nunique())))
+    return steps
+
+
+def event_funnel(site, args):
+    """
+    How many events survive each step from the event sheet to the panels.
+
+    Parameters
+    ----------
+    site : dict
+        Output of :func:`load_site`.
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``step`` and ``events``. Steps from "Event folders" on count
+        event folders; panel steps match the figures.
+    """
+    steps = _sheet_counts(site["site_dir"])
+    folders = [d for d in glob.glob(os.path.join(site["events_dir"], "*", ""))]
+    steps.append(("Event folders (stage 05)", len(folders)))
+
+    series, timing = site["series"], site["timing"]
+    peaks = series.drop_duplicates("event")
+    peaked = set(peaks.loc[peaks["sensor_peak"].notna(), "event"])
+    camera = set(series.loc[series["source"] != sc.SENSOR, "event"])
+    steps += [
+        ("Folders where the sensor was wet during the event (has a peak)",
+         len(peaked)),
+        ("Folders with at least one well-segmented image", len(camera)),
+        ("Figure 1 (a): sensor peak and a well-segmented image",
+         len(peaked & camera)),
+    ]
+    usable = timing.dropna(subset=["onset_lead_min"])
+    for source, group in sorted(usable.groupby("source"),
+                                key=lambda g: (g[0] != "ROI", g[0])):
+        steps.append((f"Figure 1 (b, c): {pub._display(source)} wet and "
+                      f"sensor wet while images exist",
+                      group["event"].nunique()))
+    if site["images"] is not None:
+        paired = pub.paired_images(site["images"])
+        steps.append(("Figure 2: well-segmented images with water and a "
+                      "sensor reading within "
+                      f"{args.match_minutes:g} min",
+                      paired["event"].nunique()))
+    return pd.DataFrame(steps, columns=["step", "events"])
+
+
+def write_event_funnels(sites, args, path):
+    """
+    Write both sites' event funnels as Markdown and log them.
+
+    Parameters
+    ----------
+    sites : list of dict
+        Output of :func:`load_site` per side, left first.
+    args : argparse.Namespace
+        Parsed arguments.
+    path : str
+        Output ``.md`` file.
+    """
+    funnels = [event_funnel(site, args).set_index("step")["events"]
+               .rename(site["site"]) for site in sites]
+    table = pd.concat(funnels, axis=1, sort=False)
+    lines = ["# Event counts, event sheet to figures", "",
+             "Events left after each step. Sheet steps count rows of the "
+             "event sheet; from \"Event folders\" on, event folders "
+             "(events with daylight images within 3 h). A blank cell: "
+             "the input for that step was not found.", "",
+             "| Step | " + " | ".join(table.columns) + " |",
+             "|---|" + "---:|" * len(table.columns)]
+    for step, row in table.iterrows():
+        lines.append(f"| {step} | " + " | ".join(
+            "" if pd.isna(v) else str(int(v)) for v in row) + " |")
+    with open(path, "w") as handle:
+        handle.write("\n".join(lines) + "\n")
+    logger.info("Event funnel (%s):\n%s", os.path.basename(path),
+                table.to_string())
 
 
 def _share_ylim(axes, bottom=0.0):
@@ -318,6 +458,8 @@ def main(argv=None):
     os.makedirs(args.out_dir, exist_ok=True)
     sites = [load_site(site, args, roi) for site, roi in
              zip(args.sites, args.rois or (None, None))]
+    write_event_funnels(sites, args,
+                        os.path.join(args.out_dir, "event_funnel.md"))
     made = sum((figure_one(sites, args, "combined_fig1_aligned_timing"),
                 figure_two(sites, args, "combined_fig2_depth_by_coverage")))
     logger.info("%d combined figures written to %s", made, args.out_dir)

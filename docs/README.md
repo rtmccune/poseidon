@@ -408,6 +408,10 @@ its y-axis across the two sites.
   reading within 5 min. The run log prints each site's image and event
   counts. The depth axis of (b) and (d) starts just below 0 m.
 
+`event_funnel.md` counts the events left after each step, from the event
+sheet to each panel, for both sites. The daylight steps need stage 01's
+`abbr_flood_events_daylight.csv` in the site's data folder.
+
 Each site's `<roi>_pub_metrics.md` still holds the statistics to quote,
 because the alignment does not change them.
 
