@@ -322,7 +322,7 @@ def draw_figure(site, event, moments, images, sensor, args):
     local = [m["time"].tz_convert(EASTERN_TZ) for m in moments]
 
     fig = plt.figure(figsize=(7.5, 6.2))
-    grid = fig.add_gridspec(2, 1, height_ratios=[1.35, 1], hspace=0.22)
+    grid = fig.add_gridspec(2, 1, height_ratios=[1.35, 1], hspace=0.1)
     panes = grid[0].subgridspec(1, 4, width_ratios=[1, 1, 1, 0.07],
                                 wspace=0.08)
 
@@ -352,8 +352,13 @@ def draw_figure(site, event, moments, images, sensor, args):
             spine.set_visible(True)
             spine.set_color(color)
             spine.set_linewidth(3)
-        ax.set_title(f"({'abc'[k]}) {name}, {when:%H:%M}", fontsize=9,
-                     color=INK_STRONG, loc="left")
+        # Bold letter, as in (d), then the phase and time
+        ax.text(0, 1.02, f"({'abc'[k]})", transform=ax.transAxes,
+                fontsize=10, weight="bold", va="bottom", color=INK_STRONG)
+        ax.annotate(f"{name}, {when:%H:%M}", xy=(0, 1.02),
+                    xycoords="axes fraction", xytext=(22, 0),
+                    textcoords="offset points", fontsize=9, va="bottom",
+                    color=INK_STRONG)
     if colour_layer is not None:
         cax = fig.add_subplot(panes[3])
         fig.colorbar(colour_layer, cax=cax, label=style["cbar_label"])
@@ -386,7 +391,7 @@ def draw_figure(site, event, moments, images, sensor, args):
     for (name, color), when in zip(PHASES, local):
         ax.axvline(when, color=color, linestyle="--", linewidth=1.6)
     ax.set_ylim(bottom=0)
-    ax.set_ylabel("Water depth (m)")
+    ax.set_ylabel("Water Depth (m)")
     first = local[0]
     ax.set_xlabel(f"Time (Eastern), {first:%-d %B %Y}")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M",
