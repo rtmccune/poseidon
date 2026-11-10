@@ -13,9 +13,44 @@
 
 // OpenCV Headers
 #include <opencv2/opencv.hpp>
+#include <cstdlib>
+#ifdef __linux__
+#include <sched.h>
+#endif
 
 // Create a namespace alias for std::filesystem for brevity
 namespace fs = std::filesystem;
+
+/**
+ * @brief Choose how many worker threads to start.
+ *
+ * Uses POSEIDON_THREADS when it is set to a positive number (the HPC
+ * scripts set it to the CPUs given to the job), else the CPUs this
+ * process may run on (on Linux, the scheduler's allocation rather than
+ * every core on the node), else std::thread::hardware_concurrency().
+ * Never more threads than files.
+ *
+ * @param num_files Number of files to process.
+ * @return The number of threads, at least 1.
+ */
+static unsigned int chooseThreadCount(size_t num_files) {
+    unsigned int n = 0;
+    if (const char* env = std::getenv("POSEIDON_THREADS")) {
+        long value = std::strtol(env, nullptr, 10);
+        if (value > 0) n = static_cast<unsigned int>(value);
+    }
+#ifdef __linux__
+    if (n == 0) {
+        cpu_set_t cpus;
+        CPU_ZERO(&cpus);
+        if (sched_getaffinity(0, sizeof(cpus), &cpus) == 0) n = CPU_COUNT(&cpus);
+    }
+#endif
+    if (n == 0) n = std::thread::hardware_concurrency();
+    if (n == 0) n = 4;
+    if (num_files > 0 && n > num_files) n = static_cast<unsigned int>(num_files);
+    return n;
+}
 
 /**
  * @brief A custom comparator struct for using cv::Vec3b as a key in std::map.
@@ -259,7 +294,9 @@ int main(int argc, char* argv[]) {
         std::cout << "Found " << totalFiles << " image pairs to process from file list." << std::endl;
 
         // --- 4. Setup Thread Pool ---
-        unsigned int num_threads = std::thread::hardware_concurrency();
+        unsigned int num_threads = chooseThreadCount(totalFiles);
+        // Images are processed in parallel; keep OpenCV itself single-threaded
+        cv::setNumThreads(1);
         std::cout << "Using " << num_threads << " threads for processing." << std::endl;
         
         std::vector<std::thread> threads;
