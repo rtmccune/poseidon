@@ -4,8 +4,7 @@ Layout (first ``--sites`` entry on the left, as in the other combined
 figures):
 
 (a) North Carolina with both sites' community extents outlined.
-(b), (c) Each community on aerial imagery, with the site's elevation
-    grid extent and the camera.
+(b), (c) Each community on aerial imagery, with the camera (triangle).
 (d), (f) Each site's elevation grid (LiDAR, stage 06), shaded, with
     the camera and its field of view, the roadway region and the
     virtual sensors.
@@ -135,15 +134,6 @@ def web_box(extent):
     """Web Mercator ``(x0, x1, y0, y1)`` of a lon/lat extent."""
     xs, ys = to_web([extent[0], extent[1]], [extent[2], extent[3]])
     return xs[0], xs[1], ys[0], ys[1]
-
-
-def grid_outline_web(site):
-    """Web Mercator outline (x, y) of a site's grid extent."""
-    g = site.grid
-    xs = [g.min_x, g.max_x, g.max_x, g.min_x, g.min_x]
-    ys = [g.min_y, g.min_y, g.max_y, g.max_y, g.min_y]
-    transformer = Transformer.from_crs(site.crs, WEB, always_xy=True)
-    return transformer.transform(xs, ys)
 
 
 def note(ax, text):
@@ -298,6 +288,8 @@ def draw_context(ax, sites, args):
                 linewidth=0.9, zorder=3)
     if not (os.path.exists(context) or os.path.exists(states_path)):
         note(ax, "Run the fetch step for the North Carolina layers")
+    ax.set_xlabel("")  # geopandas labels the axes with the CRS units
+    ax.set_ylabel("")
     ax.set_xlim(x0, x1)
     ax.set_ylim(y0, y1)
     ax.set_aspect("equal")
@@ -338,11 +330,10 @@ def draw_community(ax, site, args):
     ax.set_xlim(x0, x1)
     ax.set_ylim(y0, y1)
     ax.set_aspect("equal")
-    gx, gy = grid_outline_web(config)
-    ax.plot(gx, gy, color=HIGHLIGHT, linewidth=1.6, zorder=10)
+    # The site, marked like the camera in the site panels
     cx, cy = to_web(config.longitude, config.latitude)
-    ax.plot(cx, cy, marker="o", markersize=11, markerfacecolor="none",
-            markeredgecolor=HIGHLIGHT, markeredgewidth=1.6, zorder=11)
+    ax.plot(cx, cy, marker="^", markersize=11, color=HIGHLIGHT,
+            markeredgecolor=INK, markeredgewidth=1, zorder=11)
     _, xs, _, ys = md.add_graticule_ticks(ax, WEB, args.community_tick_deg,
                                           fontsize=7)
     md.add_zebra_frame(ax, xs, ys, width=4)
@@ -491,6 +482,46 @@ def draw_photo(ax, site, path):
         spine.set_color(INK)
 
 
+def find_photo(name, config, data_root):
+    """
+    Find a camera photo for a site.
+
+    Prefers the image the camera roadway polygon was drawn on (so the
+    outline matches), searched anywhere under ``<data_root>/<site>``
+    (e.g. in the image folders on the HPC), then any ``CAM_*.jpg``
+    directly in that folder.
+
+    Parameters
+    ----------
+    name : str
+        Site name (data folder).
+    config : poseidon_utils.site_config.SiteConfig
+        Site configuration.
+    data_root : str
+        Folder of site data folders.
+
+    Returns
+    -------
+    str or None
+        Photo path, or None if none was found.
+    """
+    site_dir = os.path.join(data_root, name)
+    wanted = None
+    roi = config.resolve(config.camera_roi_json)
+    if roi is not None and roi.exists():
+        with open(roi) as handle:
+            wanted = json.load(handle).get("imagePath")
+    if wanted:
+        wanted = os.path.basename(wanted)
+        for folder, _, files in os.walk(site_dir):
+            if wanted in files:
+                return os.path.join(folder, wanted)
+        logger.info("%s: %s (the camera polygon's image) not found under "
+                    "%s", name, wanted, site_dir)
+    photos = sorted(glob.glob(os.path.join(site_dir, "CAM_*.jpg")))
+    return photos[0] if photos else None
+
+
 def render(args):
     """
     Draw the figure from local files only.
@@ -509,11 +540,16 @@ def render(args):
     plt.rcParams.update({"axes.grid": False, "savefig.bbox": "tight"})
     sites = []
     for i, name in enumerate(args.sites):
-        photo = (args.photos[i] if args.photos else
-                 next(iter(sorted(glob.glob(os.path.join(
-                     args.data_root, name, "CAM_*.jpg")))), None))
+        config = load_site_config(name)
+        photo = (args.photos[i] if args.photos
+                 else find_photo(name, config, args.data_root))
+        if photo is None:
+            logger.warning("%s: no photo found; pass --photos LEFT RIGHT.",
+                           name)
+        else:
+            logger.info("%s photo: %s", name, photo)
         sites.append({"name": name, "title": site_title(name),
-                      "config": load_site_config(name), "photo": photo,
+                      "config": config, "photo": photo,
                       "letter": "bc"[i]})
     grids = [load_grid(site, args) for site in sites]
     norms = [Normalize(*(args.elevation_range or (
@@ -522,7 +558,7 @@ def render(args):
 
     fig = plt.figure(figsize=(7.5, 9.0))
     outer = fig.add_gridspec(3, 1, height_ratios=[1.0, 1.25, 1.1],
-                             hspace=0.12)
+                             hspace=0.2)
     ax_nc = fig.add_subplot(outer[0])
     draw_context(ax_nc, [s for s in sites], args)
     panel_letter(ax_nc, "a")
