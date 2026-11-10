@@ -6,15 +6,17 @@ series. Each pane is framed in a colour that matches a dashed vertical
 line on the time series at the moment it shows.
 
 Panes (``--pane``)
-    ``depth`` (default): the depth map (stage 08, ``--statistic``) on
-    the rectified image, north up, with the roadway outline, on one
-    shared colour scale. ``image``: the camera image with the predicted
-    water shaded.
+    ``depth`` (default): the depth map (stage 08, ``--statistic``)
+    drawn exactly as stage 09 draws it (basemap, depth colour scale,
+    virtual sensor markers), one colour bar for all three. ``image``:
+    the camera image with the predicted water shaded.
 
 Time series
     The in-situ sensor's depth (dashed; readings at or below the road
-    surface shown as 0 m) and the mean depth on the roadway from each
-    well-segmented image (points), in local time.
+    surface shown as 0 m), the mean depth on the roadway (points) and
+    each virtual sensor's depth (lines, in the map marker colours; 0 m
+    where its cell is dry) from each well-segmented image, in local
+    time.
 
 Choosing the moments
     Only well-segmented images with water on the roadway (and, for depth
@@ -53,22 +55,27 @@ import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from matplotlib.colors import Normalize, to_rgb  # noqa: E402
+from matplotlib.colors import to_rgb  # noqa: E402
 
 from poseidon_utils.constants import EASTERN_TZ  # noqa: E402
 from poseidon_utils.logging_utils import setup_logging  # noqa: E402
+from poseidon_utils.site_config import load_site_config  # noqa: E402
+from poseidon_utils.zarr_io import read_zip_arrays  # noqa: E402
 
 import access_plotter as ap  # noqa: E402
 import publication_figures as pub  # noqa: E402
-from methods_figure_assets import _north_up, _stamp_files, _zip_array  # noqa: E402
-from plot_style import (BLUE, INK, INK_STRONG, MAGENTA, ORANGE,  # noqa: E402
-                        SEQUENTIAL_BLUE, apply_style)
+from methods_figure_assets import _stamp_files, _zip_array  # noqa: E402
+from plot_style import (BLUE, INK, INK_STRONG, apply_style,  # noqa: E402
+                        virtual_sensor_color)
 
 logger = logging.getLogger(__name__)
 
-#: Phases shown, with their frame and line colours. Distinct from the
-#: series colours (black sensor, blue roadway mean).
-PHASES = (("Rising", ORANGE), ("Peak", MAGENTA), ("Falling", "#6D8600"))
+#: Phases shown, with their frame and line colours: a light-to-dark
+#: red, in time order, distinct from the depth colour scale (blue to
+#: purple) and the series (black sensor, blue roadway mean, the virtual
+#: sensors' green, amber and pink).
+PHASES = (("Rising", "#F28E7F"), ("Peak", "#D7301F"),
+          ("Falling", "#7F0000"))
 
 
 def site_title(site):
@@ -199,31 +206,77 @@ def choose_event(images, sensor, site_dir, args, event=None, times=None):
     return name, moments
 
 
-def depth_pane(event_dir, stamp, args):
+def map_plotter(site, event_dir):
     """
-    Depth map on the greyed rectified image, north up.
+    Stage 09's map plotter for an event, with the site's virtual sensors.
+
+    Parameters
+    ----------
+    site : str
+        Site config name.
+    event_dir : str
+        Event folder.
 
     Returns
     -------
-    tuple
-        ``(background_rgb, depth)`` arrays (depth NaN where dry), or
-        ``(None, None)`` if missing.
+    poseidon_core.depth_map_plotter.DepthMapPlotter
+        Plotter drawing depth maps as stage 09 does (basemap, colour
+        scale, virtual sensor markers).
     """
-    zarr = os.path.join(event_dir, "zarr")
-    depth = _zip_array(os.path.join(zarr, "depth_maps.zip"), stamp,
-                       f"depth_map_{args.statistic}")
-    rect = _zip_array(os.path.join(zarr, "orig_image_rects.zip"), stamp)
-    if depth is None:
-        return None, None
-    depth = _north_up(np.squeeze(depth)).astype(float)
-    if rect is None:
-        grey = np.full((*depth.shape, 3), 0.85)
-    else:
-        rect = _north_up(rect).astype(float)[..., :3] / 255
-        grey = np.repeat(rect.mean(axis=2, keepdims=True), 3, axis=2)
-        grey = 0.35 + 0.55 * grey  # light, so the depths stand out
-    depth[depth <= 0] = np.nan
-    return grey, depth
+    from poseidon_core.depth_map_plotter import DepthMapPlotter
+
+    config = load_site_config(site)
+    g = config.grid
+    basemap = config.resolve(config.basemap)
+    return DepthMapPlotter(
+        event_dir, g.min_x, g.max_x, g.min_y, g.max_y,
+        resolution_m=g.resolution, bbox_crs=config.crs,
+        virtual_sensor_locations=config.virtual_sensors, plot_sensors=True,
+        basemap_path=str(basemap) if basemap else None)
+
+
+def depth_map(event_dir, stamp, args):
+    """
+    An image's depth map in grid orientation (row 0 south), or None.
+    """
+    depth = _zip_array(os.path.join(event_dir, "zarr", "depth_maps.zip"),
+                       stamp, f"depth_map_{args.statistic}")
+    return None if depth is None else np.squeeze(depth).astype(float)
+
+
+def virtual_sensor_series(event_dir, good):
+    """
+    Each virtual sensor's depth for the event's well-segmented images.
+
+    Parameters
+    ----------
+    event_dir : str
+        Event folder (``zarr/virtual_sensor_data.zip`` from stage 09).
+    good : set of str
+        Well-segmented image timestamps.
+
+    Returns
+    -------
+    pandas.DataFrame or None
+        ``time`` and ``VS1``, ``VS2``... (0 m where the cell is dry), or
+        None without the store.
+    """
+    path = os.path.join(event_dir, "zarr", "virtual_sensor_data.zip")
+    if not os.path.exists(path):
+        logger.warning("No %s; virtual sensors left off the time series.",
+                       path)
+        return None
+    arrays = read_zip_arrays(path, ["timestamps", "vs_depth"])
+    stamps = [str(t) for t in arrays["timestamps"]]
+    depth = np.atleast_2d(arrays["vs_depth"]).astype(float)
+    table = pd.DataFrame(np.nan_to_num(depth, nan=0.0),
+                         columns=[f"VS{i + 1}" for i in
+                                  range(depth.shape[1])])
+    table["stamp"] = [pd.Timestamp(t).strftime("%Y%m%d%H%M%S")
+                      if not t.isdigit() else t for t in stamps]
+    table["time"] = pd.to_datetime(table["stamp"], format="%Y%m%d%H%M%S",
+                                   utc=True)
+    return table[table["stamp"].isin(good)].sort_values("time")
 
 
 def image_pane(event_dir, stamp, args):
@@ -263,7 +316,6 @@ def draw_figure(site, event, moments, images, sensor, args):
     """
     site_dir = os.path.join(args.data_root, site)
     event_dir = os.path.join(site_dir, "flood_events", event)
-    roi = args.roi or pub.site_roi(site)
     stamps = [stamp_of(m["time"]) for m in moments]
     local = [m["time"].tz_convert(EASTERN_TZ) for m in moments]
 
@@ -272,32 +324,26 @@ def draw_figure(site, event, moments, images, sensor, args):
     panes = grid[0].subgridspec(1, 4, width_ratios=[1, 1, 1, 0.07],
                                 wspace=0.08)
 
-    loaded = [depth_pane(event_dir, s, args) if args.pane == "depth"
-              else (image_pane(event_dir, s, args), None) for s in stamps]
-    depths = [d for _, d in loaded if d is not None]
-    top = args.depth_max or (float(np.nanpercentile(
-        np.concatenate([d[np.isfinite(d)] for d in depths]), 99))
-        if depths and any(np.isfinite(d).any() for d in depths) else 0.1)
-    norm = Normalize(0, top)
-    mask_path = os.path.join(event_dir, f"{roi}_roi_mask.png")
-    roi_mask = (cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) > 0
-                if os.path.exists(mask_path) else None)
-
-    for k, ((name, color), (background, depth), when) in enumerate(
-            zip(PHASES, loaded, local)):
+    plotter = map_plotter(site, event_dir) if args.pane == "depth" else None
+    colour_layer = None
+    for k, ((name, color), stamp, when) in enumerate(
+            zip(PHASES, stamps, local)):
         ax = fig.add_subplot(panes[k])
-        if background is None:
+        if args.pane == "depth":
+            depth = depth_map(event_dir, stamp, args)
+            if depth is not None:
+                # Stage 09's map: basemap, depth scale, virtual sensors
+                colour_layer, _, style = plotter.draw_map(
+                    ax, depth, "depth", basemap=True, marker_size=60,
+                    label_size=6.5)
+                ax.set_aspect("equal")
+        else:
+            image = image_pane(event_dir, stamp, args)
+            if image is not None:
+                ax.imshow(image)
+        if not ax.images:
             ax.text(0.5, 0.5, "image not found", ha="center", va="center",
                     transform=ax.transAxes, fontsize=8, color=INK)
-        else:
-            ax.imshow(background, interpolation="none")
-            if depth is not None:
-                ax.imshow(depth, cmap=SEQUENTIAL_BLUE, norm=norm,
-                          interpolation="none")
-                if roi_mask is not None and roi_mask.shape == depth.shape:
-                    ax.contour(roi_mask.astype(float), levels=[0.5],
-                               colors=INK_STRONG, linewidths=0.8,
-                               linestyles="--")
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
@@ -306,10 +352,9 @@ def draw_figure(site, event, moments, images, sensor, args):
             spine.set_linewidth(3)
         ax.set_title(f"({'abc'[k]}) {name}, {when:%H:%M}", fontsize=9,
                      color=INK_STRONG, loc="left")
-    if args.pane == "depth":
+    if colour_layer is not None:
         cax = fig.add_subplot(panes[3])
-        fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=SEQUENTIAL_BLUE),
-                     cax=cax, label="Depth (m)")
+        fig.colorbar(colour_layer, cax=cax, label=style["cbar_label"])
         cax.tick_params(labelsize=7)
 
     # Time series over the event's window, local time
@@ -327,6 +372,15 @@ def draw_figure(site, event, moments, images, sensor, args):
     ax.plot(good["time"].dt.tz_convert(EASTERN_TZ), good["depth"],
             marker="o", markersize=3.5, linestyle="none", color=BLUE,
             label="Mean depth on roadway (image)")
+    good_stamps = set(good["time"].dt.strftime("%Y%m%d%H%M%S"))
+    sensors = virtual_sensor_series(event_dir, good_stamps)
+    if sensors is not None:
+        for i, column in enumerate(c for c in sensors if
+                                   c.startswith("VS")):
+            ax.plot(sensors["time"].dt.tz_convert(EASTERN_TZ),
+                    sensors[column], color=virtual_sensor_color(i),
+                    linewidth=1.3, marker="o", markersize=2.5,
+                    label=column)
     for (name, color), when in zip(PHASES, local):
         ax.axvline(when, color=color, linestyle="--", linewidth=1.6)
     ax.set_ylim(bottom=0)
@@ -335,7 +389,7 @@ def draw_figure(site, event, moments, images, sensor, args):
     ax.set_xlabel(f"Time (Eastern), {first:%-d %B %Y}")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M",
                                                       tz=EASTERN_TZ))
-    ax.legend(loc="best", fontsize=8)
+    ax.legend(loc="best", fontsize=7.5, ncol=2)
     ax.text(-0.07, 1.02, "(d)", transform=ax.transAxes, fontsize=10,
             weight="bold", va="bottom")
 
@@ -390,9 +444,6 @@ def parse_args(argv=None):
                         help="Roadway ROI. Default: the publication ROI.")
     parser.add_argument("--statistic", default="95_perc",
                         help="Depth map statistic (stage 10 uses 95_perc).")
-    parser.add_argument("--depth_max", type=float, default=None,
-                        help="Top of the depth colour scale (m). Default: "
-                             "99th percentile of the three maps.")
     parser.add_argument("--water_class", type=int, default=1,
                         help="Label value of water (image panes).")
     parser.add_argument("--sensor_wet_ft", type=float, default=0.02,

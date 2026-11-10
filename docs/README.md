@@ -420,11 +420,16 @@ because the alignment does not change them.
 `99_example_event_figure.sh` runs
 `poseidon_deploy/analysis/example_event_figure.py` and makes one figure
 per site. Three panes show the rising leg, the peak and the falling leg
-of one flood event: by default depth maps on the rectified image, or the
-camera image with water shaded (`--pane image`). Below them is the
-event's water depth time series: the in-situ sensor and the image mean
-depth on the roadway. Each pane is framed in a colour that matches a
-dashed line on the time series.
+of one flood event. By default they are depth maps drawn exactly as
+stage 09 draws them (basemap, depth scale and virtual sensors); with
+`--pane image` they are the camera image with water shaded. Below them
+is the event's water depth time series:
+- the in-situ sensor;
+- the mean depth on the roadway, from the images;
+- each virtual sensor, in its map colour.
+
+Each pane is framed in a colour that matches a dashed line on the time
+series.
 
 The event and the three moments are chosen from well-segmented images
 with water on the roadway. Use `--events` and `--times` to choose your

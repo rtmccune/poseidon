@@ -525,12 +525,48 @@ class DepthMapPlotter:
         output_folder : str or os.PathLike
             Output folder.
         """
+        fig, ax = plt.subplots(figsize=(10, 10))
+        image, geodata, style = self.draw_map(ax, data, plot_type)
+        self._finalize_and_save_plot(fig, ax, image, geodata,
+                                     style["cbar_label"], output_folder,
+                                     output_filename)
+
+    def draw_map(self, ax, data, plot_type="depth", basemap=False,
+                 marker_size=300, label_size=9):
+        """
+        Draw one map (and its virtual sensors) on existing axes.
+
+        The map layer of :meth:`_plot_georeferenced_map`, for figures
+        that place several maps together.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes to draw on (Web Mercator data coordinates).
+        data : numpy.ndarray
+            2-D map in grid orientation (row 0 south).
+        plot_type : {'depth', 'wse'}, optional
+            Selects the color scale. Default ``'depth'``.
+        basemap : bool, optional
+            Also draw the basemap and set the limits to the map.
+            Default False (the stage 09 plots add both when saving).
+        marker_size : float, optional
+            Virtual sensor marker size (points^2). Default 300.
+        label_size : float, optional
+            Virtual sensor label size (points). Default 9.
+
+        Returns
+        -------
+        tuple
+            ``(image, geodata, style)``: the map layer, the output of
+            :meth:`_load_and_prepare_geodata` and of
+            :meth:`_get_plot_style`.
+        """
         geodata = self._load_and_prepare_geodata(data)
         mercator = geodata["mercator_array"]
         minx, miny, maxx, maxy = mercator.rio.bounds()
         style = self._get_plot_style(plot_type, mercator)
 
-        fig, ax = plt.subplots(figsize=(10, 10))
         image = ax.imshow(mercator.to_numpy(), extent=(minx, maxx, miny, maxy),
                           cmap=style["cmap"], vmin=style["vmin"],
                           vmax=style["vmax"], alpha=0.7, interpolation="none",
@@ -538,10 +574,17 @@ class DepthMapPlotter:
         if self.plot_sensors:
             self._plot_sensor_locations(ax, self.sensor_marker_path,
                                         geodata["shape"],
-                                        geodata["transform"])
-        self._finalize_and_save_plot(fig, ax, image, geodata,
-                                     style["cbar_label"], output_folder,
-                                     output_filename)
+                                        geodata["transform"],
+                                        marker_size=marker_size,
+                                        label_size=label_size)
+        if basemap:
+            try:
+                self._draw_basemap(ax, (minx, miny, maxx, maxy))
+            except Exception as err:  # noqa: BLE001 - a basemap is optional
+                logger.warning("Failed to draw basemap: %s", err)
+            ax.set_xlim(minx, maxx)
+            ax.set_ylim(miny, maxy)
+        return image, geodata, style
 
     def _load_and_prepare_geodata(self, data):
         """
@@ -723,7 +766,8 @@ class DepthMapPlotter:
         return marker
 
     def _plot_sensor_locations(self, ax, marker_path, original_data_shape,
-                               data_affine_transform):
+                               data_affine_transform, marker_size=300,
+                               label_size=9):
         """
         Draw virtual sensors at their map locations.
 
@@ -737,6 +781,11 @@ class DepthMapPlotter:
             ``(rows, cols)`` of the grid map.
         data_affine_transform : affine.Affine
             North-up transform of the grid in `bbox_crs`.
+        marker_size : float, optional
+            Marker size (points^2). Default 300.
+        label_size : float, optional
+            Label size (points); the label offset scales with it.
+            Default 9.
         """
         height, width = original_data_shape
         transformer = Transformer.from_crs(self.bbox_crs, PLOT_CRS,
@@ -752,10 +801,11 @@ class DepthMapPlotter:
                 *(data_affine_transform @ (col + 0.5, row_north_up + 0.5)))
             ax.scatter([x], [y], marker=marker_path,
                        color=virtual_sensor_color(i), edgecolors="white",
-                       s=300, linewidths=1, zorder=20,
+                       s=marker_size, linewidths=1, zorder=20,
                        label="Virtual Sensors" if i == 0 else None)
-            ax.annotate(f"VS{i + 1}", (x, y), xytext=(9, 9),
-                        textcoords="offset points", fontsize=9,
+            ax.annotate(f"VS{i + 1}", (x, y),
+                        xytext=(label_size, label_size),
+                        textcoords="offset points", fontsize=label_size,
                         fontweight="bold", color="black", zorder=21,
                         bbox={"boxstyle": "round,pad=0.15",
                               "facecolor": "white", "edgecolor": "none",
