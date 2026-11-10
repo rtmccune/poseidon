@@ -1,17 +1,23 @@
 """Make the site description figure: North Carolina, community and site.
 
-Layout (first ``--sites`` entry on the left, as in the other combined
-figures):
+Layout ``horizontal`` (default, landscape). On the left, eastern North
+Carolina (a), with each site's box in its own colour, above the two
+communities, (b) and (c) in ``--sites`` order, each joined to its box by
+dashed lines of that colour. On the right, one row per site: the
+elevation grids (d), (e), each framed in its site's colour, beside the
+photos (f), (g).
 
-(a) North Carolina with both sites' community extents outlined.
-(b), (c) Each community on aerial imagery, with the camera (triangle).
-(d), (f) Each site's elevation grid (LiDAR, stage 06), shaded, with
-    the camera and its field of view, the roadway region and the
-    virtual sensors.
-(e), (g) A photo from each camera, with the roadway polygon.
+* community: aerial imagery with the camera (triangle in the site's
+  colour);
+* elevation grid (LiDAR, stage 06), shaded, with the camera and its
+  field of view, the roadway region and the virtual sensors;
+* camera photo with the roadway polygon.
 
-Maps carry a zebra frame, scale bar and north arrow
-(``map_decorations.py``, adapted from the shift repository).
+``--layout vertical`` (portrait) stacks the whole state, then the
+communities (b), (c), then the grid and photo pairs (d, f and e, g).
+
+Maps carry a scale bar and north arrow, and a zebra frame except the
+framed grids (``map_decorations.py``, adapted from the shift repository).
 
 Two steps, because HPC compute nodes have no internet:
 
@@ -64,7 +70,7 @@ from poseidon_utils.logging_utils import setup_logging  # noqa: E402
 from poseidon_utils.site_config import load_site_config  # noqa: E402
 
 import map_decorations as md  # noqa: E402
-from plot_style import INK, apply_style  # noqa: E402
+from plot_style import INK, MAGENTA, ORANGE, apply_style  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +80,11 @@ WEB = "EPSG:3857"
 #: North Carolina map extent (lon_min, lon_max, lat_min, lat_max).
 NC_EXTENT = (-84.4, -75.3, 33.7, 36.7)
 
+#: Eastern North Carolina, the default state map of the landscape layout
+#: (nearly square, so it fills its column; inside NC_EXTENT, so the
+#: downloaded basemap covers it).
+EAST_NC_EXTENT = (-80.6, -75.3, 33.7, 36.65)
+
 #: Census cartographic boundary file of US states (1:5,000,000).
 STATES_URL = ("https://www2.census.gov/geo/tiger/GENZ2023/shp/"
               "cb_2023_us_state_5m.zip")
@@ -81,8 +92,9 @@ STATES_URL = ("https://www2.census.gov/geo/tiger/GENZ2023/shp/"
 #: States kept for the context map.
 STATES = ("NC", "SC", "VA", "TN", "GA")
 
-#: Highlight colour of zoom boxes and site markers (as in shift).
-HIGHLIGHT = "#FFB000"
+#: Colour of each site's box, connectors and camera markers, in row
+#: order (validated categorical slots of the shared palette).
+SITE_COLORS = (ORANGE, MAGENTA)
 
 #: Imagery credits, for the caption.
 ATTRIBUTION = {
@@ -273,7 +285,14 @@ def draw_context(ax, sites, args):
     """Draw panel (a): North Carolina with the community extents."""
     import geopandas as gpd
 
-    x0, x1, y0, y1 = web_box(NC_EXTENT)
+    extent = args.context_extent or (
+        EAST_NC_EXTENT if args.layout == "horizontal" else NC_EXTENT)
+    x0, x1, y0, y1 = web_box(extent)
+    # Text positions from lon/lat, so they suit any extent
+    def place(lon, lat):
+        x, y = to_web(lon, lat)
+        return (x - x0) / (x1 - x0), (y - y0) / (y1 - y0)
+
     context = os.path.join(args.layers_dir, "context_nc.tif")
     if os.path.exists(context):
         image, bounds = read_raster(context)
@@ -299,22 +318,28 @@ def draw_context(ax, sites, args):
         pad = 4 * (bx1 - bx0)  # keep the small box visible at state scale
         ax.add_patch(mpatches.Rectangle(
             (bx0 - pad, by0 - pad), bx1 - bx0 + 2 * pad,
-            by1 - by0 + 2 * pad, facecolor="none", edgecolor=HIGHLIGHT,
+            by1 - by0 + 2 * pad, facecolor="none", edgecolor=site["color"],
             linewidth=1.8, zorder=10))
+        # Box corners (west, east, south, north) for the zoom connectors
+        site["box"] = (bx0 - pad, bx1 + pad, by0 - pad, by1 + pad)
         # Labels sit west of the boxes, over land, clear of the coast
         ax.text(bx0 - 1.5 * pad, (by0 + by1) / 2,
-                f"{site['title']} ({site['letter']})", fontsize=8,
+                f"{site['title']} ({site['letters'][0]})", fontsize=8,
                 va="center", ha="right", weight="bold", zorder=11,
                 path_effects=[pe.withStroke(linewidth=3,
                                             foreground="white")])
-    ax.text(0.30, 0.55, "North Carolina", transform=ax.transAxes,
+    ax.text(*place(-78.9, 35.6), "North Carolina", transform=ax.transAxes,
             fontsize=10, color=INK, style="italic", ha="center")
-    ax.text(0.93, 0.12, "Atlantic\nOcean", transform=ax.transAxes,
+    # Between the Down East connectors, which run south to panel (c)
+    ax.text(*place(-76.3, 33.95), "Atlantic\nOcean",
+            transform=ax.transAxes,
             fontsize=8, color="#5F655F", style="italic", ha="center")
     _, xs, _, ys = md.add_graticule_ticks(ax, WEB, args.context_tick_deg)
     md.add_zebra_frame(ax, xs, ys, width=4)
-    md.add_scale_bar(ax, WEB, location=(0.04, 0.08))
-    md.add_north_arrow(ax, location=(0.95, 0.78), scale=0.16)
+    # Scale bar on open land at the left, clear of the site labels
+    # (west of their boxes) and the connectors (east of them)
+    md.add_scale_bar(ax, WEB, location=(0.05, 0.42))
+    md.add_north_arrow(ax, location=(0.08, 0.72), scale=0.12)
 
 
 def draw_community(ax, site, args):
@@ -332,10 +357,14 @@ def draw_community(ax, site, args):
     ax.set_aspect("equal")
     # The site, marked like the camera in the site panels
     cx, cy = to_web(config.longitude, config.latitude)
-    ax.plot(cx, cy, marker="^", markersize=11, color=HIGHLIGHT,
+    ax.plot(cx, cy, marker="^", markersize=11, color=site["color"],
             markeredgecolor=INK, markeredgewidth=1, zorder=11)
-    _, xs, _, ys = md.add_graticule_ticks(ax, WEB, args.community_tick_deg,
-                                          fontsize=7)
+    _, xs, _, ys = md.add_graticule_ticks(
+        ax, WEB, args.community_tick_deg, fontsize=7,
+        label_every=2 if args.layout == "horizontal" else 1)
+    if site.get("labels_right"):
+        # Outer side of the right-hand map, clear of its neighbour
+        ax.yaxis.tick_right()
     md.add_zebra_frame(ax, xs, ys, width=4)
     md.add_scale_bar(ax, WEB, location=(0.06, 0.07), color="white",
                      outline="black")
@@ -423,7 +452,7 @@ def draw_site(ax, site, grid, norm, args):
     ax.add_patch(mpatches.Polygon(wedge, facecolor="white", alpha=0.18,
                                   edgecolor="white", linewidth=0.8,
                                   zorder=4))
-    ax.plot(cam_x, cam_y, marker="^", markersize=8, color=HIGHLIGHT,
+    ax.plot(cam_x, cam_y, marker="^", markersize=8, color=site["color"],
             markeredgecolor=INK, zorder=8, clip_on=False)
 
     for k, (col, row) in enumerate(
@@ -438,11 +467,20 @@ def draw_site(ax, site, grid, norm, args):
                 path_effects=[pe.withStroke(linewidth=2.5,
                                             foreground="white")])
 
-    breaks_x = md.clean_ticks(g.min_x, g.max_x, args.site_tick_m)
-    breaks_y = md.clean_ticks(g.min_y, g.max_y, args.site_tick_m)
     ax.set_xticks([])
     ax.set_yticks([])
-    md.add_zebra_frame(ax, breaks_x, breaks_y, width=3)
+    if site.get("frame"):
+        # A frame in the site's colour ties the panel to its box and
+        # community map; at this scale a zebra adds nothing to the
+        # scale bar
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_color(site["color"])
+            spine.set_linewidth(3)
+    else:
+        md.add_zebra_frame(
+            ax, md.clean_ticks(g.min_x, g.max_x, args.site_tick_m),
+            md.clean_ticks(g.min_y, g.max_y, args.site_tick_m), width=3)
     md.add_scale_bar(ax, config.crs, length_m=args.site_scale_m,
                      location=(0.07, 0.05), fontsize=7)
     md.add_north_arrow(ax, location=(0.88, 0.12), scale=0.1, fontsize=8)
@@ -475,6 +513,10 @@ def draw_photo(ax, site, path):
                         linewidth=1.6)
                 ax.plot(closed[:, 0], closed[:, 1], color=INK,
                         linewidth=0.7, linestyle="--")
+    # The polygon may reach past the image edges; keep the image's frame
+    height, width = image.shape[:2]
+    ax.set_xlim(-0.5, width - 0.5)
+    ax.set_ylim(height - 0.5, -0.5)
     ax.set_xticks([])
     ax.set_yticks([])
     for spine in ax.spines.values():
@@ -487,9 +529,10 @@ def find_photo(name, config, data_root):
     Find a camera photo for a site.
 
     Prefers the image the camera roadway polygon was drawn on (so the
-    outline matches), searched anywhere under ``<data_root>/<site>``
-    (e.g. in the image folders on the HPC), then any ``CAM_*.jpg``
-    directly in that folder.
+    outline matches), searched anywhere under ``<data_root>/<site>``,
+    then any ``CAM_*.jpg`` directly in that folder, then the middle
+    image of ``images/daylight_all_events/`` (the camera view is
+    fixed, so the polygon still lines up).
 
     Parameters
     ----------
@@ -519,7 +562,109 @@ def find_photo(name, config, data_root):
         logger.info("%s: %s (the camera polygon's image) not found under "
                     "%s", name, wanted, site_dir)
     photos = sorted(glob.glob(os.path.join(site_dir, "CAM_*.jpg")))
-    return photos[0] if photos else None
+    if photos:
+        return photos[0]
+    # Last resort: any daylight image from this camera (the view is
+    # fixed, so the roadway polygon still lines up)
+    daylight = os.path.join(site_dir, "images", "daylight_all_events")
+    photos = sorted(glob.glob(os.path.join(
+        daylight, f"{config.camera_name}_*.jpg")))
+    if photos:
+        logger.info("%s: using a daylight event image; pass --photos to "
+                    "choose one.", name)
+        return photos[len(photos) // 2]
+    return None
+
+
+def add_connector(ax_map, ax_zoom, site):
+    """
+    Join a site's box on the state map to its community panel.
+
+    Dashed lines in the site's colour run from the box's south corners
+    to the top corners of the panel below, as in shift's
+    ``add_zoom_inset``.
+    """
+    x0, x1, y0, _ = site["box"]
+    for x_box, x_axes in ((x0, 0.0), (x1, 1.0)):
+        ax_zoom.add_artist(mpatches.ConnectionPatch(
+            xyA=(x_box, y0), coordsA=ax_map.transData, xyB=(x_axes, 1.0),
+            coordsB=ax_zoom.transAxes, color=site["color"], linewidth=1.3,
+            linestyle="--", alpha=0.9, zorder=40, clip_on=False))
+
+
+def draw_horizontal(sites, grids, norms, args):
+    """
+    Landscape layout: maps on the left, site pairs on the right.
+
+    Eastern North Carolina (a) sits above the two communities, (b) and
+    (c) in ``--sites`` order, each joined to its box by dashed lines in
+    the site's colour. On the right, the elevation grids (d), (e) form
+    one column and the photos (f), (g) the next, one site per row; each
+    grid is framed in its site's colour.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure.
+    """
+    fig = plt.figure(figsize=(11.6, 7.0))
+    outer = fig.add_gridspec(1, 2, width_ratios=[1.05, 1], wspace=0.06)
+    left = outer[0].subgridspec(2, 2, height_ratios=[1.45, 1],
+                                hspace=0.12, wspace=0.08)
+    right = outer[1].subgridspec(2, 2, width_ratios=[1, 0.82],
+                                 hspace=0.26, wspace=0.04)
+    for i, site in enumerate(sites):
+        site.update(color=SITE_COLORS[i], letters="bc"[i], frame=True,
+                    labels_right=i == 1)
+    ax_nc = fig.add_subplot(left[0, :])
+    draw_context(ax_nc, sites, args)
+    panel_letter(ax_nc, "a")
+    for i, site in enumerate(sites):
+        ax = fig.add_subplot(left[1, i])
+        draw_community(ax, site, args)
+        panel_letter(ax, "bc"[i])
+        add_connector(ax_nc, ax, site)
+        ax_site = fig.add_subplot(right[i, 0])
+        draw_site(ax_site, site, grids[i], norms[i], args)
+        panel_letter(ax_site, "de"[i])
+        ax_photo = fig.add_subplot(right[i, 1])
+        draw_photo(ax_photo, site, site["photo"])
+        panel_letter(ax_photo, "fg"[i])
+    return fig
+
+
+def draw_vertical(sites, grids, norms, args):
+    """
+    Portrait layout: state map, then communities, then site pairs.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure.
+    """
+    fig = plt.figure(figsize=(7.5, 9.0))
+    outer = fig.add_gridspec(3, 1, height_ratios=[1.0, 1.25, 1.1],
+                             hspace=0.2)
+    ax_nc = fig.add_subplot(outer[0])
+    middle = outer[1].subgridspec(1, 2, wspace=0.12)
+    bottom = outer[2].subgridspec(1, 4, wspace=0.06,
+                                  width_ratios=[1, 0.8, 1, 0.8])
+    for i, site in enumerate(sites):
+        site["color"] = SITE_COLORS[i]
+        site["letters"] = "bc"[i]  # community panel letter
+    draw_context(ax_nc, sites, args)
+    panel_letter(ax_nc, "a")
+    for i, site in enumerate(sites):
+        ax = fig.add_subplot(middle[i])
+        draw_community(ax, site, args)
+        panel_letter(ax, "bc"[i])
+        ax_site = fig.add_subplot(bottom[2 * i])
+        draw_site(ax_site, site, grids[i], norms[i], args)
+        panel_letter(ax_site, "de"[i])
+        ax_photo = fig.add_subplot(bottom[2 * i + 1])
+        draw_photo(ax_photo, site, site["photo"])
+        panel_letter(ax_photo, "fg"[i])
+    return fig
 
 
 def render(args):
@@ -549,33 +694,16 @@ def render(args):
         else:
             logger.info("%s photo: %s", name, photo)
         sites.append({"name": name, "title": site_title(name),
-                      "config": config, "photo": photo,
-                      "letter": "bc"[i]})
+                      "config": config, "photo": photo})
     grids = [load_grid(site, args) for site in sites]
     norms = [Normalize(*(args.elevation_range or (
         np.percentile(g["z"][np.isfinite(g["z"])], [1, 99])
         if g is not None else (0, 1)))) for g in grids]
 
-    fig = plt.figure(figsize=(7.5, 9.0))
-    outer = fig.add_gridspec(3, 1, height_ratios=[1.0, 1.25, 1.1],
-                             hspace=0.2)
-    ax_nc = fig.add_subplot(outer[0])
-    draw_context(ax_nc, [s for s in sites], args)
-    panel_letter(ax_nc, "a")
-
-    middle = outer[1].subgridspec(1, 2, wspace=0.12)
-    bottom = outer[2].subgridspec(1, 4, wspace=0.06,
-                                  width_ratios=[1, 0.8, 1, 0.8])
-    for i, (site, grid, norm) in enumerate(zip(sites, grids, norms)):
-        ax = fig.add_subplot(middle[i])
-        draw_community(ax, site, args)
-        panel_letter(ax, "bc"[i])
-        ax_site = fig.add_subplot(bottom[2 * i])
-        draw_site(ax_site, site, grid, norm, args)
-        panel_letter(ax_site, "df"[i])
-        ax_photo = fig.add_subplot(bottom[2 * i + 1])
-        draw_photo(ax_photo, site, site["photo"])
-        panel_letter(ax_photo, "eg"[i])
+    if args.layout == "horizontal":
+        fig = draw_horizontal(sites, grids, norms, args)
+    else:
+        fig = draw_vertical(sites, grids, norms, args)
 
     os.makedirs(args.out_dir, exist_ok=True)
     for ext in ("png", "pdf", "svg"):
@@ -643,6 +771,11 @@ def parse_args(argv=None):
                       help="Camera photos, left first.")
     draw.add_argument("--out_dir", default="data/site_figure",
                       help="Output folder.")
+    draw.add_argument("--layout", choices=("horizontal", "vertical"),
+                      default="horizontal",
+                      help="horizontal: communities beside North "
+                           "Carolina above the site panels (landscape); "
+                           "vertical: one map per row (portrait).")
     draw.add_argument("--elevation_cmap", default="gist_earth",
                       help="Colour map of the elevation grids.")
     draw.add_argument("--elevation_range", type=float, nargs=2,
@@ -651,6 +784,13 @@ def parse_args(argv=None):
                            "Default: each grid's 1st-99th percentile.")
     draw.add_argument("--elevation_label", default="Elevation (m)",
                       help="Colour bar label; add the vertical datum.")
+    draw.add_argument("--context_extent", type=float, nargs=4,
+                      default=None,
+                      metavar=("LON_MIN", "LON_MAX", "LAT_MIN", "LAT_MAX"),
+                      help="State map extent. Default: eastern North "
+                           "Carolina (landscape) or the whole state "
+                           "(portrait); the downloaded basemap covers "
+                           f"{NC_EXTENT}.")
     draw.add_argument("--context_tick_deg", type=float, default=1.0,
                       help="Graticule spacing (degrees) of panel (a).")
     draw.add_argument("--community_tick_deg", type=float, default=0.01,

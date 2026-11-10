@@ -945,3 +945,37 @@ def test_site_figure_download_falls_back_to_coarser_zoom(tmp_path,
                        argparse.Namespace(wait=0, retries=0), "test")
     assert tried == [16, 15] and out.read_text() == "tiles"
     assert not (tmp_path / "layer.tif.partial.tif").exists()
+
+
+def test_site_summary_table_from_events(tmp_path):
+    """Sensor and image rows, with capped intervals and every output."""
+    import site_summary_table as table
+
+    for name in ("carolina_beach", "down_east"):
+        _write_publication_site(tmp_path / name)
+        # Two wet readings 1 min apart, then one after a 3 h gap
+        times = pd.to_datetime(["2024-06-01 12:00", "2024-06-01 12:01",
+                                "2024-06-01 15:01"], utc=True)
+        pd.DataFrame({"flood_event": 1, "time_UTC": times.astype(str),
+                      "road_water_level": [0.1, 0.5, 0.3]}).to_csv(
+            tmp_path / name / "flood_events.csv", index=False)
+    out = tmp_path / "out"
+    assert table.main(["--sites", "carolina_beach", "down_east",
+                       "--data_root", str(tmp_path), "--out_dir", str(out),
+                       "--rois", "road", "road"]) == 0
+    for stem in ("site_summary_table", "site_summary_table_good_only"):
+        for ext in ("png", "pdf", "svg", "csv", "tex", "md"):
+            assert (out / f"{stem}.{ext}").exists()
+    values = pd.read_csv(out / "site_summary_table.csv",
+                         index_col="key")["carolina_beach"]
+    assert values["sensor_max_depth_m"] == pytest.approx(0.5 * 0.3048)
+    # 1 + 1 + 12 (capped) minutes of wet readings
+    assert values["sensor_total_hours"] == pytest.approx(14 / 60)
+    # Four events with water; of 16 images 6 min apart only the first
+    # is dry (sin(pi) rounds to a tiny positive depth)
+    assert values["image_events"] == 4
+    # No event folder has a sensor CSV, so every event is image-only
+    assert values["image_events_no_sensor"] == 4
+    assert values["image_total_hours"] == pytest.approx(4 * 15 * 0.1)
+    assert values["image_max_depth_m"] == pytest.approx(0.15, abs=0.002)
+    assert "\\toprule" in (out / "site_summary_table.tex").read_text()

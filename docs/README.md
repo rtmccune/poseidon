@@ -415,6 +415,29 @@ sheet to each panel, for both sites. The daylight steps need stage 01's
 Each site's `<roi>_pub_metrics.md` still holds the statistics to quote,
 because the alignment does not change them.
 
+### Site summary table
+
+`99_site_summary_table.sh` runs
+`poseidon_deploy/analysis/site_summary_table.py`. It makes the paper
+table of flooding at each site: in-situ sensor rows (from
+`flood_events.csv`) and image-derived rows (from stage 10's roadway
+CSVs, publication ROI). The output, in `data/publication_combined/`, is:
+- a rendered table (PNG, PDF and SVG), in the figure colours;
+- a CSV of the unrounded values;
+- a booktabs `.tex` table;
+- a `.md` file that defines every row.
+
+The image rows differ from stage 11's summary:
+- **Capped intervals:** each image stands for at most 12 minutes, so an
+  overnight gap is not counted as flooded time.
+- **Overlapping windows:** images in two event windows count once.
+- **Averages:** event means are over events with water.
+
+The image rows include events without sensor data, and a row counts
+them, because those extra events are part of what the imagery adds.
+Each run also writes `site_summary_table_good_only.*` from
+well-segmented images only, for comparison.
+
 ### Methods figure
 
 `99_methods_figure.sh` makes the material for the methods process diagram:
@@ -456,6 +479,24 @@ It runs in two steps, because compute nodes have no internet:
 2. **Draw the figure** offline. Either run
    `site_description_figure.py render` locally, or copy the layers to
    the HPC and submit `99_site_description_figure.sh`.
+
+The default layout is landscape:
+- **Left:** eastern North Carolina (a), with each site's box in its own
+  colour. Below it are the two communities, (b) and (c) in `--sites`
+  order, each joined to its box by dashed lines in that colour.
+- **Right:** one row per site. The elevation grids (d), (e) are framed
+  in the site's colour, and the photos (f), (g) sit beside them.
+
+`--context_extent` changes the state map's extent, and
+`--layout vertical` gives a portrait version with the whole state.
+
+For each site's photo, the render step uses the first of these it finds:
+1. the image the camera roadway polygon was drawn on, anywhere under
+   `data/<site>/`;
+2. a `data/<site>/CAM_*.jpg`;
+3. the middle image of `images/daylight_all_events/`.
+
+Or choose the photos with `--photos LEFT RIGHT`.
 
 The render step needs each site's `data/grids/shared_grid_<site>.npz`.
 Stage 06 builds it in seconds from the LiDAR, locally too. The figure is

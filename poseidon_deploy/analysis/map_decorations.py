@@ -77,7 +77,8 @@ def _format_degrees(value, positive, negative):
     return f"{abs(value):.4g}°{hemisphere}"
 
 
-def add_graticule_ticks(ax, crs, interval, labels=True, fontsize=8):
+def add_graticule_ticks(ax, crs, interval, labels=True, fontsize=8,
+                        label_every=1):
     """
     Put longitude / latitude ticks on a projected map's frame.
 
@@ -93,6 +94,9 @@ def add_graticule_ticks(ax, crs, interval, labels=True, fontsize=8):
         Label the ticks. Default True.
     fontsize : float, optional
         Tick label size.
+    label_every : int, optional
+        Label every n-th tick only (all ticks still break the zebra
+        frame), for narrow maps. Default 1.
 
     Returns
     -------
@@ -104,10 +108,16 @@ def add_graticule_ticks(ax, crs, interval, labels=True, fontsize=8):
     ax.set_xticks(xs)
     ax.set_yticks(ys)
     if labels:
-        ax.set_xticklabels([_format_degrees(v, "E", "W") for v in lons],
-                           fontsize=fontsize)
-        ax.set_yticklabels([_format_degrees(v, "N", "S") for v in lats],
-                           fontsize=fontsize, rotation=90, va="center")
+        def keep(values, positive, negative):
+            # Keep labels on round multiples, so they do not shift
+            step = interval * label_every
+            return [_format_degrees(v, positive, negative)
+                    if abs(v / step - round(v / step)) < 1e-6 else ""
+                    for v in values]
+
+        ax.set_xticklabels(keep(lons, "E", "W"), fontsize=fontsize)
+        ax.set_yticklabels(keep(lats, "N", "S"), fontsize=fontsize,
+                           rotation=90, va="center")
     else:
         ax.set_xticklabels([])
         ax.set_yticklabels([])
