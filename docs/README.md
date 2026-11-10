@@ -370,6 +370,11 @@ say so.
 
 `publication_figures.py --align peak` puts hour 0 of panel (a) at the
 in-situ sensor's peak instead (only events where the sensor saw water).
+`--dry zero` counts dry times in panel (a) as 0 m. The in-situ sensor
+then reads 0 m outside the event sheet's start and end. Each line then
+shows the expected depth at that time across all events, instead of the
+mean among only the events still wet. That avoids a U shape, where only
+long, deep events remain far from the peak.
 
 #### Two-site figures
 
@@ -382,11 +387,14 @@ its y-axis across the two sites.
 
 - **`combined_fig1_aligned_timing`:** each site's figure 1. The left site
   has panels (a)–(c) and the right site has (d)–(f). Panel (a) is aligned
-  on the in-situ sensor's peak.
+  on the in-situ sensor's peak, with dry times counted as 0 m.
 - **`combined_fig2_depth_by_coverage`:** for each site, the mean-depth 1c
-  plot sits above figure 2. The 1c plot shows well-segmented images and
-  the logistic fit of depth on coverage. The left site has (a), (b) and
-  the right site has (c), (d).
+  plot sits above figure 2. The 1c plot shows the logistic fit of depth
+  on coverage, with its median and 80% prediction band. The left site has
+  (a), (b) and the right site has (c), (d). Both rows use the same
+  images: well segmented, with water on the road and an in-situ sensor
+  reading within 5 min. The run log prints each site's image and event
+  counts. The depth axis of (b) and (d) starts just below 0 m.
 
 Each site's `<roi>_pub_metrics.md` still holds the statistics to quote,
 because the alignment does not change them.

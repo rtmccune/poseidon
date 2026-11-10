@@ -1492,7 +1492,7 @@ def plot_point_metrics(data, roi, metric, has_labels, sensor,
     return records
 
 
-def _draw_depth_fit(ax, fit):
+def _draw_depth_fit(ax, fit, brief=False):
     """
     Draw a depth-from-coverage fit with its bands.
 
@@ -1505,6 +1505,10 @@ def _draw_depth_fit(ax, fit):
         Axes with coverage on x and depth on y.
     fit : dict
         Output of :func:`fit_depth_from_coverage`.
+    brief : bool, optional
+        Leave out the fit's 95 % confidence band and use short legend
+        labels (for multi-panel figures whose caption gives the
+        details). Default False.
     """
     c, curves = fit["c"], fit["quantiles"]
     if 0.1 in curves and 0.9 in curves:
@@ -1512,18 +1516,21 @@ def _draw_depth_fit(ax, fit):
         note = "" if np.isnan(inside) else f", {100 * inside:.0f}% of images"
         ax.fill_between(c, curves[0.1], curves[0.9], color=BLUE, alpha=0.12,
                         linewidth=0,
-                        label=f"80% Prediction Band (0.1-0.9 quantiles{note})")
-    if fit["curve_ci"] is not None:
+                        label="80% Prediction Band" if brief else
+                        f"80% Prediction Band (0.1-0.9 quantiles{note})")
+    if fit["curve_ci"] is not None and not brief:
         ax.fill_between(c, *fit["curve_ci"], color=BLUE, alpha=0.35,
                         linewidth=0,
                         label=f"95% CI of Fit ({fit['n_boot']} event "
                               f"resamples)")
     ax.plot(c, fit["fit"], color=BLUE, linewidth=2,
-            label=f"Logistic Fit ($R^2$={fit['r2']:.2f}, "
-                  f"RMSE={fit['rmse']:.3f} m)")
+            label=f"Logistic Fit ($R^2$={fit['r2']:.2f})" if brief else
+            f"Logistic Fit ($R^2$={fit['r2']:.2f}, "
+            f"RMSE={fit['rmse']:.3f} m)")
     if 0.5 in curves:
         ax.plot(c, curves[0.5], linestyle="--", color=ORANGE, linewidth=2,
-                label="Median Depth (0.5 Quantile)")
+                label="Median Depth" if brief else
+                "Median Depth (0.5 Quantile)")
 
 
 def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
@@ -1572,7 +1579,7 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
 
 def draw_good_only_fit(ax, good, metric, pretty, n_boot=0, seed=0,
                        ylabel=None, ylim=None, legend_fontsize=None,
-                       name=None):
+                       name=None, brief=False):
     """
     Draw the 1c images and logistic fit on an axes.
 
@@ -1598,6 +1605,9 @@ def draw_good_only_fit(ax, good, metric, pretty, n_boot=0, seed=0,
         Legend font size. Default: matplotlib's.
     name : str, optional
         Name for the warning if the fit fails.
+    brief : bool, optional
+        Short legend, without the fit's 95 % CI (see
+        :func:`_draw_depth_fit`). Default False.
 
     Returns
     -------
@@ -1609,7 +1619,7 @@ def draw_good_only_fit(ax, good, metric, pretty, n_boot=0, seed=0,
     try:
         fit = fit_depth_from_coverage(good["Coverage"], good[metric],
                                       good["event"], n_boot, seed)
-        _draw_depth_fit(ax, fit)
+        _draw_depth_fit(ax, fit, brief)
     except (RuntimeError, ValueError) as err:
         logger.warning("Logistic fit failed for %s: %s", name or metric, err)
         fit = None

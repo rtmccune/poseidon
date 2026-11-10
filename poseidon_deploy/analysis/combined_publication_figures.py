@@ -6,21 +6,27 @@ entry on the left. Each site uses its own config (ROI: the stem of
 ``camera_roi_json``, else ``roi_json``) and the files stage 99 reads
 under ``<data_root>/<site>/``: ``flood_events/``,
 ``sensor_data_comparison.csv`` and ``segmentation_labels.csv``. Only
-well-segmented images are used. Figures have no titles beyond the site
-names and are saved as PNG (300 dpi) and PDF in ``--out_dir``.
+well-segmented images are used. Figures have no titles (captions name the
+sites) and are saved as PNG (300 dpi) and PDF in ``--out_dir``.
 
 ``combined_fig1_aligned_timing``
     Each site's figure 1, panels (a)-(c) on the left and (d)-(f) on
     the right. Panel (a) is aligned on the in-situ sensor's peak (hour
-    0), so it holds only events where the sensor saw water; the
-    single-site script aligns on the start of each event's window by
-    default.
+    0), so it holds only events where the sensor saw water, and dry
+    times count as 0 m (the sensor reads 0 m outside the event sheet's
+    start to end), so each line is the expected depth at that time
+    over every event rather than the mean among events still wet. The
+    single-site script defaults to start alignment with dry times left
+    out (``--align``, ``--dry``).
 
 ``combined_fig2_depth_by_coverage``
-    Per site, plot 1c for the mean roadway depth (well-segmented images,
-    logistic fit of depth on coverage with its 95 % CI and 80 %
-    prediction band) above figure 2 (mean, maximum and sensor depth by
-    coverage bin): (a), (b) on the left and (c), (d) on the right.
+    Per site, plot 1c for the mean roadway depth (logistic fit of depth on coverage with its median and 80 %
+    prediction band; the fit's CI is in the fit summary CSV, not drawn)
+    above figure 2 (mean, maximum and sensor depth by
+    coverage bin; the depth axis starts just below 0 m so markers at
+    0 m stay visible): (a), (b) on the left and (c), (d) on the right.
+    Both panels use the same images: well segmented, with water on the
+    road and an in-situ sensor reading within ``--match_minutes``.
 
 Each row shares its y-axis across the two sites, so the sites compare
 directly. The CSVs behind the panels that differ from the single-site
@@ -60,24 +66,6 @@ logger = logging.getLogger(__name__)
 FIT_METRIC = "MeanDepth"
 
 
-def site_title(site):
-    """
-    Display name of a site, e.g. ``carolina_beach`` -> Carolina Beach.
-
-    Parameters
-    ----------
-    site : str
-        Site config name.
-
-    Returns
-    -------
-    str
-        Title-cased name.
-    """
-    return os.path.splitext(os.path.basename(site))[0].replace(
-        "_", " ").title()
-
-
 def load_site(site, args, roi=None):
     """
     Load everything one site's panels need.
@@ -95,7 +83,7 @@ def load_site(site, args, roi=None):
     Returns
     -------
     dict
-        ``site``, ``title``, ``roi``, ``sensor``, ``series``, ``timing``
+        ``site``, ``roi``, ``sensor``, ``series``, ``timing``
         and ``images`` (None if the ROI has no accessibility CSVs).
 
     Raises
@@ -122,7 +110,7 @@ def load_site(site, args, roi=None):
     logger.info("%s: ROI %s, %d events with camera series, %d images",
                 site, roi, series["event"].nunique() if len(series) else 0,
                 0 if images is None else len(images))
-    return {"site": site, "title": site_title(site), "roi": roi,
+    return {"site": site, "roi": roi,
             "sensor": sensor, "series": series, "timing": timing,
             "images": images}
 
@@ -174,9 +162,6 @@ def figure_one(sites, args, stem):
         result = pub.draw_aligned_timing(
             axes, site["series"], site["timing"], site["sensor"], args,
             letters="abcdef"[3 * i:3 * i + 3])
-        subfig.subplots_adjust(top=0.9)
-        subfig.suptitle(site["title"], fontsize=13, fontweight="bold",
-                        y=0.97)
         result["composites"].to_csv(
             os.path.join(args.out_dir,
                          f"{site['site']}_{stem}_a_peak_means.csv"),
@@ -213,15 +198,15 @@ def figure_two(sites, args, stem):
             logger.warning("%s has no accessibility CSVs; figure 2 "
                            "skipped.", site["site"])
             return False
+        # The fit uses the same sensor-matched images as the binned panel
         paired = pub.paired_images(images)
-        good = images[images["Segmentation"] == "good"].dropna(
-            subset=["Coverage", FIT_METRIC])
-        if len(paired) <= 3 or len(good) <= 3:
-            logger.warning("%s: too few well-segmented images (%d paired, "
-                           "%d for the fit); figure 2 skipped.",
-                           site["site"], len(paired), len(good))
+        if len(paired) <= 3:
+            logger.warning("%s: only %d paired images; figure 2 skipped.",
+                           site["site"], len(paired))
             return False
-        prepared.append((good, pub.binned_depth_tables(paired, args)))
+        logger.info("%s figure 2: %d images, %d events", site["site"],
+                    len(paired), paired["event"].nunique())
+        prepared.append((paired, pub.binned_depth_tables(paired, args)))
 
     # One depth scale per row: the deepest image (fit row) and the
     # highest band or CI (binned row) of either site
@@ -238,19 +223,17 @@ def figure_two(sites, args, stem):
         fit = ap.draw_good_only_fit(
             ax_fit, good, FIT_METRIC, ap.PRETTY_METRICS[FIT_METRIC],
             args.n_boot, args.seed, ylim=(0, fit_top), legend_fontsize=8,
-            name=site["site"])
+            name=site["site"], brief=True)
         if fit is not None:
             ap.write_fit_summary(fit, args.out_dir,
                                  f"{site['site']}_{stem}_1c_mean_depth")
         ax_fit.set_xlim(0, 100)
         ax, ax_full = pub.binned_depth_axes(subfig, grid[1])
-        pub.draw_binned_depth(ax, ax_full, tables, args)
-        ax.set_ylim(0, binned_top)
+        # A little room below 0 m so markers at 0 m stay visible
+        pub.draw_binned_depth(ax, ax_full, tables, args,
+                              ylim=(-0.04 * binned_top, binned_top))
         for ax_, letter in zip((ax_fit, ax), "abcd"[2 * i:2 * i + 2]):
             pub.panel_letter(ax_, letter)
-        subfig.subplots_adjust(top=0.9)
-        subfig.suptitle(site["title"], fontsize=13, fontweight="bold",
-                        y=0.97)
     pub._save(fig, args.out_dir, stem)
     return True
 
@@ -267,7 +250,8 @@ def parse_args(argv=None):
     Returns
     -------
     argparse.Namespace
-        Parsed arguments, with ``align`` set to ``'peak'``.
+        Parsed arguments, with ``align`` set to ``'peak'`` and ``dry``
+        to ``'zero'``.
     """
     parser = argparse.ArgumentParser(
         description="Make two-site publication figures.")
@@ -283,7 +267,7 @@ def parse_args(argv=None):
                              "config's camera_roi_json, else roi_json.")
     pub.add_figure_arguments(parser)
     args = parser.parse_args(argv)
-    args.align = "peak"
+    args.align, args.dry = "peak", "zero"
     return args
 
 

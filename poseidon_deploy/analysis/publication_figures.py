@@ -226,7 +226,8 @@ def vs1_agreement(pairs, n_boot, seed):
     return stats
 
 
-def _draw_means_panel(ax, series, padding_hours, align="start"):
+def _draw_means_panel(ax, series, padding_hours, align="start",
+                      dry="nan"):
     """
     Draw panel (a): mean depth across events per source.
 
@@ -241,6 +242,12 @@ def _draw_means_panel(ax, series, padding_hours, align="start"):
     align : {'start', 'peak'}, optional
         Hour 0 at the start of each event's window (every event), or at
         the in-situ sensor's peak (events where the sensor saw water).
+    dry : {'nan', 'zero'}, optional
+        ``'nan'``: dry times are left out, so a line is the mean among
+        events wet at that time. ``'zero'``: dry times count as 0 m, so
+        every event counts at every time in its window and a line is
+        the expected depth then; the sensor reads 0 m outside the event
+        sheet's start to end.
 
     Returns
     -------
@@ -254,7 +261,14 @@ def _draw_means_panel(ax, series, padding_hours, align="start"):
     outside = (series["source"] == sc.SENSOR) & (
         (series["time"] < series["flood_start"])
         | (series["time"] > series["flood_end"]))
-    aligned = sc.aligned_series(series[~outside], align, "buffer")
+    if dry == "zero":
+        # Outside its own flood period the event's sensor is dry; any
+        # water there belongs to a neighbouring event
+        series = series.assign(depth_m=series["depth_m"].fillna(0.0).mask(
+            outside, 0.0))
+    else:
+        series = series[~outside]
+    aligned = sc.aligned_series(series, align, "buffer")
     table = sc.composites(aligned, stat="mean")
     present = set(table["source"])
     sources = ([sc.SENSOR] if sc.SENSOR in present else []) + sorted(
@@ -413,7 +427,8 @@ def draw_aligned_timing(axes, series, timing, sensor, args,
     """
     ax_a, ax_b, ax_c = axes
     composites = _draw_means_panel(ax_a, series, args.padding_hours,
-                                   getattr(args, "align", "start"))
+                                   getattr(args, "align", "start"),
+                                   getattr(args, "dry", "nan"))
     pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
                              args.sensor_wet_ft * FEET_TO_METERS,
                              args.padding_hours)
@@ -615,7 +630,8 @@ def binned_depth_axes(fig, spec=None):
     return ax, fig.add_subplot(grid[0, 1], sharey=ax)
 
 
-def draw_binned_depth(ax, ax_full, tables, args, legend_fontsize=8):
+def draw_binned_depth(ax, ax_full, tables, args, legend_fontsize=8,
+                      ylim=None):
     """
     Draw figure 2 on its two panels.
 
@@ -629,7 +645,12 @@ def draw_binned_depth(ax, ax_full, tables, args, legend_fontsize=8):
         Parsed arguments.
     legend_fontsize : float, optional
         Legend font size.
+    ylim : tuple of float, optional
+        Depth-axis limits (m), e.g. shared between figures; a slightly
+        negative bottom keeps markers at 0 m clear of the x-axis.
+        Default: 0 to :func:`binned_depth_top`.
     """
+    bottom, top = ylim or (0.0, binned_depth_top(tables))
     partial = [t[~t["full_coverage"]].reset_index(drop=True) for t in tables]
     full = [t[t["full_coverage"]] for t in tables]
     widths = partial[0]["coverage_high"] - partial[0]["coverage_low"]
@@ -647,15 +668,17 @@ def draw_binned_depth(ax, ax_full, tables, args, legend_fontsize=8):
         _draw_bin(ax_full, 0.0, 1.0, [(t.iloc[0], color, marker) for t, (
             _, _, color, marker, _) in zip(full, DEPTH_SOURCES)])
         row = full[0].iloc[0]
-        ax_full.text(0.5, 0.02, f"n = {row['images']} images,\n"
-                                f"{row['events']} events",
+        # Just above 0 m, so the note clears markers sitting there
+        ax_full.text(0.5, (0.07 * top - bottom) / (top - bottom),
+                     f"n = {row['images']} images,\n"
+                     f"{row['events']} events",
                      transform=ax_full.transAxes, ha="center", va="bottom",
                      fontsize=8, color=INK)
 
     ax.set_xlim(0, args.full_coverage)
     ax.set_xlabel("Roadway Coverage (%)")
     ax.set_ylabel("Depth on Roadway (m)")
-    ax.set_ylim(0, binned_depth_top(tables))
+    ax.set_ylim(bottom, top)
     ax_full.set_xlim(-0.6, 0.6)
     ax_full.set_xticks([0.0])
     ax_full.set_xticklabels([f"Full\n(>={args.full_coverage:g}%)"])
@@ -963,6 +986,10 @@ def parse_args(argv=None):
                         help="Hour 0 of figure 1 (a): the start of each "
                              "event's window, or the in-situ sensor's "
                              "peak (events where it saw water).")
+    parser.add_argument("--dry", choices=("nan", "zero"), default="nan",
+                        help="Figure 1 (a): leave dry times out (mean "
+                             "among wet events) or count them as 0 m "
+                             "(expected depth over every event).")
     add_figure_arguments(parser)
     args = parser.parse_args(argv)
     if args.roi is None and args.site:

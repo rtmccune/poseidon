@@ -753,5 +753,9 @@ def test_combined_publication_figures_side_by_side(tmp_path):
         out / "left_site_combined_fig1_aligned_timing_a_peak_means.csv")
     # Hour 0 is the sensor peak, so the composite runs on both sides of it
     assert means["hours"].min() < 0 < means["hours"].max()
+    # Dry times count as 0 m, so the sensor mean falls to 0 m away from
+    # its peak instead of leaving those times out
+    sensor_means = means.loc[means["source"] == "In-situ sensor", "center_m"]
+    assert sensor_means.min() == 0 and sensor_means.max() > 0
     assert (out / "right_site_combined_fig2_depth_by_coverage_1c_mean_depth"
                   "_fit_summary.csv").exists()
