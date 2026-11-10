@@ -24,8 +24,9 @@ Choosing the moments
     the in-situ sensor's peak (or, without sensor water, the candidate
     with the deepest roadway mean); rising and falling are the
     candidates nearest halfway between the first wet image and the peak,
-    and between the peak and the last wet image. ``--times`` overrides
-    them.
+    and between the peak and the last wet image. ``--times`` (with
+    ``--events``) names the images instead; they are used as given,
+    whatever their segmentation score.
 
 Choosing the event (``--events`` overrides)
     Among events with candidates both before and after the peak, the
@@ -159,6 +160,58 @@ def pick_moments(rows, peak_time):
     return [rise, peak, fall]
 
 
+def named_moments(images, event, times, event_dir, args):
+    """
+    The images named with ``--times``, used as given.
+
+    Any image of the event counts, whatever its segmentation score or
+    wetness (the automatic choice is limited to well-segmented, wet
+    images; a named image is the user's choice). A time without an image
+    falls back to the event's nearest image, with a warning.
+
+    Parameters
+    ----------
+    images : pandas.DataFrame
+        Images of the ROI.
+    event : str
+        Event folder name.
+    times : sequence of str
+        Rising, peak and falling timestamps (14-digit UTC).
+    event_dir : str
+        Event folder.
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    list of pandas.Series or None
+        The three image rows, or None if the event has no images.
+    """
+    rows = images[images["event"] == event].copy()
+    if rows.empty:
+        return None
+    rows["time"] = pd.to_datetime(rows["Time"], utc=True)
+    chosen = []
+    for (phase, _), stamp in zip(PHASES, times):
+        wanted = pd.Timestamp(stamp, tz="UTC")
+        row = rows.iloc[(rows["time"] - wanted).abs().argmin()]
+        if row["time"] != wanted:
+            logger.warning("%s: no image at %s in %s; using the nearest, "
+                           "%s.", phase, stamp, event, stamp_of(row["time"]))
+        if row.get("Segmentation") != "good":
+            logger.info("%s image %s is not scored well segmented.", phase,
+                        stamp_of(row["time"]))
+        if (args.pane == "depth"
+                and not has_depth_map(event_dir, stamp_of(row["time"]),
+                                      args.statistic)):
+            logger.warning("%s image %s has no depth map; its pane will be "
+                           "empty.", phase, stamp_of(row["time"]))
+        chosen.append(row)
+    if len({r["time"] for r in chosen}) < len(chosen):
+        logger.warning("Two of the named times map to the same image.")
+    return chosen
+
+
 def choose_event(images, sensor, site_dir, args, event=None, times=None):
     """
     Pick the event and the three moments for one site.
@@ -175,6 +228,12 @@ def choose_event(images, sensor, site_dir, args, event=None, times=None):
         If no event has candidates on both sides of its peak.
     """
     events_dir = os.path.join(site_dir, "flood_events")
+    if times and event:
+        return event, named_moments(images, event, times,
+                                    os.path.join(events_dir, event), args)
+    if times:
+        logger.warning("--times needs --events for the site; choosing the "
+                       "moments automatically.")
     names = [event] if event else sorted(images["event"].unique())
     scored = []
     for name in names:
@@ -185,11 +244,6 @@ def choose_event(images, sensor, site_dir, args, event=None, times=None):
             rows = rows[[has_depth_map(event_dir, stamp_of(t),
                                        args.statistic)
                          for t in rows["time"]]]
-        if times:
-            wanted = [pd.Timestamp(t, tz="UTC") for t in times]
-            chosen = [rows.iloc[(rows["time"] - t).abs().argmin()]
-                      for t in wanted] if not rows.empty else None
-            return name, chosen
         moments = pick_moments(rows, peak_time)
         if moments is None:
             continue
@@ -335,10 +389,18 @@ def draw_figure(site, event, moments, images, sensor, args):
             depth = depth_map(event_dir, stamp, args)
             if depth is not None:
                 # Stage 09's map: basemap, depth scale, virtual sensors
-                colour_layer, _, style = plotter.draw_map(
+                colour_layer, geodata, style = plotter.draw_map(
                     ax, depth, "depth", basemap=True, marker_size=60,
                     label_size=6.5)
                 ax.set_aspect("equal")
+                # Wetted area, as stage 09 labels its maps
+                ax.text(0.04, 0.96, f"Spatial Extent (m$^2$): "
+                                    f"{geodata['spatial_extent']:g}",
+                        transform=ax.transAxes, fontsize=6.5, va="top",
+                        ha="left", zorder=30,
+                        bbox={"facecolor": "white", "alpha": 0.8,
+                              "edgecolor": INK, "linewidth": 0.5,
+                              "boxstyle": "square,pad=0.25"})
         else:
             image = image_pane(event_dir, stamp, args)
             if image is not None:

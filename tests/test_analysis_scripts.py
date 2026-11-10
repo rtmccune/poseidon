@@ -1010,3 +1010,14 @@ def test_example_event_figure_picks_rising_peak_falling(tmp_path):
     assert moments["phase"].tolist() == ["Rising", "Peak", "Falling"]
     times = pd.to_datetime(moments["time_utc"])
     assert times.is_monotonic_increasing and times.nunique() == 3
+
+    # Named images are used exactly, even when automatic picks differ
+    event = moments["event"].iloc[0]
+    named = ["20240601120600", "20240601121200", "20240601125400"]
+    assert example.main(["--sites", "carolina_beach", "--data_root",
+                         str(tmp_path), "--out_dir", str(out), "--roi",
+                         "road", "--events", event, "--times",
+                         "carolina_beach", *named]) == 0
+    used = pd.read_csv(out / "example_event_carolina_beach.csv",
+                       dtype={"image_timestamp": str})
+    assert used["image_timestamp"].tolist() == named
