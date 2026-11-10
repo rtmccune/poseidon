@@ -113,7 +113,9 @@ cmake -S . -B build
 cmake --build build
 ```
 The executables are written to `poseidon_utils/bin/`. Rebuild them after
-upgrading OpenCV.
+upgrading OpenCV or changing their source. Each starts one thread per CPU
+given to the job: `POSEIDON_THREADS` when set (stages 03 and 04 set it to
+the CPUs requested), else the CPUs the process may run on.
 
 ### Segmentation Gym container
 From the repository root:
@@ -153,7 +155,7 @@ The HPC is moving from LSF to Slurm. Scripts with `#SBATCH` headers are
 submitted with `sbatch`, e.g. `sbatch 07_make_rectify.sh`:
 
 * Stage 02 and the segmentation `99_*` scripts use the GPU partitions.
-* Stages 07, 08, 09, 10 and 11 run on the CPU, on idle partner nodes
+* Stages 03, 04, 07, 08, 09, 10 and 11 run on the CPU, on idle partner nodes
   (`--account=kanarde_cpu --partition=compute_partners --qos=short`, a
   2-hour limit per task). They are limited by file reads and writes, so a
   GPU does not speed them up.
