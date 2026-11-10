@@ -493,7 +493,8 @@ def organize_images_into_flood_events(image_folder, csv_file,
     return copied
 
 
-def prepare_job_lists(image_folder, num_jobs, output_dir=None):
+def prepare_job_lists(image_folder, num_jobs, output_dir=None,
+                      skip_done_dir=None, done_suffix="_predseg.png"):
     """
     Split a folder's files into text lists for an HPC job array.
 
@@ -506,6 +507,14 @@ def prepare_job_lists(image_folder, num_jobs, output_dir=None):
     output_dir : str or os.PathLike, optional
         Folder for ``file_list_<n>.txt`` (1-based). Default is
         ``job_file_lists`` beside `image_folder`.
+    skip_done_dir : str or os.PathLike, optional
+        Leave out files already processed: those whose stem plus
+        `done_suffix` is a non-empty file in this folder (e.g. the
+        segmentation predictions folder, to list only the images still
+        to segment).
+    done_suffix : str, optional
+        Suffix of a finished output in `skip_done_dir`. Default is
+        ``"_predseg.png"``, the segmentation prediction.
 
     Returns
     -------
@@ -531,9 +540,22 @@ def prepare_job_lists(image_folder, num_jobs, output_dir=None):
 
     files = sorted(p.name for p in image_path.iterdir()
                    if p.is_file() and not p.name.startswith("."))
+    if skip_done_dir is not None:
+        done_path = Path(skip_done_dir)
+        done = ({p.name for p in done_path.iterdir()
+                 if p.is_file() and p.stat().st_size > 0}
+                if done_path.is_dir() else set())
+        total = len(files)
+        files = [name for name in files
+                 if Path(name).stem + done_suffix not in done]
+        logger.info("Skipping %d of %d files already in %s",
+                    total - len(files), total, done_path)
     if not files:
-        logger.warning("No files in %s; no lists created.", image_path)
+        logger.warning("No files to list from %s; no lists created.",
+                       image_path)
         return []
+    # Never write empty lists
+    num_jobs = min(num_jobs, len(files))
 
     list_paths = []
     for i, chunk in enumerate(np.array_split(files, num_jobs), start=1):

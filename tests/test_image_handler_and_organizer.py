@@ -299,6 +299,21 @@ def test_job_lists_split_files_evenly(tmp_path):
         fo.prepare_job_lists(tmp_path / "missing", 2)
 
 
+def test_job_lists_skip_images_already_segmented(tmp_path):
+    """Images with a non-empty prediction are left out; no empty lists."""
+    folder = touch(tmp_path / "imgs", *(f"img_{i:02d}.jpg" for i in range(5)))
+    preds = touch(tmp_path / "preds", "img_00_predseg.png",
+                  "img_01_predseg.png", "img_02_predseg.png")
+    for name in ("img_00_predseg.png", "img_01_predseg.png"):
+        (preds / name).write_bytes(b"png")  # img_02's is empty: redo it
+    lists = fo.prepare_job_lists(folder, num_jobs=10,
+                                 output_dir=tmp_path / "remaining",
+                                 skip_done_dir=preds)
+    listed = [name for p in lists for name in p.read_text().split()]
+    assert listed == ["img_02.jpg", "img_03.jpg", "img_04.jpg"]
+    assert len(lists) == 3
+
+
 def test_daylight_coverage_splits_event_and_buffer_images(tmp_path):
     """An event across sunset is counted by daylight, inside vs. buffer."""
     pytest.importorskip("astral")
