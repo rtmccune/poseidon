@@ -250,7 +250,8 @@ def timing_event_sets(timing):
 
 
 def _draw_means_panel(ax, series, padding_hours, align="start",
-                      dry="nan", event_sets=None, show_counts=False):
+                      dry="nan", event_sets=None, show_counts=False,
+                      minutes=sc.COMPOSITE_MINUTES, sensor_with_camera=False):
     """
     Draw panel (a): mean depth across events per source.
 
@@ -278,6 +279,13 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
     show_counts : bool, optional
         Give each line's event count in the legend (always on with
         `event_sets`). Default False.
+    minutes : float, optional
+        Time bin width. Default
+        :data:`sensor_camera_comparison.COMPOSITE_MINUTES`.
+    sensor_with_camera : bool, optional
+        Draw the in-situ sensor from only the events that the camera
+        lines use, so all lines average the same events. Default False
+        (every event with sensor data).
 
     Returns
     -------
@@ -303,7 +311,11 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
                          for source, event in zip(series["source"],
                                                   series["event"])]]
     aligned = sc.aligned_series(series, align, "buffer")
-    table = sc.composites(aligned, stat="mean")
+    if sensor_with_camera:
+        is_sensor = aligned["source"] == sc.SENSOR
+        camera_events = set(aligned.loc[~is_sensor, "event"])
+        aligned = aligned[~is_sensor | aligned["event"].isin(camera_events)]
+    table = sc.composites(aligned, minutes=minutes, stat="mean")
     counts = aligned.groupby("source")["event"].nunique()
     table["source_events"] = table["source"].map(counts)
     present = set(table["source"])
@@ -311,7 +323,7 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
         (s for s in present if s.startswith("VS")),
         key=lambda s: int(s[2:])) + [
         s for s in (sc.ROI_STATS["MeanDepth"],) if s in present]
-    width = sc.COMPOSITE_MINUTES / 60
+    width = minutes / 60
     for source in sources:
         comp = table[table["source"] == source]
         # Break the line where a bin has too few events, rather than
@@ -423,7 +435,7 @@ def panel_letter(ax, letter):
                 fontweight="bold", va="bottom")
 
 
-def aligned_timing_axes(fig):
+def aligned_timing_axes(fig, hspace=0.45, **margins):
     """
     Lay out figure 1's panels on a figure or subfigure.
 
@@ -431,14 +443,20 @@ def aligned_timing_axes(fig):
     ----------
     fig : matplotlib.figure.Figure or matplotlib.figure.SubFigure
         Where to draw.
+    hspace : float, optional
+        Height between panel (a) and panels (b), (c), as a fraction of
+        the mean panel height.
+    **margins
+        ``left``, ``right``, ``top``, ``bottom`` of the panel grid, as
+        fractions of `fig`. Default: matplotlib's.
 
     Returns
     -------
     tuple of matplotlib.axes.Axes
         Panels (a), (b), (c); (b) and (c) share their minutes axis.
     """
-    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=0.45,
-                            wspace=0.25)
+    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=hspace,
+                            wspace=0.25, **margins)
     ax_a = fig.add_subplot(grid[0, :])
     ax_b = fig.add_subplot(grid[1, 0])
     ax_c = fig.add_subplot(grid[1, 1], sharey=ax_b)  # one minutes scale
@@ -475,7 +493,9 @@ def draw_aligned_timing(axes, series, timing, sensor, args,
         ax_a, series, args.padding_hours, getattr(args, "align", "start"),
         getattr(args, "dry", "nan"),
         timing_event_sets(timing) if getattr(args, "same_events", False)
-        else None, getattr(args, "event_counts", False))
+        else None, getattr(args, "event_counts", False),
+        getattr(args, "bin_minutes", sc.COMPOSITE_MINUTES),
+        getattr(args, "sensor_with_camera", False))
     pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
                              args.sensor_wet_ft * FEET_TO_METERS,
                              args.padding_hours)
@@ -1152,6 +1172,12 @@ def parse_args(argv=None):
     parser.add_argument("--event_counts", action="store_true",
                         help="Figure 1 (a): give each line's event count "
                              "in the legend.")
+    parser.add_argument("--bin_minutes", type=float,
+                        default=sc.COMPOSITE_MINUTES,
+                        help="Figure 1 (a): time bin width (minutes).")
+    parser.add_argument("--sensor_with_camera", action="store_true",
+                        help="Figure 1 (a): draw the in-situ sensor from "
+                             "only the events the camera lines use.")
     add_figure_arguments(parser)
     args = parser.parse_args(argv)
     if args.roi is None and args.site:

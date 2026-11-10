@@ -387,18 +387,19 @@ its y-axis across the two sites.
 
 - **`combined_fig1_aligned_timing`:** each site's figure 1. The left site
   has panels (a)–(c) and the right site has (d)–(f). Panel (a) is aligned
-  on the in-situ sensor's peak, with dry times counted as 0 m. Panel (a)
-  uses every event with a sensor peak, so it can hold more events than
-  the columns of (b) and (c). The legend gives each line's event count,
-  to compare with the column counts. The panel (a) CSV records the
-  count as `source_events`. In the single-site script this is
-  `--event_counts`; `--same_events` instead restricts (a) to the events
-  of (b) and (c). A line breaks where a 15-minute bin has fewer than 3
+  on the in-situ sensor's peak, with dry times counted as 0 m and
+  30-minute bins (`--bin_minutes`). Every line averages the same events:
+  those with a sensor peak and at least one well-segmented image. The
+  sensor line is limited to the events the camera lines use. The job log
+  prints the count for the caption, and the panel (a) CSV records it as
+  `source_events`. A line breaks where a bin has fewer than 3
   events. `<site>_combined_fig1_aligned_timing_event_membership.csv`
   lists, per event and camera location, whether the event is in (a),
   (b)–(c), both or neither, and why. The run log prints a count per
   reason. The single-site script writes the same table as
-  `<roi>_pub_fig1_aligned_timing_event_membership.csv`.
+  `<roi>_pub_fig1_aligned_timing_event_membership.csv`. There, 15-minute
+  bins, every sensor event and no legend counts stay the defaults
+  (`--bin_minutes`, `--sensor_with_camera`, `--event_counts`).
 - **`combined_fig2_depth_by_coverage`:** for each site, the mean-depth 1c
   plot sits above figure 2. The 1c plot shows the logistic fit of depth
   on coverage, with its median and 80% prediction band. The left site has

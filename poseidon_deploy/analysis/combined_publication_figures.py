@@ -15,18 +15,22 @@ sites) and are saved as PNG (300 dpi) and PDF in ``--out_dir``.
     0), so it holds only events where the sensor saw water, and dry
     times count as 0 m (the sensor reads 0 m outside the event sheet's
     start to end), so each line is the expected depth at that time
-    over every event rather than the mean among events still wet. Panel
-    (a) uses every event with a sensor peak, so it can hold more events
-    than the columns of (b) and (c), which need water at both the
-    camera location and the sensor while the camera has images; the
-    legend gives each line's event count to compare with the columns.
-    The single-site script defaults to start alignment, dry times left
-    out and no counts (``--align``, ``--dry``, ``--event_counts``;
-    ``--same_events`` restricts (a) to the events of (b) and (c)).
+    over every event rather than the mean among events still wet.
+    Every line in (a) averages the same events: those with a sensor
+    peak and at least one well-segmented image (the in-situ sensor
+    line is limited to the events the camera lines use). Times are
+    binned every ``--bin_minutes`` (default 30, five images at one
+    every 6 min); a line breaks where a bin has fewer than 3 events.
+    Panels (b) and (c) can hold fewer events: they also need water at
+    the camera location and the sensor while the camera has images.
+    The log gives each line's event count for the caption. The
+    single-site script defaults to start alignment, 15 min bins, dry
+    times left out and every sensor event (``--align``,
+    ``--bin_minutes``, ``--dry``, ``--sensor_with_camera``).
 
 ``combined_fig2_depth_by_coverage``
-    Per site, plot 1c for the mean roadway depth (logistic fit of depth on coverage with its median and 80 %
-    prediction band; the fit's CI is in the fit summary CSV, not drawn)
+    Per site, plot 1c for the mean roadway depth (logistic fit of
+    depth on coverage with its median and 80 % prediction band; the fit's CI is in the fit summary CSV, not drawn)
     above figure 2 (mean, maximum and sensor depth by
     coverage bin; the depth axis starts just below 0 m so markers at
     0 m stay visible): (a), (b) on the left and (c), (d) on the right.
@@ -72,6 +76,9 @@ logger = logging.getLogger(__name__)
 
 #: Depth metric of the 1c panels.
 FIT_METRIC = "MeanDepth"
+
+#: Panel grid margins within each site's half of a figure.
+MARGINS = {"left": 0.08, "right": 0.98, "top": 0.95, "bottom": 0.08}
 
 
 def load_site(site, args, roi=None):
@@ -162,14 +169,18 @@ def figure_one(sites, args, stem):
         logger.warning("A site has no well-segmented camera series; "
                        "figure 1 skipped.")
         return False
-    fig = plt.figure(figsize=(17, 9))
-    subfigs = fig.subfigures(1, 2, wspace=0.04)
+    fig = plt.figure(figsize=(17, 8.5))
+    subfigs = fig.subfigures(1, 2, wspace=0)
     panels = []
     for i, (subfig, site) in enumerate(zip(subfigs, sites)):
-        axes = pub.aligned_timing_axes(subfig)
+        axes = pub.aligned_timing_axes(subfig, hspace=0.32, **MARGINS)
         result = pub.draw_aligned_timing(
             axes, site["series"], site["timing"], site["sensor"], args,
             letters="abcdef"[3 * i:3 * i + 3])
+        counts = result["composites"].groupby("source")[
+            "source_events"].first()
+        logger.info("%s figure 1 (a) events per line: %s", site["site"],
+                    counts.to_dict())
         result["composites"].to_csv(
             os.path.join(args.out_dir,
                          f"{site['site']}_{stem}_a_peak_means.csv"),
@@ -226,11 +237,12 @@ def figure_two(sites, args, stem):
                          for good, _ in prepared)
     binned_top = max(pub.binned_depth_top(tables) for _, tables in prepared)
 
-    fig = plt.figure(figsize=(17, 11))
-    subfigs = fig.subfigures(1, 2, wspace=0.04)
+    fig = plt.figure(figsize=(17, 10.5))
+    subfigs = fig.subfigures(1, 2, wspace=0)
     for i, (subfig, site, (good, tables)) in enumerate(
             zip(subfigs, sites, prepared)):
-        grid = subfig.add_gridspec(2, 1, height_ratios=[1, 1], hspace=0.3)
+        grid = subfig.add_gridspec(2, 1, height_ratios=[1, 1], hspace=0.22,
+                                   **MARGINS)
         ax_fit = subfig.add_subplot(grid[0])
         fit = ap.draw_good_only_fit(
             ax_fit, good, FIT_METRIC, ap.PRETTY_METRICS[FIT_METRIC],
@@ -263,7 +275,7 @@ def parse_args(argv=None):
     -------
     argparse.Namespace
         Parsed arguments, with ``align`` set to ``'peak'``, ``dry`` to
-        ``'zero'`` and ``event_counts`` on.
+        ``'zero'`` and ``sensor_with_camera`` on.
     """
     parser = argparse.ArgumentParser(
         description="Make two-site publication figures.")
@@ -277,9 +289,12 @@ def parse_args(argv=None):
                         metavar=("LEFT", "RIGHT"),
                         help="ROI names, left first. Default: each site "
                              "config's camera_roi_json, else roi_json.")
+    parser.add_argument("--bin_minutes", type=float, default=30,
+                        help="Figure 1 (a): time bin width (minutes).")
     pub.add_figure_arguments(parser)
     args = parser.parse_args(argv)
-    args.align, args.dry, args.event_counts = "peak", "zero", True
+    args.align, args.dry = "peak", "zero"
+    args.sensor_with_camera = True
     return args
 
 
