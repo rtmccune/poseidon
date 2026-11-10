@@ -510,8 +510,9 @@ def test_pull_event_series_keeps_numbers_and_skips_image_only(
     seen = {}
 
     class FakeTracker:
-        def __init__(self, auth, min_date, max_date):
+        def __init__(self, auth, min_date, max_date, **kwargs):
             seen["range"] = (min_date, max_date)
+            seen["kwargs"] = kwargs
 
         def pull_qced_time_series_bulk(self, qc_csv_path, output_csv_name,
                                        chunk_days, time_buffer_hours):

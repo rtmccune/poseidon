@@ -25,7 +25,11 @@ lidar_units: meters           # units of the LiDAR point coordinates
 basemap: data/basemaps/CB_03_basemap.tif
 
 # Roadway region of interest (LabelMe JSON drawn on a rectified image).
-roi_json: data/transects/canal_dr_polygon.json
+roi_json: poseidon_deploy/configs/sites/rois/carolina_beach/canal_dr_polygon.json
+
+# Optional roadway polygon drawn in LabelMe on an original (unrectified)
+# camera image, labeled "roadway". Uncomment once the JSON exists:
+camera_roi_json: poseidon_deploy/configs/sites/rois/carolina_beach/canal_dr_camera_polygon.json
 
 # Lowest in-situ sensor WSE (m) shown in image/sensor comparison plots.
 sensor_wse_floor: 0.92
@@ -55,7 +59,10 @@ extrinsics:
 
 # Virtual sensor locations as [column, row] grid pixels, row 0 at the
 # southern (minimum y) edge of the grid.
+# Shifted from the previous 70 m x 70 m grid (min_x 712160, min_y 33100)
+# to the current extent: column + 40, row - 400. Positions in meters
+# are unchanged.
 virtual_sensors:
-  - [15, 717]
-  - [224, 781]
-  - [177, 905]
+  - [55, 317]     # sensor1: x 712160.75, y 33135.85
+  - [264, 381]    # sensor2: x 712171.20, y 33139.05
+  - [217, 505]    # sensor3: x 712168.85, y 33145.25
