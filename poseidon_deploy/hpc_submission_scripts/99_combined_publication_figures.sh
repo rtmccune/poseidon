@@ -7,6 +7,8 @@
 # hpc_paths.env; set LEFT_SITE / RIGHT_SITE to change the sites, e.g.
 #   LEFT_SITE=down_east RIGHT_SITE=carolina_beach \
 #       sbatch 99_combined_publication_figures.sh
+# Options after the script name go to combined_publication_figures.py:
+#   sbatch 99_combined_publication_figures.sh --bin_minutes 24
 #
 # Input:  data/<site>/flood_events, sensor_data_comparison.csv and
 #         segmentation_labels.csv for each site; ROI: each site's
@@ -33,4 +35,5 @@ activate_env
 python -u "$ANALYSIS/combined_publication_figures.py" \
     --sites "${LEFT_SITE:-carolina_beach}" "${RIGHT_SITE:-down_east}" \
     --data_root "$REPO_ROOT/data" \
-    --out_dir "$REPO_ROOT/data/publication_combined"
+    --out_dir "$REPO_ROOT/data/publication_combined" \
+    "$@"
