@@ -760,5 +760,47 @@ def test_combined_publication_figures_side_by_side(tmp_path):
     # Each line's event count is recorded for the legend and caption
     events = means.groupby("source")["source_events"].first()
     assert events["VS1"] == 4 and events["In-situ sensor"] == 4
+    membership = pd.read_csv(
+        out / "left_site_combined_fig1_aligned_timing_event_membership.csv")
+    assert set(membership["source"]) == {"ROI", "VS1"}
+    assert (membership["reason"] == "in (a) and (b)-(c)").all()
     assert (out / "right_site_combined_fig2_depth_by_coverage_1c_mean_depth"
                   "_fit_summary.csv").exists()
+
+
+def test_event_membership_reasons():
+    """Each event is placed in (a), (b)-(c), both or neither, with why."""
+    import publication_figures as pub
+    import sensor_camera_comparison as sc
+
+    peak = pd.Timestamp("2024-06-01 12:00", tz="UTC")
+    rows = []
+    for event, has_peak, depth in (("both", True, 0.1), ("dry_cam", True, 0.0),
+                                   ("night", True, 0.1),
+                                   ("no_peak", False, 0.1),
+                                   ("no_images", True, None)):
+        rows.append({"event": event, "source": sc.SENSOR, "time": peak,
+                     "depth_m": 0.1,
+                     "sensor_peak": peak if has_peak else pd.NaT})
+        if depth is not None:
+            rows.append({"event": event, "source": "VS1", "time": peak,
+                         "depth_m": depth or np.nan,
+                         "sensor_peak": peak if has_peak else pd.NaT})
+    series = pd.DataFrame(rows)
+    timing = pd.DataFrame([
+        {"event": e, "source": "VS1", "camera_images": 5,
+         "camera_first_wet": peak if cam else pd.NaT,
+         "sensor_first_wet": peak if sens else pd.NaT,
+         "onset_lead_min": 0.0 if cam and sens else np.nan}
+        for e, cam, sens in (("both", True, True), ("dry_cam", False, True),
+                             ("night", True, False),
+                             ("no_peak", True, True))])
+    table = pub.event_membership(series, timing, "peak", "zero").set_index(
+        "event")["reason"]
+    assert table["both"] == "in (a) and (b)-(c)"
+    assert table["dry_cam"] == "in (a) only: camera location never wet"
+    assert table["night"] == ("in (a) only: sensor not wet during the "
+                              "camera's image hours")
+    assert table["no_peak"] == ("in (b)-(c) only: no sensor peak in the "
+                                "event period")
+    assert table["no_images"] == "in neither: no well-segmented images"

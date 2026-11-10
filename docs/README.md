@@ -393,7 +393,12 @@ its y-axis across the two sites.
   to compare with the column counts. The panel (a) CSV records the
   count as `source_events`. In the single-site script this is
   `--event_counts`; `--same_events` instead restricts (a) to the events
-  of (b) and (c).
+  of (b) and (c). A line breaks where a 15-minute bin has fewer than 3
+  events. `<site>_combined_fig1_aligned_timing_event_membership.csv`
+  lists, per event and camera location, whether the event is in (a),
+  (b)–(c), both or neither, and why. The run log prints a count per
+  reason. The single-site script writes the same table as
+  `<roi>_pub_fig1_aligned_timing_event_membership.csv`.
 - **`combined_fig2_depth_by_coverage`:** for each site, the mean-depth 1c
   plot sits above figure 2. The 1c plot shows the logistic fit of depth
   on coverage, with its median and 80% prediction band. The left site has

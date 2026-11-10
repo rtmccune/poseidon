@@ -35,8 +35,11 @@ sites) and are saved as PNG (300 dpi) and PDF in ``--out_dir``.
 
 Each row shares its y-axis across the two sites, so the sites compare
 directly. The CSVs behind the panels that differ from the single-site
-outputs are written beside the figures: the peak-aligned means of panel
-(a) and the 1c fit summary, prefixed with the site name. The
+outputs are written beside the figures, prefixed with the site name:
+the peak-aligned means of panel (a), the 1c fit summary, and
+``_event_membership.csv``, which lists per event and camera location
+whether it is in panel (a), panels (b)-(c), both or neither, and why
+(a summary is logged). The
 statistics in each site's ``<roi>_pub_metrics.md`` still apply; they do
 not depend on the alignment.
 
@@ -171,6 +174,10 @@ def figure_one(sites, args, stem):
             os.path.join(args.out_dir,
                          f"{site['site']}_{stem}_a_peak_means.csv"),
             index=False)
+        pub.write_event_membership(
+            site["series"], site["timing"], args,
+            os.path.join(args.out_dir,
+                         f"{site['site']}_{stem}_event_membership.csv"))
         panels.append(axes)
     _share_ylim([axes[0] for axes in panels])
     _share_ylim([ax for axes in panels for ax in axes[1:]], bottom=None)

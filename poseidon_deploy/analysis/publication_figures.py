@@ -311,8 +311,15 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
         (s for s in present if s.startswith("VS")),
         key=lambda s: int(s[2:])) + [
         s for s in (sc.ROI_STATS["MeanDepth"],) if s in present]
+    width = sc.COMPOSITE_MINUTES / 60
     for source in sources:
         comp = table[table["source"] == source]
+        # Break the line where a bin has too few events, rather than
+        # joining the bins on either side with a straight segment
+        steps = np.round(comp["hours"] / width - 0.5).astype(int)
+        comp = comp.set_index(steps).reindex(
+            range(steps.min(), steps.max() + 1))
+        comp["hours"] = (comp.index + 0.5) * width
         ax.plot(comp["hours"], comp["center_m"],
                 color=sc._series_style(source), linewidth=2.2,
                 linestyle="--" if source == sc.SENSOR else "-",
@@ -484,6 +491,83 @@ def draw_aligned_timing(axes, series, timing, sensor, args,
             "end": rows_c}
 
 
+#: Why an event is in panel (a), panels (b)-(c), both or neither.
+MEMBERSHIP_REASONS = {
+    (True, True): "in (a) and (b)-(c)",
+    (True, False): None,  # filled in from the timing row
+    (False, True): "in (b)-(c) only: no sensor peak in the event period",
+    (False, False): None,
+}
+
+
+def event_membership(series, timing, align="start", dry="nan"):
+    """
+    Which events each figure 1 panel uses per camera location, and why.
+
+    Parameters
+    ----------
+    series, timing : pandas.DataFrame
+        From :func:`sensor_camera_comparison.collect` (good images).
+    align : {'start', 'peak'}, optional
+        Panel (a) alignment (``'peak'`` needs a sensor peak).
+    dry : {'nan', 'zero'}, optional
+        Panel (a) dry handling (``'nan'`` needs a wet image).
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per event and camera location (``ROI`` = "Anywhere on
+        Roadway" in (b)-(c) and "Mean on Roadway" in (a)):
+        ``sensor_peak``, ``good_images``, ``camera_wet``,
+        ``sensor_wet_in_image_span``, ``in_a``, ``in_bc`` and
+        ``reason``. An event in (a) may still be missing from a bin
+        that has fewer than 3 events.
+    """
+    peaks = series.drop_duplicates("event").set_index("event")[
+        "sensor_peak"]
+    camera = series[series["source"] != sc.SENSOR].assign(
+        source=lambda d: d["source"].replace(
+            {sc.ROI_STATS["MeanDepth"]: "ROI"}))
+    if dry == "nan":
+        camera = camera.dropna(subset=["depth_m"])
+    if align == "peak":
+        camera = camera[camera["sensor_peak"].notna()]
+    in_a = set(zip(camera["source"], camera["event"]))
+    times = timing.set_index(["source", "event"])
+    sources = sorted(set(timing["source"]) | {s for s, _ in in_a},
+                     key=lambda s: (s != "ROI", s))
+    rows = []
+    for event in sorted(set(peaks.index) | set(timing["event"])):
+        for source in sources:
+            row = (times.loc[(source, event)]
+                   if (source, event) in times.index else None)
+            images = 0 if row is None else int(row["camera_images"])
+            wet = row is not None and pd.notna(row["camera_first_wet"])
+            sensor_wet = row is not None and pd.notna(row["sensor_first_wet"])
+            a = (source, event) in in_a
+            bc = row is not None and pd.notna(row["onset_lead_min"])
+            reason = MEMBERSHIP_REASONS[(a, bc)]
+            if reason is None:
+                if images == 0:
+                    reason = "no well-segmented images"
+                elif not wet:
+                    reason = "camera location never wet"
+                elif not sensor_wet:
+                    reason = "sensor not wet during the camera's image hours"
+                elif not a:
+                    reason = "no sensor peak in the event period"
+                else:
+                    reason = "other"
+                reason = ("in (a) only: " if a else "in neither: ") + reason
+            peak = peaks.get(event, pd.NaT)
+            rows.append({"event": event, "source": source,
+                         "sensor_peak": peak, "good_images": images,
+                         "camera_wet": wet,
+                         "sensor_wet_in_image_span": sensor_wet,
+                         "in_a": a, "in_bc": bc, "reason": reason})
+    return pd.DataFrame(rows)
+
+
 def write_aligned_timing_csvs(result, timing, out_dir, stem):
     """
     Write the CSVs behind figure 1.
@@ -534,7 +618,37 @@ def figure_aligned_timing(series, timing, sensor, args, stem):
                                  sensor, args)
     _save(fig, args.out_dir, stem)
     write_aligned_timing_csvs(result, timing, args.out_dir, stem)
+    write_event_membership(series, timing, args,
+                           os.path.join(args.out_dir,
+                                        f"{stem}_event_membership.csv"))
     return result
+
+
+def write_event_membership(series, timing, args, path):
+    """
+    Write :func:`event_membership` and log its reason counts.
+
+    Parameters
+    ----------
+    series, timing : pandas.DataFrame
+        From :func:`sensor_camera_comparison.collect` (good images).
+    args : argparse.Namespace
+        Parsed arguments (``align``, ``dry``).
+    path : str
+        Output CSV.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The membership table.
+    """
+    table = event_membership(series, timing, getattr(args, "align", "start"),
+                             getattr(args, "dry", "nan"))
+    table.to_csv(path, index=False)
+    summary = table.groupby(["source", "reason"]).size()
+    logger.info("Figure 1 events per camera location and reason (%s):\n%s",
+                os.path.basename(path), summary.to_string())
+    return table
 
 
 # ----- Figure 2 --------------------------------------------------------------
