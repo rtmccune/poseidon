@@ -13,10 +13,10 @@ Panes (``--pane``)
 
 Time series
     The in-situ sensor's depth (dashed; readings at or below the road
-    surface shown as 0 m), the mean depth on the roadway (points) and
-    each virtual sensor's depth (lines, in the map marker colours; 0 m
-    where its cell is dry) from each well-segmented image, in local
-    time.
+    surface shown as 0 m), and from every image of the event the mean
+    roadway depth in the field of view and each virtual sensor's depth
+    (points, in the map marker colours; 0 m where dry), in local time.
+    Only the three panes are limited to well-segmented images.
 
 Choosing the moments
     Only well-segmented images with water on the roadway (and, for depth
@@ -244,16 +244,16 @@ def depth_map(event_dir, stamp, args):
     return None if depth is None else np.squeeze(depth).astype(float)
 
 
-def virtual_sensor_series(event_dir, good):
+def virtual_sensor_series(event_dir, keep=None):
     """
-    Each virtual sensor's depth for the event's well-segmented images.
+    Each virtual sensor's depth at the event's images.
 
     Parameters
     ----------
     event_dir : str
         Event folder (``zarr/virtual_sensor_data.zip`` from stage 09).
-    good : set of str
-        Well-segmented image timestamps.
+    keep : set of str, optional
+        Image timestamps to keep. Default: every image.
 
     Returns
     -------
@@ -276,7 +276,9 @@ def virtual_sensor_series(event_dir, good):
                       if not t.isdigit() else t for t in stamps]
     table["time"] = pd.to_datetime(table["stamp"], format="%Y%m%d%H%M%S",
                                    utc=True)
-    return table[table["stamp"].isin(good)].sort_values("time")
+    if keep is not None:
+        table = table[table["stamp"].isin(keep)]
+    return table.sort_values("time")
 
 
 def image_pane(event_dir, stamp, args):
@@ -364,22 +366,22 @@ def draw_figure(site, event, moments, images, sensor, args):
                     & (sensor["datetime_utc"] <= end)]
     ax.plot(window["datetime_utc"].dt.tz_convert(EASTERN_TZ),
             window["SensorDepth_m"], color=INK_STRONG, linestyle="--",
-            linewidth=1.6, label="In-situ sensor")
-    good = images[(images["event"] == event)
-                  & (images["Segmentation"] == "good")].copy()
-    good["time"] = pd.to_datetime(good["Time"], utc=True)
-    good["depth"] = good["MeanDepth"].where(good["Impassable"] == 1, 0.0)
-    ax.plot(good["time"].dt.tz_convert(EASTERN_TZ), good["depth"],
+            linewidth=1.6, label="In-Situ Sensor")
+    # Every image of the event (the moments were chosen from
+    # well-segmented images only)
+    shown = images[images["event"] == event].copy()
+    shown["time"] = pd.to_datetime(shown["Time"], utc=True)
+    shown["depth"] = shown["MeanDepth"].where(shown["Impassable"] == 1, 0.0)
+    ax.plot(shown["time"].dt.tz_convert(EASTERN_TZ), shown["depth"],
             marker="o", markersize=3.5, linestyle="none", color=BLUE,
-            label="Mean depth on roadway (image)")
-    good_stamps = set(good["time"].dt.strftime("%Y%m%d%H%M%S"))
-    sensors = virtual_sensor_series(event_dir, good_stamps)
+            label="Mean Roadway Depth in Field of View")
+    sensors = virtual_sensor_series(event_dir)
     if sensors is not None:
         for i, column in enumerate(c for c in sensors if
                                    c.startswith("VS")):
             ax.plot(sensors["time"].dt.tz_convert(EASTERN_TZ),
                     sensors[column], color=virtual_sensor_color(i),
-                    linewidth=1.3, marker="o", markersize=2.5,
+                    marker="o", markersize=2.5, linestyle="none",
                     label=column)
     for (name, color), when in zip(PHASES, local):
         ax.axvline(when, color=color, linestyle="--", linewidth=1.6)
@@ -389,7 +391,12 @@ def draw_figure(site, event, moments, images, sensor, args):
     ax.set_xlabel(f"Time (Eastern), {first:%-d %B %Y}")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M",
                                                       tz=EASTERN_TZ))
-    ax.legend(loc="best", fontsize=7.5, ncol=2)
+    # Headroom above the data so the legend does not cover the peak
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.3)
+    ax.legend(loc="upper right", fontsize=6.5, ncol=2,
+              handlelength=1.6, columnspacing=1.0, labelspacing=0.3,
+              borderaxespad=0.3, frameon=True, facecolor="white",
+              edgecolor="none", framealpha=0.9)
     ax.text(-0.07, 1.02, "(d)", transform=ax.transAxes, fontsize=10,
             weight="bold", va="bottom")
 
