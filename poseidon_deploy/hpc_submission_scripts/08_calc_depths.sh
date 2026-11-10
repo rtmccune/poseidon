@@ -12,7 +12,7 @@
 # the short QOS (2-hour limit per task).
 #
 #SBATCH --job-name=depths_batch
-#SBATCH --array=1-77
+#SBATCH --array=1-82
 #SBATCH --time=00:30:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1

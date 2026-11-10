@@ -12,7 +12,7 @@
 # Output: $EVENT_DIR/<event>/plots/
 #
 #SBATCH --job-name=plot_batch
-#SBATCH --array=1-77
+#SBATCH --array=1-82
 #SBATCH --time=01:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1

@@ -13,7 +13,7 @@
 #         and <roi>_roi_mask.png for each ROI
 #
 #SBATCH --job-name=roadway_batch
-#SBATCH --array=1-77
+#SBATCH --array=1-82
 #SBATCH --time=00:30:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
