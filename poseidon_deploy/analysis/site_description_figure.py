@@ -19,7 +19,8 @@ Two steps, because HPC compute nodes have no internet:
 ``fetch`` (run where there is internet, e.g. locally)
     Downloads the background layers into ``--layers_dir``: US state
     boundaries (US Census cartographic boundaries, 1:5,000,000) as
-    ``states.gpkg``, a light basemap of North Carolina as
+    ``states.gpkg``, a light basemap of North Carolina (Esri World Light
+    Gray Canvas; CARTO tiles now need an API key) as
     ``context_nc.tif`` and aerial imagery of each community as
     ``community_<site>.tif`` (Web Mercator GeoTIFFs via contextily).
 ``render`` (works offline, locally or on the HPC)
@@ -86,7 +87,8 @@ HIGHLIGHT = "#FFB000"
 
 #: Imagery credits, for the caption.
 ATTRIBUTION = {
-    "context": "Basemap: CARTO, OpenStreetMap contributors.",
+    "context": "Basemap: Esri, HERE, Garmin, OpenStreetMap contributors, "
+               "and the GIS User Community (World Light Gray Canvas).",
     "community": "Imagery: Esri, Maxar, Earthstar Geographics, and the "
                  "GIS User Community.",
     "states": "State boundaries: US Census Bureau cartographic boundary "
@@ -179,6 +181,58 @@ def read_raster(path):
 
 # ----- fetch -----------------------------------------------------------------
 
+def download_tiles(extent, path, source, zoom, args, label):
+    """
+    Download web map tiles of a lon/lat extent into a GeoTIFF.
+
+    Retries failed tiles (tile servers return occasional 502 errors)
+    and, if a zoom level still fails, tries up to two coarser levels.
+    The GeoTIFF is written only once every tile has arrived, so a
+    failed run leaves no partial file and the next run tries again.
+
+    Parameters
+    ----------
+    extent : tuple of float
+        ``(lon_min, lon_max, lat_min, lat_max)``.
+    path : str
+        Output GeoTIFF.
+    source : xyzservices.TileProvider
+        Tile source.
+    zoom : int
+        Preferred zoom level.
+    args : argparse.Namespace
+        Parsed arguments (``retries``, ``wait``).
+    label : str
+        Name for the log.
+
+    Raises
+    ------
+    RuntimeError
+        If every zoom level fails.
+    """
+    import contextily as ctx
+    import requests
+
+    partial = path + ".partial.tif"
+    for level in range(zoom, zoom - 3, -1):
+        logger.info("Downloading %s (zoom %d)", label, level)
+        try:
+            ctx.bounds2raster(extent[0], extent[2], extent[1], extent[3],
+                              partial, ll=True, zoom=level, source=source,
+                              wait=args.wait, max_retries=args.retries)
+        except (requests.HTTPError, requests.ConnectionError) as err:
+            logger.warning("%s failed at zoom %d: %s", label, level, err)
+            if os.path.exists(partial):
+                os.remove(partial)
+            continue
+        os.replace(partial, path)
+        logger.info("Wrote %s", path)
+        return
+    raise RuntimeError(f"Could not download {label}; the tile server may "
+                       f"be down. Run fetch again later (finished layers "
+                       f"are kept).")
+
+
 def fetch(args):
     """
     Download the background layers (needs internet).
@@ -207,23 +261,18 @@ def fetch(args):
 
     context_path = os.path.join(args.layers_dir, "context_nc.tif")
     if args.force or not os.path.exists(context_path):
-        logger.info("Downloading the North Carolina basemap")
-        ctx.bounds2raster(NC_EXTENT[0], NC_EXTENT[2], NC_EXTENT[1],
-                          NC_EXTENT[3], context_path, ll=True,
-                          zoom=args.context_zoom,
-                          source=ctx.providers.CartoDB.PositronNoLabels)
-        logger.info("Wrote %s", context_path)
+        download_tiles(NC_EXTENT, context_path,
+                       ctx.providers.Esri.WorldGrayCanvas,
+                       args.context_zoom, args, "the North Carolina basemap")
 
     for name in args.sites:
         site = load_site_config(name)
         path = os.path.join(args.layers_dir, f"community_{name}.tif")
         if args.force or not os.path.exists(path):
-            extent = community_extent(site, args.community_km)
-            logger.info("Downloading imagery around %s", name)
-            ctx.bounds2raster(extent[0], extent[2], extent[1], extent[3],
-                              path, ll=True, zoom=args.community_zoom,
-                              source=ctx.providers.Esri.WorldImagery)
-            logger.info("Wrote %s", path)
+            download_tiles(community_extent(site, args.community_km), path,
+                           ctx.providers.Esri.WorldImagery,
+                           args.community_zoom, args,
+                           f"imagery around {name}")
     logger.info("Layers ready in %s; copy that folder to the HPC to "
                 "render there.", args.layers_dir)
 
@@ -541,6 +590,10 @@ def parse_args(argv=None):
                      help="Tile zoom of the community imagery.")
     get.add_argument("--force", action="store_true",
                      help="Download again even if a layer exists.")
+    get.add_argument("--retries", type=int, default=6,
+                     help="Retries per failed tile.")
+    get.add_argument("--wait", type=float, default=3,
+                     help="Seconds between retries of a failed tile.")
 
     draw = commands.add_parser("render", parents=[shared],
                                help="Draw the figure (offline).")

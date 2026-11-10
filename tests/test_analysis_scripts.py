@@ -917,3 +917,31 @@ def test_site_description_figure_renders_offline(tmp_path):
     for ext in ("png", "pdf", "svg"):
         assert (out / f"site_description.{ext}").exists()
     assert "Esri" in (out / "attribution.txt").read_text()
+
+
+def test_site_figure_download_falls_back_to_coarser_zoom(tmp_path,
+                                                          monkeypatch):
+    """A failing zoom level is retried coarser; no partial file is left."""
+    import argparse
+
+    import contextily
+    import requests
+
+    import site_description_figure as sdf
+
+    tried = []
+
+    def fake(w, s, e, n, path, ll, zoom, source, wait, max_retries):
+        tried.append(zoom)
+        if zoom == 16:
+            open(path, "w").close()  # a partial write before the error
+            raise requests.HTTPError("502 Bad Gateway")
+        with open(path, "w") as handle:
+            handle.write("tiles")
+
+    monkeypatch.setattr(contextily, "bounds2raster", fake)
+    out = tmp_path / "layer.tif"
+    sdf.download_tiles((-77, -76, 34, 35), str(out), None, 16,
+                       argparse.Namespace(wait=0, retries=0), "test")
+    assert tried == [16, 15] and out.read_text() == "tiles"
+    assert not (tmp_path / "layer.tif.partial.tif").exists()
