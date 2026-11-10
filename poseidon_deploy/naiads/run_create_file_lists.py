@@ -31,8 +31,14 @@ def main(argv=None):
     parser.add_argument("--output_dir", default=None,
                         help="Folder for the lists; default is "
                              "'job_file_lists' beside --image_dir.")
+    parser.add_argument("--skip_done_dir", default=None,
+                        help="Leave out images whose <stem>_predseg.png "
+                             "is already in this folder (the predictions "
+                             "folder), to list only what is left.")
     args = cli_common.start(parser, argv)
-    prepare_job_lists(args.image_dir, args.num_jobs, args.output_dir)
+    lists = prepare_job_lists(args.image_dir, args.num_jobs, args.output_dir,
+                              skip_done_dir=args.skip_done_dir)
+    print(f"Wrote {len(lists)} file lists; submit with --array=1-{len(lists)}")
 
 
 if __name__ == "__main__":

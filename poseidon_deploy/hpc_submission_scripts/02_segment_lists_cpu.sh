@@ -14,6 +14,10 @@
 #   NUM_JOBS=200 sbatch 99_create_job_lists.sh
 #   sbatch --array=1-200 02_segment_lists_cpu.sh
 # Each task must finish within the short QOS time limit.
+# To finish a run that was started elsewhere, list only the images not
+# yet segmented (see 99_create_job_lists.sh) and read those lists:
+#   SKIP_DONE=1 NUM_JOBS=100 sbatch 99_create_job_lists.sh
+#   LIST_DIR=job_file_lists_remaining sbatch --array=1-<n> 02_segment_lists_cpu.sh
 #
 # Input:  $SITE_DATA/images/daylight_all_events/job_file_lists/
 # Output: segmentation predictions written by segmentation_gym
@@ -43,7 +47,7 @@ export APPTAINERENV_TF_NUM_INTEROP_THREADS=2
 
 IMAGES_DIR="$SITE_DATA/images/daylight_all_events"
 WEIGHTS="$REPO_ROOT/data/segmentation/all_sites/weights/all_sites_5_class_v3_segformer_fullmodel.h5"
-FILE_LIST=$(file_list_for_task "$IMAGES_DIR/job_file_lists")
+FILE_LIST=$(file_list_for_task "$IMAGES_DIR/${LIST_DIR:-job_file_lists}")
 echo "Task $TASK_ID: $FILE_LIST on $NPROC CPUs"
 
 SECONDS=0
