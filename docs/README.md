@@ -434,6 +434,34 @@ because the alignment does not change them.
   named Inkscape layer, and all text is live, so the figure can be
   finished in Inkscape. Missing panels appear as labelled placeholders.
 
+### Site description figure
+
+`poseidon_deploy/analysis/site_description_figure.py` draws:
+- North Carolina with both sites marked;
+- each community on aerial imagery;
+- each site's elevation grid, with the camera and its field of view,
+  the roadway region and the virtual sensors;
+- a photo from each camera.
+
+The maps have zebra frames, scale bars and north arrows, from
+`map_decorations.py`, which is adapted from the shift repository.
+
+It runs in two steps, because compute nodes have no internet:
+1. **Download the layers** where there is internet, e.g. locally:
+   ```bash
+   python poseidon_deploy/analysis/site_description_figure.py fetch \
+       --sites carolina_beach down_east --layers_dir data/site_figure/layers
+   ```
+   This saves state boundaries and basemap / imagery GeoTIFFs.
+2. **Draw the figure** offline. Either run
+   `site_description_figure.py render` locally, or copy the layers to
+   the HPC and submit `99_site_description_figure.sh`.
+
+The render step needs each site's `data/grids/shared_grid_<site>.npz`.
+Stage 06 builds it in seconds from the LiDAR, locally too. The figure is
+saved as PNG, PDF and SVG (editable in Inkscape), and `attribution.txt`
+holds the imagery credits for the caption.
+
 ### Events without sensor data
 
 Stage 05 needs `flood_events.csv`, the sensor readings inside each event.

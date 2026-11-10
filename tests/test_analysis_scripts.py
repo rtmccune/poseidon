@@ -867,3 +867,53 @@ def test_methods_figure_assets_and_diagram(tmp_path):
     assert 'xlink:href="assets/09_depth.png"' in text
     assert 'inkscape:label="Georect zoom"' in text
     assert "(not found)" not in text  # every panel was exported
+
+
+def test_site_description_figure_renders_offline(tmp_path):
+    """The figure renders from local layers, grids and photos only."""
+    import geopandas as gpd
+    import rasterio
+    from rasterio.transform import from_bounds
+    from shapely.geometry import box
+
+    import site_description_figure as sdf
+    from poseidon_utils.site_config import load_site_config
+
+    layers = tmp_path / "layers"
+    layers.mkdir()
+    x0, x1, y0, y1 = sdf.web_box(sdf.NC_EXTENT)
+    gpd.GeoDataFrame({"STUSPS": ["NC"], "NAME": ["North Carolina"]},
+                     geometry=[box(x0, y0, (x0 + x1) / 2, y1)],
+                     crs=sdf.WEB).to_file(layers / "states.gpkg")
+
+    def raster(path, bounds):
+        with rasterio.open(path, "w", driver="GTiff", width=20, height=20,
+                           count=3, dtype="uint8", crs=sdf.WEB,
+                           transform=from_bounds(bounds[0], bounds[2],
+                                                 bounds[1], bounds[3], 20,
+                                                 20)) as dst:
+            dst.write(np.full((3, 20, 20), 180, dtype=np.uint8))
+
+    raster(layers / "context_nc.tif", (x0, x1, y0, y1))
+    grids = tmp_path / "grids"
+    grids.mkdir()
+    for name in ("carolina_beach", "down_east"):
+        site = load_site_config(name)
+        raster(layers / f"community_{name}.tif",
+               sdf.web_box(sdf.community_extent(site, 2.0)))
+        g = site.grid
+        x, y = np.meshgrid(np.arange(g.min_x, g.max_x, 0.5),
+                           np.arange(g.min_y, g.max_y, 0.5))
+        np.savez(grids / f"shared_grid_{name}.npz", x=x, y=y,
+                 z=0.5 + 0.01 * (x - g.min_x))
+    photo = tmp_path / "photo.jpg"
+    cv2.imwrite(str(photo), np.full((40, 30, 3), 128, dtype=np.uint8))
+
+    out = tmp_path / "out"
+    assert sdf.main(["render", "--sites", "carolina_beach", "down_east",
+                     "--layers_dir", str(layers), "--grid_dir", str(grids),
+                     "--photos", str(photo), str(photo),
+                     "--out_dir", str(out)]) == 0
+    for ext in ("png", "pdf", "svg"):
+        assert (out / f"site_description.{ext}").exists()
+    assert "Esri" in (out / "attribution.txt").read_text()
