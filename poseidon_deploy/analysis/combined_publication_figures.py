@@ -15,9 +15,13 @@ sites) and are saved as PNG (300 dpi) and PDF in ``--out_dir``.
     0), so it holds only events where the sensor saw water, and dry
     times count as 0 m (the sensor reads 0 m outside the event sheet's
     start to end), so each line is the expected depth at that time
-    over every event rather than the mean among events still wet. The
-    single-site script defaults to start alignment with dry times left
-    out (``--align``, ``--dry``).
+    over every event rather than the mean among events still wet. Each
+    camera line uses the events of its column in panels (b) and (c)
+    (the roadway mean those of "Anywhere on Roadway"), and the in-situ
+    sensor line all of them, so the three panels share one event set;
+    the legend gives each line's event count. The single-site script
+    defaults to start alignment, dry times left out and every event
+    (``--align``, ``--dry``, ``--same_events``).
 
 ``combined_fig2_depth_by_coverage``
     Per site, plot 1c for the mean roadway depth (logistic fit of depth on coverage with its median and 80 %
@@ -250,8 +254,8 @@ def parse_args(argv=None):
     Returns
     -------
     argparse.Namespace
-        Parsed arguments, with ``align`` set to ``'peak'`` and ``dry``
-        to ``'zero'``.
+        Parsed arguments, with ``align`` set to ``'peak'``, ``dry`` to
+        ``'zero'`` and ``same_events`` on.
     """
     parser = argparse.ArgumentParser(
         description="Make two-site publication figures.")
@@ -267,7 +271,7 @@ def parse_args(argv=None):
                              "config's camera_roi_json, else roi_json.")
     pub.add_figure_arguments(parser)
     args = parser.parse_args(argv)
-    args.align, args.dry = "peak", "zero"
+    args.align, args.dry, args.same_events = "peak", "zero", True
     return args
 
 

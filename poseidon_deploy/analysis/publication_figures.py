@@ -226,8 +226,31 @@ def vs1_agreement(pairs, n_boot, seed):
     return stats
 
 
+def timing_event_sets(timing):
+    """
+    Events behind each column of figure 1 (b) and (c), per panel (a) line.
+
+    Parameters
+    ----------
+    timing : pandas.DataFrame
+        Timing table of :func:`sensor_camera_comparison.collect`.
+
+    Returns
+    -------
+    dict of str to set
+        Panel (a) source to its events: each virtual sensor's own, the
+        roadway mean the ROI's ("Anywhere on Roadway"), and the in-situ
+        sensor the union of them all.
+    """
+    usable = timing.dropna(subset=["onset_lead_min"])
+    sets = {(sc.ROI_STATS["MeanDepth"] if source == "ROI" else source):
+            set(group["event"]) for source, group in usable.groupby("source")}
+    sets[sc.SENSOR] = set().union(*sets.values()) if sets else set()
+    return sets
+
+
 def _draw_means_panel(ax, series, padding_hours, align="start",
-                      dry="nan"):
+                      dry="nan", event_sets=None):
     """
     Draw panel (a): mean depth across events per source.
 
@@ -248,6 +271,11 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
         every event counts at every time in its window and a line is
         the expected depth then; the sensor reads 0 m outside the event
         sheet's start to end.
+    event_sets : dict of str to set, optional
+        Events to use per source (:func:`timing_event_sets`), so every
+        line draws on the events of its column in panels (b) and (c);
+        sources not listed are left out. Default: every event. The
+        legend then gives each line's event count.
 
     Returns
     -------
@@ -268,8 +296,14 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
             outside, 0.0))
     else:
         series = series[~outside]
+    if event_sets is not None:
+        series = series[[event in event_sets.get(source, ())
+                         for source, event in zip(series["source"],
+                                                  series["event"])]]
     aligned = sc.aligned_series(series, align, "buffer")
     table = sc.composites(aligned, stat="mean")
+    counts = aligned.groupby("source")["event"].nunique()
+    table["source_events"] = table["source"].map(counts)
     present = set(table["source"])
     sources = ([sc.SENSOR] if sc.SENSOR in present else []) + sorted(
         (s for s in present if s.startswith("VS")),
@@ -280,7 +314,8 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
         ax.plot(comp["hours"], comp["center_m"],
                 color=sc._series_style(source), linewidth=2.2,
                 linestyle="--" if source == sc.SENSOR else "-",
-                label=_display(source))
+                label=_display(source) if event_sets is None else
+                f"{_display(source)} ({counts[source]} events)")
     events = aligned.drop_duplicates("event")
     if align == "start":
         ax.axvline(padding_hours, color=INK, linewidth=1, linestyle=":",
@@ -426,9 +461,11 @@ def draw_aligned_timing(axes, series, timing, sensor, args,
         medians).
     """
     ax_a, ax_b, ax_c = axes
-    composites = _draw_means_panel(ax_a, series, args.padding_hours,
-                                   getattr(args, "align", "start"),
-                                   getattr(args, "dry", "nan"))
+    composites = _draw_means_panel(
+        ax_a, series, args.padding_hours, getattr(args, "align", "start"),
+        getattr(args, "dry", "nan"),
+        timing_event_sets(timing) if getattr(args, "same_events", False)
+        else None)
     pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
                              args.sensor_wet_ft * FEET_TO_METERS,
                              args.padding_hours)
@@ -990,6 +1027,11 @@ def parse_args(argv=None):
                         help="Figure 1 (a): leave dry times out (mean "
                              "among wet events) or count them as 0 m "
                              "(expected depth over every event).")
+    parser.add_argument("--same_events", action="store_true",
+                        help="Figure 1 (a): draw each line from the events "
+                             "of its column in (b) and (c) (the in-situ "
+                             "sensor from all of them), with event counts "
+                             "in the legend.")
     add_figure_arguments(parser)
     args = parser.parse_args(argv)
     if args.roi is None and args.site:

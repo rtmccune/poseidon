@@ -387,7 +387,12 @@ its y-axis across the two sites.
 
 - **`combined_fig1_aligned_timing`:** each site's figure 1. The left site
   has panels (a)–(c) and the right site has (d)–(f). Panel (a) is aligned
-  on the in-situ sensor's peak, with dry times counted as 0 m.
+  on the in-situ sensor's peak, with dry times counted as 0 m. All three
+  panels use the same events. Each camera line in (a) uses the events
+  behind its column in (b) and (c). The roadway mean uses the events of
+  "Anywhere on Roadway". The sensor line uses all of those events. The
+  legend gives each line's event count. In the single-site script this
+  is `--same_events`.
 - **`combined_fig2_depth_by_coverage`:** for each site, the mean-depth 1c
   plot sits above figure 2. The 1c plot shows the logistic fit of depth
   on coverage, with its median and 80% prediction band. The left site has

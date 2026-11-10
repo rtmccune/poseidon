@@ -757,5 +757,8 @@ def test_combined_publication_figures_side_by_side(tmp_path):
     # its peak instead of leaving those times out
     sensor_means = means.loc[means["source"] == "In-situ sensor", "center_m"]
     assert sensor_means.min() == 0 and sensor_means.max() > 0
+    # Each line uses the events of its column in panels (b) and (c)
+    events = means.groupby("source")["source_events"].first()
+    assert events["VS1"] == 4 and events["In-situ sensor"] == 4
     assert (out / "right_site_combined_fig2_depth_by_coverage_1c_mean_depth"
                   "_fit_summary.csv").exists()
