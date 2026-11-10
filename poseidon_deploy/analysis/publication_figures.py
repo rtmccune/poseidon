@@ -226,7 +226,7 @@ def vs1_agreement(pairs, n_boot, seed):
     return stats
 
 
-def _draw_means_panel(ax, series, padding_hours):
+def _draw_means_panel(ax, series, padding_hours, align="start"):
     """
     Draw panel (a): mean depth across events per source.
 
@@ -238,6 +238,9 @@ def _draw_means_panel(ax, series, padding_hours):
         Output of :func:`sensor_camera_comparison.event_series`.
     padding_hours : float
         Padding before the event sheet's start.
+    align : {'start', 'peak'}, optional
+        Hour 0 at the start of each event's window (every event), or at
+        the in-situ sensor's peak (events where the sensor saw water).
 
     Returns
     -------
@@ -251,7 +254,7 @@ def _draw_means_panel(ax, series, padding_hours):
     outside = (series["source"] == sc.SENSOR) & (
         (series["time"] < series["flood_start"])
         | (series["time"] > series["flood_end"]))
-    aligned = sc.aligned_series(series[~outside], "start", "buffer")
+    aligned = sc.aligned_series(series[~outside], align, "buffer")
     table = sc.composites(aligned, stat="mean")
     present = set(table["source"])
     sources = ([sc.SENSOR] if sc.SENSOR in present else []) + sorted(
@@ -264,14 +267,26 @@ def _draw_means_panel(ax, series, padding_hours):
                 color=sc._series_style(source), linewidth=2.2,
                 linestyle="--" if source == sc.SENSOR else "-",
                 label=_display(source))
-    ax.axvline(padding_hours, color=INK, linewidth=1, linestyle=":",
-               label="Event Start")
-    durations = (aligned["flood_end"] - aligned["flood_start"]
-                 ).dt.total_seconds() / 3600
-    ax.set_xlim(0, float(np.nanpercentile(durations, 90))
-                + 2 * padding_hours)
+    events = aligned.drop_duplicates("event")
+    if align == "start":
+        ax.axvline(padding_hours, color=INK, linewidth=1, linestyle=":",
+                   label="Event Start")
+        durations = (aligned["flood_end"] - aligned["flood_start"]
+                     ).dt.total_seconds() / 3600
+        ax.set_xlim(0, float(np.nanpercentile(durations, 90))
+                    + 2 * padding_hours)
+        ax.set_xlabel("Hours Since Start of Window")
+    else:
+        ax.axvline(0, color=INK, linewidth=1, linestyle=":",
+                   label="In-Situ Sensor Peak")
+        before = (events["sensor_peak"] - events["buffer_start"]
+                  ).dt.total_seconds() / 3600
+        after = (events["flood_end"] - events["sensor_peak"]
+                 ).dt.total_seconds() / 3600 + padding_hours
+        ax.set_xlim(-float(np.nanpercentile(before, 90)),
+                    float(np.nanpercentile(after, 90)))
+        ax.set_xlabel("Hours From In-Situ Sensor Peak")
     ax.set_ylim(bottom=0)
-    ax.set_xlabel("Hours Since Start of Window")
     ax.set_ylabel("Water Depth (m)")
     ax.legend(loc="upper right", fontsize=8)
     return table
@@ -333,6 +348,112 @@ def _draw_timing_panel(ax, timing, column, ylabel, seed):
     return rows
 
 
+def panel_letter(ax, letter):
+    """
+    Label a panel ``(letter)`` above the top-left corner of its axes.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes.
+    letter : str
+        Panel letter.
+    """
+    ax.annotate(f"({letter})", xy=(0, 1), xycoords="axes fraction",
+                xytext=(-42, 4), textcoords="offset points", fontsize=11,
+                fontweight="bold", va="bottom")
+
+
+def aligned_timing_axes(fig):
+    """
+    Lay out figure 1's panels on a figure or subfigure.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure or matplotlib.figure.SubFigure
+        Where to draw.
+
+    Returns
+    -------
+    tuple of matplotlib.axes.Axes
+        Panels (a), (b), (c); (b) and (c) share their minutes axis.
+    """
+    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=0.45,
+                            wspace=0.25)
+    ax_a = fig.add_subplot(grid[0, :])
+    ax_b = fig.add_subplot(grid[1, 0])
+    ax_c = fig.add_subplot(grid[1, 1], sharey=ax_b)  # one minutes scale
+    return ax_a, ax_b, ax_c
+
+
+def draw_aligned_timing(axes, series, timing, sensor, args,
+                        letters=("a", "b", "c")):
+    """
+    Draw figure 1's three panels.
+
+    Parameters
+    ----------
+    axes : tuple of matplotlib.axes.Axes
+        Panels (a), (b), (c), e.g. from :func:`aligned_timing_axes`.
+    series, timing : pandas.DataFrame
+        From :func:`sensor_camera_comparison.collect` (good images).
+    sensor : pandas.DataFrame
+        All sensor readings.
+    args : argparse.Namespace
+        Parsed arguments (``align`` selects panel (a)'s time origin).
+    letters : tuple of str, optional
+        Panel letters.
+
+    Returns
+    -------
+    dict
+        ``composites`` (panel (a)), ``vs1`` (:func:`vs1_agreement`), and
+        ``onset`` and ``end`` (per source event counts, means and
+        medians).
+    """
+    ax_a, ax_b, ax_c = axes
+    composites = _draw_means_panel(ax_a, series, args.padding_hours,
+                                   getattr(args, "align", "start"))
+    pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
+                             args.sensor_wet_ft * FEET_TO_METERS,
+                             args.padding_hours)
+    agreement = vs1_agreement(pairs, args.n_boot, args.seed)
+    rows = _draw_timing_panel(ax_b, timing, "onset_lead_min",
+                              "Onset Lead Time (minutes)", args.seed)
+    rows_c = _draw_timing_panel(ax_c, timing, "end_lag_min",
+                                "End Lag Time (minutes)", args.seed + 1)
+    ax_c.tick_params(axis="y", labelleft=True)
+    for ax, letter in zip(axes, letters):
+        panel_letter(ax, letter)
+    return {"composites": composites, "vs1": agreement, "onset": rows,
+            "end": rows_c}
+
+
+def write_aligned_timing_csvs(result, timing, out_dir, stem):
+    """
+    Write the CSVs behind figure 1.
+
+    Parameters
+    ----------
+    result : dict
+        Output of :func:`draw_aligned_timing`.
+    timing : pandas.DataFrame
+        Timing table drawn in panels (b) and (c).
+    out_dir : str
+        Output folder.
+    stem : str
+        Filename stem of the figure.
+    """
+    result["composites"].to_csv(os.path.join(out_dir, f"{stem}_a_means.csv"),
+                                index=False)
+    pd.DataFrame([result["vs1"]]).to_csv(
+        os.path.join(out_dir, f"{stem}_a_vs1_agreement.csv"), index=False)
+    pd.concat([pd.DataFrame(result["onset"]).assign(panel="b_onset_lead"),
+               pd.DataFrame(result["end"]).assign(panel="c_end_lag")]).to_csv(
+        os.path.join(out_dir, f"{stem}_bc_timing_means.csv"), index=False)
+    timing.to_csv(os.path.join(out_dir, f"{stem}_timing.csv"), index=False)
+
+
 def figure_aligned_timing(series, timing, sensor, args, stem):
     """
     Make figure 1 and its CSVs.
@@ -351,44 +472,14 @@ def figure_aligned_timing(series, timing, sensor, args, stem):
     Returns
     -------
     dict
-        ``vs1`` (:func:`vs1_agreement`), and ``onset`` and ``end`` (per
-        source event counts, means and medians) for the metrics file.
+        Output of :func:`draw_aligned_timing`, for the metrics file.
     """
     fig = plt.figure(figsize=(11, 9))
-    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=0.45,
-                            wspace=0.25)
-    ax_a = fig.add_subplot(grid[0, :])
-    ax_b = fig.add_subplot(grid[1, 0])
-    ax_c = fig.add_subplot(grid[1, 1], sharey=ax_b)  # one minutes scale
-
-    composites = _draw_means_panel(ax_a, series, args.padding_hours)
-    pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
-                             args.sensor_wet_ft * FEET_TO_METERS,
-                             args.padding_hours)
-    agreement = vs1_agreement(pairs, args.n_boot, args.seed)
-    rows = _draw_timing_panel(ax_b, timing, "onset_lead_min",
-                              "Onset Lead Time (minutes)", args.seed)
-    rows_c = _draw_timing_panel(ax_c, timing, "end_lag_min",
-                                "End Lag Time (minutes)", args.seed + 1)
-    ax_c.tick_params(axis="y", labelleft=True)
-    for ax, letter in ((ax_a, "a"), (ax_b, "b"), (ax_c, "c")):
-        ax.text(-0.06 if ax is ax_a else -0.14, 1.02, f"({letter})",
-                transform=ax.transAxes, fontsize=11, fontweight="bold",
-                va="bottom")
+    result = draw_aligned_timing(aligned_timing_axes(fig), series, timing,
+                                 sensor, args)
     _save(fig, args.out_dir, stem)
-
-    composites.to_csv(os.path.join(args.out_dir, f"{stem}_a_means.csv"),
-                      index=False)
-    pd.DataFrame([agreement]).to_csv(
-        os.path.join(args.out_dir, f"{stem}_a_vs1_agreement.csv"),
-        index=False)
-    pd.concat([pd.DataFrame(rows).assign(panel="b_onset_lead"),
-               pd.DataFrame(rows_c).assign(panel="c_end_lag")]).to_csv(
-        os.path.join(args.out_dir, f"{stem}_bc_timing_means.csv"),
-        index=False)
-    timing.to_csv(os.path.join(args.out_dir, f"{stem}_timing.csv"),
-                  index=False)
-    return {"vs1": agreement, "onset": rows, "end": rows_c}
+    write_aligned_timing_csvs(result, timing, args.out_dir, stem)
+    return result
 
 
 # ----- Figure 2 --------------------------------------------------------------
@@ -437,43 +528,108 @@ def _draw_bin(ax, x, width, rows):
                 markeredgecolor=color, markeredgewidth=1.4, zorder=4)
 
 
-def figure_binned_depth(data, args, stem):
+def paired_images(data):
     """
-    Make figure 2 and its CSVs.
+    Images used by figure 2.
 
     Parameters
     ----------
     data : pandas.DataFrame
         Images of the ROI (one row each), from
         :func:`access_plotter.load_event`, with a sensor match.
-    args : argparse.Namespace
-        Parsed arguments.
-    stem : str
-        Output filename stem.
 
     Returns
     -------
-    dict or None
-        ``images``, ``events`` and ``agreements`` (per image metric,
-        :func:`access_plotter.paired_agreement`) for the metrics file,
-        or None if the figure was not made.
+    pandas.DataFrame
+        Well-segmented images with water on the road and every depth
+        (mean, maximum, sensor).
     """
-    paired = data[(data["Segmentation"] == "good")
-                  & (data["Coverage"] > 0)].dropna(
+    return data[(data["Segmentation"] == "good")
+                & (data["Coverage"] > 0)].dropna(
         subset=["Coverage", "MeanDepth", "MaxDepth", "SensorDepth_m"])
-    if len(paired) <= 3:
-        logger.warning("Only %d paired images; figure 2 skipped.",
-                       len(paired))
-        return None
-    tables = [ap.depth_by_coverage(paired["Coverage"], paired[column],
-                                   paired["event"], args.coverage_bin_width,
-                                   args.full_coverage, args.n_boot,
-                                   args.seed)
-              for _, column, *_ in DEPTH_SOURCES]
 
-    fig, (ax, ax_full) = plt.subplots(
-        1, 2, figsize=(10, 5.5), sharey=True,
-        gridspec_kw={"width_ratios": [5, 1.2], "wspace": 0.06})
+
+def binned_depth_tables(paired, args):
+    """
+    Depth by coverage bin of each figure 2 series.
+
+    Parameters
+    ----------
+    paired : pandas.DataFrame
+        Output of :func:`paired_images`.
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    list of pandas.DataFrame
+        :func:`access_plotter.depth_by_coverage` per
+        :data:`DEPTH_SOURCES` entry.
+    """
+    return [ap.depth_by_coverage(paired["Coverage"], paired[column],
+                                 paired["event"], args.coverage_bin_width,
+                                 args.full_coverage, args.n_boot, args.seed)
+            for _, column, *_ in DEPTH_SOURCES]
+
+
+def binned_depth_top(tables):
+    """
+    Top of figure 2's depth axis: 5 % above the highest bar or band.
+
+    Parameters
+    ----------
+    tables : list of pandas.DataFrame
+        Output of :func:`binned_depth_tables`.
+
+    Returns
+    -------
+    float
+        Upper depth limit (m).
+    """
+    tops = [t[c].max() for t in tables
+            for c in ("p90_depth_m", "mean_depth_m_ci95_high")]
+    return 1.05 * float(np.nanmax(tops))
+
+
+def binned_depth_axes(fig, spec=None):
+    """
+    Lay out figure 2's partial and full coverage panels.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure or matplotlib.figure.SubFigure
+        Where to draw.
+    spec : matplotlib.gridspec.SubplotSpec, optional
+        Area to fill. Default: the whole figure.
+
+    Returns
+    -------
+    tuple of matplotlib.axes.Axes
+        Partial coverage panel and the fully covered panel (shared
+        depth axis).
+    """
+    widths = {"width_ratios": [5, 1.2], "wspace": 0.06}
+    grid = (spec.subgridspec(1, 2, **widths) if spec is not None
+            else fig.add_gridspec(1, 2, **widths))
+    ax = fig.add_subplot(grid[0, 0])
+    return ax, fig.add_subplot(grid[0, 1], sharey=ax)
+
+
+def draw_binned_depth(ax, ax_full, tables, args, legend_fontsize=8):
+    """
+    Draw figure 2 on its two panels.
+
+    Parameters
+    ----------
+    ax, ax_full : matplotlib.axes.Axes
+        Partial coverage panel and fully covered panel (shared y).
+    tables : list of pandas.DataFrame
+        Output of :func:`binned_depth_tables`.
+    args : argparse.Namespace
+        Parsed arguments.
+    legend_fontsize : float, optional
+        Legend font size.
+    """
     partial = [t[~t["full_coverage"]].reset_index(drop=True) for t in tables]
     full = [t[t["full_coverage"]] for t in tables]
     widths = partial[0]["coverage_high"] - partial[0]["coverage_low"]
@@ -499,13 +655,11 @@ def figure_binned_depth(data, args, stem):
     ax.set_xlim(0, args.full_coverage)
     ax.set_xlabel("Roadway Coverage (%)")
     ax.set_ylabel("Depth on Roadway (m)")
-    tops = [t[c].max() for t in tables
-            for c in ("p90_depth_m", "mean_depth_m_ci95_high")]
-    ax.set_ylim(0, 1.05 * np.nanmax(tops))
+    ax.set_ylim(0, binned_depth_top(tables))
     ax_full.set_xlim(-0.6, 0.6)
     ax_full.set_xticks([0.0])
     ax_full.set_xticklabels([f"Full\n(>={args.full_coverage:g}%)"])
-    ax_full.tick_params(axis="y", left=False)
+    ax_full.tick_params(axis="y", left=False, labelleft=False)
     ax_full.spines["left"].set_visible(False)
     ax_full.grid(axis="x", visible=False)
 
@@ -521,21 +675,87 @@ def figure_binned_depth(data, args, stem):
             markerfacecolor="white", markeredgecolor=INK,
             label=f"Hollow: <{ap.MIN_BIN_IMAGES} images or "
                   f"<{ap.MIN_BIN_EVENTS} events"))
-    ax.legend(handles=handles, loc="upper left", fontsize=8)
+    ax.legend(handles=handles, loc="upper left", fontsize=legend_fontsize)
 
-    _save(fig, args.out_dir, stem)
 
-    agreements = {name: ap.paired_agreement(
+def binned_depth_agreements(paired, args):
+    """
+    Each image depth metric against the sensor for figure 2.
+
+    Parameters
+    ----------
+    paired : pandas.DataFrame
+        Output of :func:`paired_images`.
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    dict
+        :func:`access_plotter.paired_agreement` per image metric name.
+    """
+    return {name: ap.paired_agreement(
         paired[column], paired["SensorDepth_m"], paired["event"],
         args.n_boot, args.seed) for name, column, *_ in DEPTH_SOURCES[:2]}
 
+
+def write_binned_depth_csvs(tables, agreements, out_dir, stem):
+    """
+    Write the CSVs behind figure 2.
+
+    Parameters
+    ----------
+    tables : list of pandas.DataFrame
+        Output of :func:`binned_depth_tables`.
+    agreements : dict
+        Output of :func:`binned_depth_agreements`.
+    out_dir : str
+        Output folder.
+    stem : str
+        Filename stem of the figure.
+    """
     pd.concat([t.assign(depth_source=name)
                for (name, *_), t in zip(DEPTH_SOURCES, tables)],
               ignore_index=True).to_csv(
-        os.path.join(args.out_dir, f"{stem}_by_coverage.csv"), index=False)
+        os.path.join(out_dir, f"{stem}_by_coverage.csv"), index=False)
     pd.DataFrame([dict(stats, image_metric=name)
                   for name, stats in agreements.items()]).to_csv(
-        os.path.join(args.out_dir, f"{stem}_agreement.csv"), index=False)
+        os.path.join(out_dir, f"{stem}_agreement.csv"), index=False)
+
+
+def figure_binned_depth(data, args, stem):
+    """
+    Make figure 2 and its CSVs.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Images of the ROI (one row each), from
+        :func:`access_plotter.load_event`, with a sensor match.
+    args : argparse.Namespace
+        Parsed arguments.
+    stem : str
+        Output filename stem.
+
+    Returns
+    -------
+    dict or None
+        ``images``, ``events`` and ``agreements`` (per image metric,
+        :func:`access_plotter.paired_agreement`) for the metrics file,
+        or None if the figure was not made.
+    """
+    paired = paired_images(data)
+    if len(paired) <= 3:
+        logger.warning("Only %d paired images; figure 2 skipped.",
+                       len(paired))
+        return None
+    tables = binned_depth_tables(paired, args)
+    fig = plt.figure(figsize=(10, 5.5))
+    draw_binned_depth(*binned_depth_axes(fig), tables, args)
+    _save(fig, args.out_dir, stem)
+
+    agreements = binned_depth_agreements(paired, args)
+    write_binned_depth_csvs(tables, agreements, args.out_dir, stem)
     return {"images": len(paired), "events": paired["event"].nunique(),
             "agreements": agreements}
 
@@ -623,6 +843,92 @@ def write_metrics(path, args, fig1, fig2):
 
 # ----- CLI -------------------------------------------------------------------
 
+def add_figure_arguments(parser):
+    """
+    Add the options shared by every publication figure script.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to extend.
+    """
+    parser.add_argument("--n_boot", type=int, default=1000,
+                        help="Event bootstrap resamples for the CIs.")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Random seed (bootstrap and jitter).")
+    parser.add_argument("--padding_hours", type=float,
+                        default=ap.EVENT_PADDING_HOURS,
+                        help="Padding stage 05 added around each event.")
+    parser.add_argument("--match_minutes", type=float, default=5.0,
+                        help="Largest gap to a matched sensor reading.")
+    parser.add_argument("--sensor_wet_ft", type=float,
+                        default=FLOOD_START_THRESHOLD_FT,
+                        help="Road water level (ft) above which the in-situ "
+                             "sensor counts as wet.")
+    parser.add_argument("--coverage_bin_width", type=float,
+                        default=ap.COVERAGE_BIN_WIDTH,
+                        help="Coverage bin width (%%) of figure 2.")
+    parser.add_argument("--full_coverage", type=float,
+                        default=ap.FULL_COVERAGE,
+                        help="Coverage (%%) from which the road is fully "
+                             "covered.")
+
+
+def site_roi(site):
+    """
+    Default ROI of a site: the stem of camera_roi_json, else roi_json.
+
+    Parameters
+    ----------
+    site : str
+        Site config name or path.
+
+    Returns
+    -------
+    str or None
+        ROI name, or None if the config names no ROI JSON.
+    """
+    config = load_site_config(site)
+    path = config.camera_roi_json or config.roi_json
+    return os.path.splitext(os.path.basename(path))[0] if path else None
+
+
+def load_roi_images(events_dir, roi, good, sensor, padding_hours):
+    """
+    Every image of one ROI across events, each kept once.
+
+    Parameters
+    ----------
+    events_dir : str
+        Folder of event subfolders.
+    roi : str
+        ROI name.
+    good : set
+        Well-segmented timestamps, from
+        :func:`access_plotter.load_good_timestamps`.
+    sensor : pandas.DataFrame
+        All sensor readings.
+    padding_hours : float
+        Padding stage 05 added around each event.
+
+    Returns
+    -------
+    pandas.DataFrame or None
+        One row per image (:func:`access_plotter.load_event`), images in
+        overlapping windows kept in the nearer event; None if the ROI has
+        no accessibility CSVs.
+    """
+    paths = ap.find_roi_csvs(events_dir).get(roi, [])
+    if not paths:
+        return None
+    loaded = pd.concat([ap.load_event(path, good, sensor)
+                        for path in paths], ignore_index=True)
+    keep = ap.nearest_event_mask(
+        loaded["event"], pd.to_datetime(loaded["Time"], utc=True),
+        padding_hours)
+    return loaded[keep].reset_index(drop=True)
+
+
 def parse_args(argv=None):
     """
     Parse command-line arguments.
@@ -652,32 +958,15 @@ def parse_args(argv=None):
     parser.add_argument("--roi", default=None,
                         help="ROI name. Default with --site: the stem of "
                              "camera_roi_json, else roi_json.")
-    parser.add_argument("--n_boot", type=int, default=1000,
-                        help="Event bootstrap resamples for the CIs.")
-    parser.add_argument("--seed", type=int, default=0,
-                        help="Random seed (bootstrap and jitter).")
-    parser.add_argument("--padding_hours", type=float,
-                        default=ap.EVENT_PADDING_HOURS,
-                        help="Padding stage 05 added around each event.")
-    parser.add_argument("--match_minutes", type=float, default=5.0,
-                        help="Largest gap to a matched sensor reading.")
-    parser.add_argument("--sensor_wet_ft", type=float,
-                        default=FLOOD_START_THRESHOLD_FT,
-                        help="Road water level (ft) above which the in-situ "
-                             "sensor counts as wet.")
-    parser.add_argument("--coverage_bin_width", type=float,
-                        default=ap.COVERAGE_BIN_WIDTH,
-                        help="Coverage bin width (%%) of figure 2.")
-    parser.add_argument("--full_coverage", type=float,
-                        default=ap.FULL_COVERAGE,
-                        help="Coverage (%%) from which the road is fully "
-                             "covered.")
+    parser.add_argument("--align", choices=("start", "peak"),
+                        default="start",
+                        help="Hour 0 of figure 1 (a): the start of each "
+                             "event's window, or the in-situ sensor's "
+                             "peak (events where it saw water).")
+    add_figure_arguments(parser)
     args = parser.parse_args(argv)
     if args.roi is None and args.site:
-        site = load_site_config(args.site)
-        path = site.camera_roi_json or site.roi_json
-        if path:
-            args.roi = os.path.splitext(os.path.basename(path))[0]
+        args.roi = site_roi(args.site)
     if args.roi is None:
         parser.error("give --roi, or a --site with an ROI JSON")
     return args
@@ -721,15 +1010,11 @@ def main(argv=None):
         fig1 = figure_aligned_timing(series, timing, sensor, args,
                                      f"{prefix}_fig1_aligned_timing")
 
-    paths = ap.find_roi_csvs(args.events_dir).get(args.roi, [])
-    if paths:
-        loaded = pd.concat([ap.load_event(path, good, sensor)
-                            for path in paths], ignore_index=True)
-        keep = ap.nearest_event_mask(
-            loaded["event"], pd.to_datetime(loaded["Time"], utc=True),
-            args.padding_hours)
-        fig2 = figure_binned_depth(loaded[keep].reset_index(drop=True),
-                                   args, f"{prefix}_fig2_binned_depth")
+    images = load_roi_images(args.events_dir, args.roi, good, sensor,
+                             args.padding_hours)
+    if images is not None:
+        fig2 = figure_binned_depth(images, args,
+                                   f"{prefix}_fig2_binned_depth")
     else:
         logger.warning("No accessibility CSVs for ROI '%s'; figure 2 "
                        "skipped.", args.roi)

@@ -1562,15 +1562,56 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         The fit, or None if it failed.
     """
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    fit = draw_good_only_fit(ax, good, metric, pretty, n_boot, seed, ylabel,
+                             ylim, name=filename)
+    if fit is not None:
+        write_fit_summary(fit, out_dir, stem)
+    _save(fig, out_dir, filename)
+    return fit
+
+
+def draw_good_only_fit(ax, good, metric, pretty, n_boot=0, seed=0,
+                       ylabel=None, ylim=None, legend_fontsize=None,
+                       name=None):
+    """
+    Draw the 1c images and logistic fit on an axes.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes.
+    good : pandas.DataFrame
+        Well-segmented rows with `metric`, ``Coverage`` and ``event``.
+    metric : str
+        Depth metric column.
+    pretty : str
+        Human-readable metric name for the y-axis.
+    n_boot : int, optional
+        Event bootstrap resamples. Default 0 (none).
+    seed : int, optional
+        Bootstrap random seed. Default 0.
+    ylabel : str, optional
+        Y-axis label. Default ``"<pretty> on Roadway (m)"``.
+    ylim : tuple of float, optional
+        Depth-axis limits. Default: automatic.
+    legend_fontsize : float, optional
+        Legend font size. Default: matplotlib's.
+    name : str, optional
+        Name for the warning if the fit fails.
+
+    Returns
+    -------
+    dict or None
+        The fit, or None if it failed.
+    """
     ax.scatter(good["Coverage"], good[metric], alpha=0.6, s=12,
                c=CONTEXT_GREY, edgecolors="none", label="Images")
     try:
         fit = fit_depth_from_coverage(good["Coverage"], good[metric],
                                       good["event"], n_boot, seed)
         _draw_depth_fit(ax, fit)
-        write_fit_summary(fit, out_dir, stem)
     except (RuntimeError, ValueError) as err:
-        logger.warning("Logistic fit failed for %s: %s", filename, err)
+        logger.warning("Logistic fit failed for %s: %s", name or metric, err)
         fit = None
 
     ax.set_xlabel("Roadway Percentage Covered (%)")
@@ -1579,8 +1620,7 @@ def _plot_good_only_fit(good, metric, pretty, out_dir, filename, stem,
         ax.set_ylim(ylim)
     handles, labels = ax.get_legend_handles_labels()
     unique = dict(zip(labels, handles))  # drop duplicate legend entries
-    ax.legend(unique.values(), unique.keys())
-    _save(fig, out_dir, filename)
+    ax.legend(unique.values(), unique.keys(), fontsize=legend_fontsize)
     return fit
 
 

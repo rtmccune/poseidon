@@ -368,6 +368,29 @@ as wet above 0.02 ft (`--sensor_wet_ft`). That is the event detection
 start threshold, so the sensor is wet exactly when the event sheet would
 say so.
 
+`publication_figures.py --align peak` puts hour 0 of panel (a) at the
+in-situ sensor's peak instead (only events where the sensor saw water).
+
+#### Two-site figures
+
+`99_combined_publication_figures.sh` runs
+`poseidon_deploy/analysis/combined_publication_figures.py`. It puts
+Carolina Beach on the left and Down East on the right, or the sites set by
+`LEFT_SITE` and `RIGHT_SITE`. Output goes to `data/publication_combined/`.
+Each site keeps its own ROI and data folder, and each row of panels shares
+its y-axis across the two sites.
+
+- **`combined_fig1_aligned_timing`:** each site's figure 1. The left site
+  has panels (a)–(c) and the right site has (d)–(f). Panel (a) is aligned
+  on the in-situ sensor's peak.
+- **`combined_fig2_depth_by_coverage`:** for each site, the mean-depth 1c
+  plot sits above figure 2. The 1c plot shows well-segmented images and
+  the logistic fit of depth on coverage. The left site has (a), (b) and
+  the right site has (c), (d).
+
+Each site's `<roi>_pub_metrics.md` still holds the statistics to quote,
+because the alignment does not change them.
+
 ### Events without sensor data
 
 Stage 05 needs `flood_events.csv`, the sensor readings inside each event.

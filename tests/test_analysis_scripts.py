@@ -664,9 +664,8 @@ def test_sensor_wet_threshold_matches_event_detection():
                                               "sensor wet"]
 
 
-def test_publication_figures_from_events(tmp_path):
-    """Both figures and their CSVs are written from good images only."""
-    import publication_figures as pub
+def _write_publication_site(site_dir, scale=1.0):
+    """Write four synthetic events, labels and sensor CSVs for a site."""
     from poseidon_utils.zarr_io import write_array, write_zip_group
 
     labels, sensor = [], []
@@ -675,11 +674,12 @@ def test_publication_figures_from_events(tmp_path):
             days=e)
         name = (f"DE_01_{start - pd.Timedelta(hours=3):%Y%m%d%H%M%S}_"
                 f"{start + pd.Timedelta(hours=4):%Y%m%d%H%M%S}")
-        folder = tmp_path / "events" / name
+        folder = site_dir / "flood_events" / name
         (folder / "zarr").mkdir(parents=True)
         times = pd.date_range(start - pd.Timedelta(minutes=30), periods=16,
                               freq="6min", tz="UTC")
-        depth = np.clip(np.sin(np.linspace(0, np.pi, 16)) * 0.1, 0, None)
+        depth = np.clip(np.sin(np.linspace(0, np.pi, 16)) * 0.1 * scale, 0,
+                        None)
         wet = depth > 0
         pd.DataFrame({
             "Time": times, "Impassable": wet.astype(int),
@@ -698,15 +698,22 @@ def test_publication_figures_from_events(tmp_path):
                    for t in times]
         sensor += [(t, d * 0.9 / 0.3048) for t, d in zip(times, depth)]
     pd.DataFrame(labels, columns=["Filename", "Segmentation_Score"]).to_csv(
-        tmp_path / "labels.csv", index=False)
+        site_dir / "segmentation_labels.csv", index=False)
     pd.DataFrame(sensor, columns=["time_UTC", "road_water_level"]).to_csv(
-        tmp_path / "sensor.csv", index=False)
+        site_dir / "sensor_data_comparison.csv", index=False)
 
+
+def test_publication_figures_from_events(tmp_path):
+    """Both figures and their CSVs are written from good images only."""
+    import publication_figures as pub
+
+    _write_publication_site(tmp_path)
     out = tmp_path / "pub"
-    assert pub.main(["--events_dir", str(tmp_path / "events"), "--roi",
-                     "road", "--sensor", str(tmp_path / "sensor.csv"),
-                     "--labels", str(tmp_path / "labels.csv"), "--out_dir",
-                     str(out), "--n_boot", "20"]) == 0
+    assert pub.main(["--events_dir", str(tmp_path / "flood_events"),
+                     "--roi", "road", "--sensor",
+                     str(tmp_path / "sensor_data_comparison.csv"),
+                     "--labels", str(tmp_path / "segmentation_labels.csv"),
+                     "--out_dir", str(out), "--n_boot", "20"]) == 0
     for name in ("road_pub_fig1_aligned_timing.png",
                  "road_pub_fig1_aligned_timing.pdf",
                  "road_pub_fig2_binned_depth.png",
@@ -725,3 +732,26 @@ def test_publication_figures_from_events(tmp_path):
     metrics = (out / "road_pub_metrics.md").read_text()
     assert "VS1 against the in-situ sensor" in metrics
     assert "Anywhere on Roadway" in metrics and "Bias (m)" in metrics
+
+
+def test_combined_publication_figures_side_by_side(tmp_path):
+    """Two sites make both combined figures, panel (a) peak-aligned."""
+    import combined_publication_figures as combined
+
+    _write_publication_site(tmp_path / "left_site")
+    _write_publication_site(tmp_path / "right_site", scale=1.5)
+    out = tmp_path / "combined"
+    assert combined.main(["--sites", "left_site", "right_site",
+                          "--rois", "road", "road", "--data_root",
+                          str(tmp_path), "--out_dir", str(out),
+                          "--n_boot", "20"]) == 0
+    for name in ("combined_fig1_aligned_timing",
+                 "combined_fig2_depth_by_coverage"):
+        assert (out / f"{name}.png").exists()
+        assert (out / f"{name}.pdf").exists()
+    means = pd.read_csv(
+        out / "left_site_combined_fig1_aligned_timing_a_peak_means.csv")
+    # Hour 0 is the sensor peak, so the composite runs on both sides of it
+    assert means["hours"].min() < 0 < means["hours"].max()
+    assert (out / "right_site_combined_fig2_depth_by_coverage_1c_mean_depth"
+                  "_fit_summary.csv").exists()
