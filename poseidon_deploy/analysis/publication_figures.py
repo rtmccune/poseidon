@@ -250,7 +250,7 @@ def timing_event_sets(timing):
 
 
 def _draw_means_panel(ax, series, padding_hours, align="start",
-                      dry="nan", event_sets=None):
+                      dry="nan", event_sets=None, show_counts=False):
     """
     Draw panel (a): mean depth across events per source.
 
@@ -274,8 +274,10 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
     event_sets : dict of str to set, optional
         Events to use per source (:func:`timing_event_sets`), so every
         line draws on the events of its column in panels (b) and (c);
-        sources not listed are left out. Default: every event. The
-        legend then gives each line's event count.
+        sources not listed are left out. Default: every event.
+    show_counts : bool, optional
+        Give each line's event count in the legend (always on with
+        `event_sets`). Default False.
 
     Returns
     -------
@@ -314,8 +316,9 @@ def _draw_means_panel(ax, series, padding_hours, align="start",
         ax.plot(comp["hours"], comp["center_m"],
                 color=sc._series_style(source), linewidth=2.2,
                 linestyle="--" if source == sc.SENSOR else "-",
-                label=_display(source) if event_sets is None else
-                f"{_display(source)} ({counts[source]} events)")
+                label=f"{_display(source)} ({counts[source]} events)"
+                if show_counts or event_sets is not None
+                else _display(source))
     events = aligned.drop_duplicates("event")
     if align == "start":
         ax.axvline(padding_hours, color=INK, linewidth=1, linestyle=":",
@@ -465,7 +468,7 @@ def draw_aligned_timing(axes, series, timing, sensor, args,
         ax_a, series, args.padding_hours, getattr(args, "align", "start"),
         getattr(args, "dry", "nan"),
         timing_event_sets(timing) if getattr(args, "same_events", False)
-        else None)
+        else None, getattr(args, "event_counts", False))
     pairs = vs1_sensor_pairs(series, sensor, args.match_minutes,
                              args.sensor_wet_ft * FEET_TO_METERS,
                              args.padding_hours)
@@ -1031,6 +1034,9 @@ def parse_args(argv=None):
                         help="Figure 1 (a): draw each line from the events "
                              "of its column in (b) and (c) (the in-situ "
                              "sensor from all of them), with event counts "
+                             "in the legend.")
+    parser.add_argument("--event_counts", action="store_true",
+                        help="Figure 1 (a): give each line's event count "
                              "in the legend.")
     add_figure_arguments(parser)
     args = parser.parse_args(argv)

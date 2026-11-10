@@ -15,13 +15,14 @@ sites) and are saved as PNG (300 dpi) and PDF in ``--out_dir``.
     0), so it holds only events where the sensor saw water, and dry
     times count as 0 m (the sensor reads 0 m outside the event sheet's
     start to end), so each line is the expected depth at that time
-    over every event rather than the mean among events still wet. Each
-    camera line uses the events of its column in panels (b) and (c)
-    (the roadway mean those of "Anywhere on Roadway"), and the in-situ
-    sensor line all of them, so the three panels share one event set;
-    the legend gives each line's event count. The single-site script
-    defaults to start alignment, dry times left out and every event
-    (``--align``, ``--dry``, ``--same_events``).
+    over every event rather than the mean among events still wet. Panel
+    (a) uses every event with a sensor peak, so it can hold more events
+    than the columns of (b) and (c), which need water at both the
+    camera location and the sensor while the camera has images; the
+    legend gives each line's event count to compare with the columns.
+    The single-site script defaults to start alignment, dry times left
+    out and no counts (``--align``, ``--dry``, ``--event_counts``;
+    ``--same_events`` restricts (a) to the events of (b) and (c)).
 
 ``combined_fig2_depth_by_coverage``
     Per site, plot 1c for the mean roadway depth (logistic fit of depth on coverage with its median and 80 %
@@ -255,7 +256,7 @@ def parse_args(argv=None):
     -------
     argparse.Namespace
         Parsed arguments, with ``align`` set to ``'peak'``, ``dry`` to
-        ``'zero'`` and ``same_events`` on.
+        ``'zero'`` and ``event_counts`` on.
     """
     parser = argparse.ArgumentParser(
         description="Make two-site publication figures.")
@@ -271,7 +272,7 @@ def parse_args(argv=None):
                              "config's camera_roi_json, else roi_json.")
     pub.add_figure_arguments(parser)
     args = parser.parse_args(argv)
-    args.align, args.dry, args.same_events = "peak", "zero", True
+    args.align, args.dry, args.event_counts = "peak", "zero", True
     return args
 
 
