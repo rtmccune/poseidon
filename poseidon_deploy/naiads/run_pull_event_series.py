@@ -127,6 +127,45 @@ def add_event_summaries(readings, events):
     return readings[DETAILED_COLUMNS]
 
 
+def report_gaps(detailed, gap_minutes):
+    """
+    Log events whose readings have a gap longer than `gap_minutes`.
+
+    Days the API never returned, even after the daily retries, are
+    skipped by ``EventTracker`` and show up here as long gaps. Sensor
+    outages appear too; check them against the QC sheet's ``outage``.
+
+    Parameters
+    ----------
+    detailed : pandas.DataFrame
+        Detailed readings with ``flood_event`` and ``time_UTC``.
+    gap_minutes : float
+        Longest gap between readings that is not reported.
+
+    Returns
+    -------
+    list of tuple
+        (event, gap start, gap length in minutes) for every gap found.
+    """
+    times = pd.to_datetime(detailed["time_UTC"], utc=True, format="mixed")
+    frame = pd.DataFrame({"event": detailed["flood_event"], "time": times})
+    gaps = []
+    for event, group in frame.sort_values("time").groupby("event"):
+        steps = group["time"].diff().dt.total_seconds() / 60
+        for index in steps.index[steps > gap_minutes]:
+            start = group["time"].shift(1)[index]
+            gaps.append((event, start, float(steps[index])))
+    if gaps:
+        logger.warning("%d gaps longer than %g min between readings "
+                       "(possible missing data):", len(gaps), gap_minutes)
+        for event, start, minutes in gaps:
+            logger.warning("  event %s: %.0f min after %s",
+                           event, minutes, start)
+    else:
+        logger.info("No gaps longer than %g min in any event.", gap_minutes)
+    return gaps
+
+
 def main(argv=None):
     """
     Write the detailed sensor records for an abbreviated event sheet.
@@ -152,7 +191,17 @@ def main(argv=None):
                              "each event. 0 matches EventTracker's "
                              "flood_events.csv.")
     parser.add_argument("--chunk_days", type=int, default=30,
-                        help="Days requested per API call.")
+                        help="Days requested per API call. Lower it "
+                             "(e.g. 7) if the server returns 504 "
+                             "Gateway Time-out errors.")
+    parser.add_argument("--max_workers", type=int, default=4,
+                        help="Requests sent to the API at once.")
+    parser.add_argument("--timeout", type=int, default=120,
+                        help="Seconds to wait for each API response.")
+    parser.add_argument("--gap_minutes", type=float, default=30.0,
+                        help="Report events whose readings have a gap "
+                             "longer than this (e.g. a day the API "
+                             "never returned).")
     args = cli_common.start(parser, argv)
 
     abbr_path = Path(args.abbr_events_csv)
@@ -161,7 +210,9 @@ def main(argv=None):
     events = pd.read_csv(abbr_path)
     min_date, max_date = date_range(events, args.buffer_hours)
 
-    tracker = EventTracker(get_credentials(), min_date, max_date)
+    tracker = EventTracker(get_credentials(), min_date, max_date,
+                           max_workers=args.max_workers,
+                           timeout=args.timeout)
     # Write to a temporary file, then add the summaries to the final one
     raw_path = output.with_suffix(".raw.csv")
     readings = tracker.pull_qced_time_series_bulk(
@@ -184,6 +235,7 @@ def main(argv=None):
         logger.info("%d events have no sensor readings (image-only): %s",
                     len(missing), ", ".join(
                         str(n) for n in missing["flood_event"]))
+    report_gaps(detailed, args.gap_minutes)
     return 0
 
 
