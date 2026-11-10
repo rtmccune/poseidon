@@ -979,3 +979,34 @@ def test_site_summary_table_from_events(tmp_path):
     assert values["image_total_hours"] == pytest.approx(4 * 15 * 0.1)
     assert values["image_max_depth_m"] == pytest.approx(0.15, abs=0.002)
     assert "\\toprule" in (out / "site_summary_table.tex").read_text()
+
+
+def test_example_event_figure_picks_rising_peak_falling(tmp_path):
+    """Three moments around the peak, depth panes, and the CSV."""
+    import example_event_figure as example
+    from poseidon_utils.zarr_io import write_array, write_zip_group
+
+    site = tmp_path / "carolina_beach"
+    _write_publication_site(site)
+    for folder in sorted((site / "flood_events").iterdir()):
+        times = pd.read_csv(folder / "road_accessibility_time_series.csv")[
+            "Time"]
+        stamps = pd.to_datetime(times, utc=True).dt.strftime("%Y%m%d%H%M%S")
+        with write_zip_group(folder / "zarr" / "depth_maps.zip") as g:
+            for stamp in stamps:
+                write_array(g, f"CAM_DE_01_{stamp}_rectified_depth_map_"
+                               "95_perc", np.full((20, 16), 0.05))
+        with write_zip_group(folder / "zarr" / "orig_image_rects.zip") as g:
+            for stamp in stamps:
+                write_array(g, f"CAM_DE_01_{stamp}_rectified",
+                            np.full((20, 16, 3), 120, dtype=np.uint8))
+    out = tmp_path / "out"
+    assert example.main(["--sites", "carolina_beach", "--data_root",
+                         str(tmp_path), "--out_dir", str(out), "--roi",
+                         "road"]) == 0
+    for ext in ("png", "pdf", "svg", "csv"):
+        assert (out / f"example_event_carolina_beach.{ext}").exists()
+    moments = pd.read_csv(out / "example_event_carolina_beach.csv")
+    assert moments["phase"].tolist() == ["Rising", "Peak", "Falling"]
+    times = pd.to_datetime(moments["time_utc"])
+    assert times.is_monotonic_increasing and times.nunique() == 3
