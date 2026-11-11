@@ -16,7 +16,7 @@ Time series
     surface shown as 0 m), and from every image of the event the mean
     roadway depth in the field of view and each virtual sensor's depth
     (points, in the map marker colours; 0 m where dry), in local time.
-    Only the three panes are limited to well-segmented images.
+    Points from well-segmented images are opaque, the rest faded.
 
 Choosing the moments
     Only well-segmented images with water on the roadway (and, for depth
@@ -75,6 +75,9 @@ logger = logging.getLogger(__name__)
 #: red, in time order, distinct from the depth colour scale (blue to
 #: purple) and the series (black sensor, blue roadway mean, the virtual
 #: sensors' green, amber and pink).
+#: Opacity of time series points from images not scored well segmented.
+FADED_ALPHA = 0.25
+
 PHASES = (("Rising", "#F28E7F"), ("Peak", "#D7301F"),
           ("Falling", "#7F0000"))
 
@@ -439,17 +442,34 @@ def draw_figure(site, event, moments, images, sensor, args):
     shown = images[images["event"] == event].copy()
     shown["time"] = pd.to_datetime(shown["Time"], utc=True)
     shown["depth"] = shown["MeanDepth"].where(shown["Impassable"] == 1, 0.0)
-    ax.plot(shown["time"].dt.tz_convert(EASTERN_TZ), shown["depth"],
-            marker="o", markersize=3.5, linestyle="none", color=BLUE,
-            label="Mean Roadway Depth in Field of View")
+    good = set(shown.loc[shown["Segmentation"] == "good", "time"]
+               .dt.strftime("%Y%m%d%H%M%S"))
+
+    def points(times, values, stamps, color, size, label):
+        # Opaque for well-segmented images, faded for the rest
+        is_good = np.isin(stamps, list(good))
+        local_times = times.dt.tz_convert(EASTERN_TZ)
+        ax.plot(local_times[~is_good], values[~is_good], marker="o",
+                markersize=size, linestyle="none", color=color,
+                alpha=FADED_ALPHA)
+        ax.plot(local_times[is_good], values[is_good], marker="o",
+                markersize=size, linestyle="none", color=color,
+                label=label)
+
+    points(shown["time"], shown["depth"],
+           shown["time"].dt.strftime("%Y%m%d%H%M%S").to_numpy(), BLUE, 3.5,
+           "Mean Roadway Depth in Field of View")
     sensors = virtual_sensor_series(event_dir)
     if sensors is not None:
         for i, column in enumerate(c for c in sensors if
                                    c.startswith("VS")):
-            ax.plot(sensors["time"].dt.tz_convert(EASTERN_TZ),
-                    sensors[column], color=virtual_sensor_color(i),
-                    marker="o", markersize=2.5, linestyle="none",
-                    label=column)
+            points(sensors["time"], sensors[column],
+                   sensors["stamp"].to_numpy(), virtual_sensor_color(i),
+                   2.5, column)
+    # Legend key for the faded points
+    ax.plot([], [], marker="o", markersize=3.5, linestyle="none",
+            color=INK, alpha=FADED_ALPHA,
+            label="Faded: not well segmented")
     for (name, color), when in zip(PHASES, local):
         ax.axvline(when, color=color, linestyle="--", linewidth=1.6)
     ax.set_ylim(bottom=0)
