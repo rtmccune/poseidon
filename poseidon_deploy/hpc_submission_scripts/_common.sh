@@ -13,7 +13,6 @@
 #   * defines SITE_DATA=$REPO_ROOT/data/$SITE and EVENT_DIR when SITE is
 #     set in hpc_paths.env
 #   * creates job_outputs/ for array-job logs
-#   * turns off PROJ's grid downloads (compute nodes have no internet)
 # and provides the helper functions below.
 
 source ~/.bashrc
@@ -27,13 +26,6 @@ NAIADS="$REPO_ROOT/poseidon_deploy/naiads"
 ANALYSIS="$REPO_ROOT/poseidon_deploy/analysis"
 BIN_DIR="$REPO_ROOT/poseidon_utils/bin"
 mkdir -p "$SUBMIT_DIR/job_outputs"
-
-# Compute nodes have no internet. With PROJ_NETWORK on, PROJ tries to
-# download (or, after a day, re-check) datum grids such as
-# us_noaa_nchpgn.tif from cdn.proj.org, times out, and every coordinate
-# transform fails ("Too many points failed to transform"). Off, it uses
-# grids already on disk (see README: Map projections on the HPC).
-export PROJ_NETWORK=OFF
 
 ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
 if [ -f "$ENV_FILE" ]; then
@@ -54,11 +46,20 @@ die() {
     exit 1
 }
 
-# Activate the conda environment named by POSEIDON_ENV.
+# Activate the conda environment named by POSEIDON_ENV, with PROJ's grid
+# downloads off (compute nodes have no internet).
 activate_env() {
     [ -n "$POSEIDON_ENV" ] || die "POSEIDON_ENV is not set in hpc_paths.env"
     conda activate "$POSEIDON_ENV"
     echo "Activated conda environment $POSEIDON_ENV"
+    # Compute nodes have no internet. With PROJ_NETWORK on, PROJ tries to
+    # download (or, after a day, re-check) datum grids such as
+    # us_noaa_nchpgn.tif from cdn.proj.org, times out, and every
+    # coordinate transform fails ("Too many points failed to transform").
+    # Set it after `conda activate`: the proj package's activation script
+    # turns it ON unless proj-data is installed. Off, PROJ uses grids on
+    # disk (see README: Map projections on the HPC).
+    export PROJ_NETWORK=OFF
 }
 
 # Stop unless SITE names a config in poseidon_deploy/configs/sites.

@@ -557,8 +557,10 @@ remaining counts for the daylight and `all_events_during_FOV` folders.
 Stage 09 and the map figures convert the site grid (NC State Plane) to
 Web Mercator. PROJ does this best with a North Carolina datum-shift grid
 (`us_noaa_nchpgn.tif`), which it normally downloads from cdn.proj.org.
-Compute nodes have no internet, so `_common.sh` sets `PROJ_NETWORK=OFF`
-for every job. Without it, PROJ times out trying to download (or, a day
+Compute nodes have no internet, so `activate_env` in `_common.sh` sets
+`PROJ_NETWORK=OFF` for every job. It must come after `conda activate`:
+the `proj` package's activation script turns the network on unless
+`proj-data` is installed. Without it, PROJ times out trying to download (or, a day
 later, re-check) the grid, and every transform fails with "Too many
 points failed to transform".
 
@@ -570,10 +572,13 @@ conda activate $POSEIDON_ENV
 projsync --bbox -84.5,33.5,-75,37 --user-writable-directory
 ```
 `projsync` downloads every grid covering North Carolina to
-`~/.local/share/proj`, which PROJ always searches. Without them, the
-maps still work but use a coarser datum conversion, off by about a meter
-in absolute position. The map layers all shift together, so they still
-line up with each other.
+`~/.local/share/proj`, which PROJ always searches. Installing
+`proj-data` in the environment (`conda install -c conda-forge
+proj-data`) also works: it ships every grid and leaves the network off
+on activation. Without the grids, the maps still work but use a coarser
+datum conversion, about 0.3–0.4 m off in absolute position at the sites.
+Layers in the site CRS (depth maps, virtual sensors) shift together; a
+basemap in another CRS may sit that far off them.
 
 ## Example notebooks
 
