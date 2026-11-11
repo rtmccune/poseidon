@@ -26,7 +26,6 @@
 source "${SLURM_SUBMIT_DIR:-${LS_SUBCWD:-$PWD}}/_common.sh"
 require_site
 export TMPDIR=/tmp
-export PROJ_NETWORK=OFF  # compute nodes have no internet for PROJ grids
 activate_env
 
 EVENT=$(event_for_task)

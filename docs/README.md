@@ -552,6 +552,29 @@ python poseidon_deploy/analysis/list_unreviewed_images.py \
 This writes `data/down_east/images_to_review.txt` and logs reviewed and
 remaining counts for the daylight and `all_events_during_FOV` folders.
 
+### Map projections on the HPC
+
+Stage 09 and the map figures convert the site grid (NC State Plane) to
+Web Mercator. PROJ does this best with a North Carolina datum-shift grid
+(`us_noaa_nchpgn.tif`), which it normally downloads from cdn.proj.org.
+Compute nodes have no internet, so `_common.sh` sets `PROJ_NETWORK=OFF`
+for every job. Without it, PROJ times out trying to download (or, a day
+later, re-check) the grid, and every transform fails with "Too many
+points failed to transform".
+
+With the network off, PROJ uses only grids on disk. Download the North
+Carolina grids once, on a login node (they have internet), into your
+PROJ user folder:
+```bash
+conda activate $POSEIDON_ENV
+projsync --bbox -84.5,33.5,-75,37 --user-writable-directory
+```
+`projsync` downloads every grid covering North Carolina to
+`~/.local/share/proj`, which PROJ always searches. Without them, the
+maps still work but use a coarser datum conversion, off by about a meter
+in absolute position. The map layers all shift together, so they still
+line up with each other.
+
 ## Example notebooks
 
 * `notebooks/flood_event_pull.ipynb` downloads SDFP water levels for the

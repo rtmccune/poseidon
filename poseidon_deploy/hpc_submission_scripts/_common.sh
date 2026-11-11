@@ -13,6 +13,7 @@
 #   * defines SITE_DATA=$REPO_ROOT/data/$SITE and EVENT_DIR when SITE is
 #     set in hpc_paths.env
 #   * creates job_outputs/ for array-job logs
+#   * turns off PROJ's grid downloads (compute nodes have no internet)
 # and provides the helper functions below.
 
 source ~/.bashrc
@@ -26,6 +27,13 @@ NAIADS="$REPO_ROOT/poseidon_deploy/naiads"
 ANALYSIS="$REPO_ROOT/poseidon_deploy/analysis"
 BIN_DIR="$REPO_ROOT/poseidon_utils/bin"
 mkdir -p "$SUBMIT_DIR/job_outputs"
+
+# Compute nodes have no internet. With PROJ_NETWORK on, PROJ tries to
+# download (or, after a day, re-check) datum grids such as
+# us_noaa_nchpgn.tif from cdn.proj.org, times out, and every coordinate
+# transform fails ("Too many points failed to transform"). Off, it uses
+# grids already on disk (see README: Map projections on the HPC).
+export PROJ_NETWORK=OFF
 
 ENV_FILE="$SUBMIT_DIR/../hpc_paths.env"
 if [ -f "$ENV_FILE" ]; then
